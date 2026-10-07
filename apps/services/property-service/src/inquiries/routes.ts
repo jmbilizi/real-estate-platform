@@ -9,12 +9,13 @@ import {
 import { isListingPublishable, type ReadClient } from '../listings/repository';
 import { createListingInquiry, type Queryable } from './write';
 import type { IntrospectionClient } from './account-introspection';
+import { resolveRequester } from './requester';
 import type { RateLimiter } from './rate-limit';
 
 /**
  * `POST /listings/:id/inquiries` (#131) — a consumer's message or tour request against a listing.
  *
- * Never returned by any read endpoint: this router adds no GET. `id` is validated and the listing
+ * No public read endpoint: this router adds no GET. Staff read endpoints sit behind roles (#632). `id` is validated and the listing
  * is checked against `listing_search_v` — the same single source of listing visibility every other
  * route in this service reads — before anything is written, so an unknown, soft-deleted or
  * `internet_display_allowed = false` listing is rejected exactly like `GET /listings/{id}` rejects
@@ -138,7 +139,7 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
 
       // Resolved AFTER the listing check: there is no reason to call account-service for a
       // request that is about to 404 anyway.
-      const accountId = await deps.introspection.resolveAccountId({
+      const requester = await resolveRequester(deps.introspection, {
         cookie: req.headers.cookie,
         authorization: req.headers.authorization,
         apiKey: firstHeaderValue(req.headers['x-api-key']),
@@ -151,8 +152,11 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
         email: parsedBody.data.email,
         phone: parsedBody.data.phone ?? null,
         message: parsedBody.data.message ?? null,
-        accountId,
+        accountId: requester.accountId,
+        verifiedAccount: requester.verifiedAccount,
         consentToContact: parsedBody.data.consentToContact,
+        consentTextVersion: parsedBody.data.consentTextVersion,
+        consentChannels: parsedBody.data.consentChannels,
       });
 
       res.status(201).json({ id: createdId });

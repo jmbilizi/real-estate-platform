@@ -18,10 +18,45 @@ const MESSAGE_MAX_LENGTH = 2000;
  * disclosure, and "not a condition of service" statement are the TCPA floor (PRD §6.4) for a
  * checkbox that collects a phone number.
  */
-export const CONSENT_DISCLOSURE_TEXT =
+const CONSENT_TEXT_V1 =
   "I agree that Real Broker, LLC (Cribstop's brokerage) and its agents may contact me about this " +
   'home by phone, text message, or email, including by autodialer or prerecorded message. ' +
   'Consent is not required to use Cribstop, and message and data rates may apply.';
+
+/**
+ * The consent text per version (#627). The server stores the text, the version, the channels and
+ * the time with each request. A client names a version and never sends its own text. A wording
+ * change adds a new version. It never edits an old one, because stored rows point at the old one.
+ */
+export const CONSENT_TEXTS = { v1: CONSENT_TEXT_V1 } as const;
+export const CONSENT_TEXT_VERSIONS = ['v1'] as const;
+export const consentTextVersionSchema = z.enum(CONSENT_TEXT_VERSIONS);
+export type ConsentTextVersion = z.infer<typeof consentTextVersionSchema>;
+export const CURRENT_CONSENT_TEXT_VERSION: ConsentTextVersion = 'v1';
+
+/** The text of `CURRENT_CONSENT_TEXT_VERSION`. Kept for the current web form. */
+export const CONSENT_DISCLOSURE_TEXT = CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION];
+
+export const CONSENT_CHANNELS = ['email', 'phone_call', 'phone_text'] as const;
+export const consentChannelSchema = z.enum(CONSENT_CHANNELS);
+export type ConsentChannel = z.infer<typeof consentChannelSchema>;
+
+/** The lead lifecycle (#627). The allowed transitions live in the property-service. */
+export const LEAD_STATUSES = [
+  'new',
+  'verified',
+  'assigned',
+  'accepted',
+  'contacted',
+  'touring',
+  'under_contract',
+  'closed',
+  'lost',
+  'spam',
+  'rejected',
+] as const;
+export const leadStatusSchema = z.enum(LEAD_STATUSES);
+export type LeadStatus = z.infer<typeof leadStatusSchema>;
 
 /**
  * The request body for `POST /listings/{id}/inquiries`.
@@ -31,9 +66,11 @@ export const CONSENT_DISCLOSURE_TEXT =
  * familial status or disability field to strip, because none can ever be added without a
  * reviewed schema change reaching this file first.
  *
- * `name`/`email` are required regardless of sign-in state. Signed-in resolves an account id
- * server-side (#86); it does not excuse the caller from submitting contact details, because the
- * inquiry must remain readable on its own even if the account is later deleted.
+ * `name` and `email` are required regardless of sign-in state. `phone` is optional (ruling
+ * 2026-10-06).
+ * Signed-in resolves an account id server-side (#86). It does not excuse the caller from
+ * submitting contact details, because the inquiry must remain readable on its own even if the
+ * account is later deleted.
  *
  * `consentToContact` defaults to `false` and is never inferred from anything else. Absent means
  * no consent, matching the stakeholder ruling: nothing but the consumer's own submission may set
@@ -54,6 +91,21 @@ export const listingInquiryRequestSchema = z
         'Required (non-empty) when `kind` is `message`. Optional for `tour_request`. Max ' +
           `${MESSAGE_MAX_LENGTH} characters.`,
       ),
+    consentTextVersion: consentTextVersionSchema
+      .optional()
+      .describe(
+        'The consent text version the consumer saw. Optional for now. The server stores the ' +
+          'text for that version, never a client string. Defaults to the current version.',
+      ),
+    consentChannels: z
+      .array(consentChannelSchema)
+      .min(1)
+      .max(CONSENT_CHANNELS.length)
+      .optional()
+      .describe(
+        'The channels the consumer agreed to. Defaults to the channels that match the ' +
+          'supplied `email` and `phone`. `phone_call` and `phone_text` need a `phone`. Only valid when `consentToContact` is true.',
+      ),
     consentToContact: z
       .boolean()
       .default(false)
@@ -64,6 +116,33 @@ export const listingInquiryRequestSchema = z
       ),
   })
   .superRefine((value, ctx) => {
+    if (
+      (value.consentTextVersion !== undefined || value.consentChannels !== undefined) &&
+      !value.consentToContact
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: '"consentTextVersion" and "consentChannels" need "consentToContact" true.',
+        path: ['consentToContact'],
+      });
+    }
+    if (new Set(value.consentChannels).size !== (value.consentChannels?.length ?? 0)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: '"consentChannels" must not repeat a channel.',
+        path: ['consentChannels'],
+      });
+    }
+    for (const channel of value.consentChannels ?? []) {
+      const needsPhone = channel !== 'email';
+      if (needsPhone && value.phone === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Channel "${channel}" needs "phone".`,
+          path: ['consentChannels'],
+        });
+      }
+    }
     if (value.kind === 'message' && (value.message === undefined || value.message.length === 0)) {
       ctx.addIssue({
         code: 'custom',

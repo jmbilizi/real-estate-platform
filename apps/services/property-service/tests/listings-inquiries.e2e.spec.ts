@@ -1,5 +1,7 @@
 import axios from 'axios';
-import { idSchema } from '@cribstop/property-contracts';
+import { CONSENT_TEXTS, idSchema } from '@cribstop/property-contracts';
+import { closePool, getPool } from '../src/db/pool';
+import { changeLeadStatus } from '../src/inquiries/lead-status-write';
 import { complianceFixtureIds } from './support/fixture-ids';
 
 /**
@@ -139,5 +141,152 @@ describe('POST /listings/:id/inquiries — never exposed by a read endpoint', ()
     const response = await axios.get(`/listings/${fixtures.sampleListingId}`);
 
     expect(JSON.stringify(response.data)).not.toMatch(/inquir/i);
+  });
+});
+
+describe('lead model (#627)', () => {
+  const pool = getPool();
+  afterAll(async () => {
+    await closePool();
+  });
+
+  async function create(body: Record<string, unknown>): Promise<string> {
+    const response = await axios.post(`/listings/${fixtures.sampleListingId}/inquiries`, {
+      ...VALID_BODY,
+      ...body,
+    });
+    expect(response.status).toBe(201);
+    return response.data.id as string;
+  }
+
+  async function row(id: string): Promise<Record<string, unknown>> {
+    const { rows } = await pool.query('SELECT * FROM listing_inquiries WHERE id = $1', [id]);
+    return rows[0] as Record<string, unknown>;
+  }
+
+  it('creates a lead in status new, unverified, with one creation event', async () => {
+    const id = await create({});
+
+    expect(await row(id)).toMatchObject({ status: 'new', verified_account: false });
+    const { rows } = await pool.query(
+      'SELECT from_status, to_status, actor_account_id, actor_role FROM lead_status_events WHERE lead_id = $1',
+      [id],
+    );
+    expect(rows).toEqual([
+      { from_status: null, to_status: 'new', actor_account_id: null, actor_role: 'system' },
+    ]);
+  });
+
+  it('refuses verifiedAccount in the body', async () => {
+    const response = await axios.post(
+      `/listings/${fixtures.sampleListingId}/inquiries`,
+      { ...VALID_BODY, verifiedAccount: true },
+      { validateStatus: () => true },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('stores the consent evidence: server text, version, channels and time', async () => {
+    const id = await create({
+      phone: '202-555-0100',
+      consentToContact: true,
+      consentTextVersion: 'v1',
+      consentChannels: ['phone_text', 'email'],
+    });
+
+    const stored = await row(id);
+    expect(stored).toMatchObject({
+      consent_to_contact: true,
+      consent_disclosure_text: CONSENT_TEXTS.v1,
+      consent_text_version: 'v1',
+      consent_channels: ['phone_text', 'email'],
+    });
+    expect(stored.consent_given_at).toBeInstanceOf(Date);
+  });
+
+  it('defaults the version and channels when the current web form sends only the boolean', async () => {
+    const id = await create({ consentToContact: true });
+
+    expect(await row(id)).toMatchObject({
+      consent_text_version: 'v1',
+      consent_channels: ['email'],
+    });
+  });
+
+  it('stores no consent evidence without consent', async () => {
+    const id = await create({});
+
+    expect(await row(id)).toMatchObject({
+      consent_to_contact: false,
+      consent_disclosure_text: null,
+      consent_text_version: null,
+      consent_channels: null,
+    });
+  });
+
+  it('changes status and appends the audit event in one transaction', async () => {
+    const id = await create({});
+    const actor = '0195f2d0-9999-7000-8000-0000000000a1';
+
+    const result = await changeLeadStatus(pool, {
+      leadId: id,
+      to: 'verified',
+      actorAccountId: actor,
+      actorRole: 'moderator',
+      note: 'phone checked',
+    });
+
+    expect(result).toEqual({ ok: true, from: 'new', to: 'verified' });
+    expect(await row(id)).toMatchObject({ status: 'verified' });
+    const { rows } = await pool.query(
+      'SELECT from_status, to_status, actor_account_id, actor_role, note ' +
+        'FROM lead_status_events WHERE lead_id = $1 ORDER BY created_at, id',
+      [id],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      from_status: 'new',
+      to_status: 'verified',
+      actor_account_id: actor,
+      actor_role: 'moderator',
+      note: 'phone checked',
+    });
+  });
+
+  it('refuses a transition the table forbids and leaves status and events unchanged', async () => {
+    const id = await create({});
+
+    const result = await changeLeadStatus(pool, {
+      leadId: id,
+      to: 'closed',
+      actorAccountId: null,
+      actorRole: 'system',
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'invalid_transition', from: 'new' });
+    expect(await row(id)).toMatchObject({ status: 'new' });
+    const { rows } = await pool.query('SELECT 1 FROM lead_status_events WHERE lead_id = $1', [id]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('keeps the audit trail append-only', async () => {
+    const id = await create({});
+
+    await expect(
+      pool.query("UPDATE lead_status_events SET note = 'x' WHERE lead_id = $1", [id]),
+    ).rejects.toThrow(/append-only/);
+    await expect(
+      pool.query('DELETE FROM lead_status_events WHERE lead_id = $1', [id]),
+    ).rejects.toThrow(/append-only/);
+    await expect(pool.query('TRUNCATE lead_status_events')).rejects.toThrow(/append-only/);
+  });
+
+  it('rejects a bad status at the database', async () => {
+    const id = await create({});
+
+    await expect(
+      pool.query("UPDATE listing_inquiries SET status = 'bogus' WHERE id = $1", [id]),
+    ).rejects.toThrow(/status_check/);
   });
 });
