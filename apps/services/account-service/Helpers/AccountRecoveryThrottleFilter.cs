@@ -77,7 +77,7 @@ internal sealed class AccountRecoveryThrottleFilter(
                 allowed = this.TrySignUpSend(signUpResend.Email, clientAddress, out retryAfter);
                 break;
 
-            case SignUpVerifyRequest:
+            case SignUpVerifyRequest or SignUpCompleteRequest:
                 allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter);
                 break;
 
@@ -153,6 +153,7 @@ internal sealed class AccountRecoveryThrottleFilter(
                 or SignUpStartRequest
                 or SignUpResendRequest
                 or SignUpVerifyRequest
+                or SignUpCompleteRequest
                 or SignUpChangeEmailRequest
                 or LoginRequest)
             {

@@ -23,7 +23,7 @@ namespace AccountService.Tests.Integration
     public class AppLoginTrackingTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task Login_WithAllowedAppIdHeader_CreatesUserAppRecord()

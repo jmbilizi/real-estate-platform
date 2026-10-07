@@ -43,7 +43,7 @@ namespace AccountService.Tests.Integration
     /// </remarks>
     public class AccountRecoveryEndpointTests
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
         private const string NewPassword = "Replaced5678!@#";
         private const string RegisterPath = "/account/register";
         private const string ForgotPath = "/account/forgotPassword";
@@ -281,7 +281,7 @@ namespace AccountService.Tests.Integration
             {
                 using var failed = await client.PostAsJsonAsync(
                     "/account/login",
-                    new { email, password = "Wrong1234!@#" });
+                    new { email, password = "Wrong1234!@#Abc" });
                 failed.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             }
 
@@ -392,7 +392,7 @@ namespace AccountService.Tests.Integration
 
             // Both surfaces run the same validators and report the same error codes, so the two
             // cannot drift into different rules for the same field.
-            foreach (var code in new[] { "PasswordTooShort", "PasswordRequiresNonAlphanumeric", "PasswordRequiresDigit", "PasswordRequiresUpper" })
+            foreach (var code in new[] { "too_short" })
             {
                 registerBody.Should().Contain(code);
                 resetBody.Should().Contain(code);

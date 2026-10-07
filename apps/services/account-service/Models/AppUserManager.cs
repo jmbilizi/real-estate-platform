@@ -56,12 +56,10 @@ internal sealed class AppUserManager(
     {
         var result = await base.CreateAsync(user).ConfigureAwait(false);
 
-        if (result.Succeeded)
-        {
-            await AddToRoleAsync(user, Roles.User).ConfigureAwait(false);
-        }
-
-        return result;
+        // A failed role grant is a failed create. Sign-up completion rolls back on it.
+        return result.Succeeded
+            ? await AddToRoleAsync(user, Roles.User).ConfigureAwait(false)
+            : result;
     }
 
     /// <summary>

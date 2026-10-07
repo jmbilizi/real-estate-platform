@@ -20,7 +20,7 @@ namespace AccountService.Tests.Integration
     public class AccountRevocationTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task DeleteProfile_RevokesActiveSession_SubsequentRequestReturnsUnauthorized()

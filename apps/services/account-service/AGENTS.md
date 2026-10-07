@@ -184,3 +184,25 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `InternalRoutesNotExposedTests` guards it.
 - Every grant and removal in `Routes/Admin.cs` writes a `RoleGrantAudits` row. The README says how a
   human grants the first `SuperAdmin`.
+
+## Complete sign-up and password policy (#654)
+
+- `POST /account/signup/complete` (`Routes/SignUpComplete.cs`, `Helpers/SignUpCompletion.cs`) takes
+  `{ email, signupProof, password }`. It uses up the proof, creates a confirmed `ApplicationUser`
+  through `UserManager.CreateAsync` (default role, password check), deletes the pending row, and
+  signs in like `/login`. Query `useCookies` and `useSessionCookies` pick cookie or bearer.
+- Answers: `200` session, `401 invalid_proof`, `400 password_rejected` with `errors` (stable codes),
+  `409 email_unavailable` (an account, a soft-deleted account, or a lost race: one answer).
+- A rejected password gives the proof back (`SignUpService.ReleaseProofAsync`). The proof check runs
+  first, so the breach check is not an oracle for a caller without a proof.
+- The new account, its role and the pending-row delete share one transaction on a relational
+  provider. The unique index on `NormalizedUserName` (the address) is the final guard.
+- Policy: `Configuration/PasswordPolicyOptions.cs`, section `PasswordPolicy`. `MinLength` 15,
+  `MaxLength` 128, no composition rules. `Helpers/PasswordPolicyValidator.cs` is the only
+  `IPasswordValidator`, so register, change and reset follow it. Codes: `too_short`, `too_long`,
+  `breached`. The password is never trimmed. Old shorter passwords still log in.
+- Breach check: `Helpers/PwnedPasswordsClient.cs` (HIBP range API, SHA-1 prefix, `Add-Padding`, 2
+  second timeout). A timeout or error lets the password pass and logs event `1390`. The HTTP client
+  calls `RemoveAllLoggers()` because the framework logs the request URI, which holds the prefix.
+  Never log the password, the hash or the exception text there.
+- Tests use `FakePwnedPasswordsClient` (`AccountServiceFactory.Breaches`). No test reaches the API.

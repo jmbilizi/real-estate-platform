@@ -20,7 +20,7 @@ namespace AccountService.Tests.Integration
     public class BearerRevocationTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task Bearer_IsAcceptedBeforeAnyRotation()
@@ -53,7 +53,7 @@ namespace AccountService.Tests.Integration
             await RotateAsync(email, async (users, user) =>
             {
                 var code = await users.GeneratePasswordResetTokenAsync(user);
-                return await users.ResetPasswordAsync(user, code, "Other1234!@#");
+                return await users.ResetPasswordAsync(user, code, "Other1234!@#Abcde");
             });
 
             using var after = await client.GetAsync("/account/profile");

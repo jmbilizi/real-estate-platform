@@ -23,7 +23,7 @@ namespace AccountService.Tests.Integration
     public class StaffRolesEndpointTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
         private const string IntrospectPath = "/internal/account/introspect";
 
         [Fact]

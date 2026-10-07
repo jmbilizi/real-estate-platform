@@ -282,6 +282,45 @@ internal sealed class SignUpService(
         }
     }
 
+    /// <summary>
+    /// Gives a used proof back, after the complete step refused the password and created nothing.
+    /// The proof keeps its expiry.
+    /// </summary>
+    /// <param name="email">The address the proof is bound to.</param>
+    /// <param name="proof">The proof that was used. A row with another proof is left alone.</param>
+    /// <param name="cancellationToken">A token to cancel the call.</param>
+    /// <returns>A task that completes when the proof is live again.</returns>
+    internal async Task ReleaseProofAsync(string? email, string? proof, CancellationToken cancellationToken = default)
+    {
+        if (!SignUpEmail.TryNormalize(email, out var key, out _) || string.IsNullOrEmpty(proof))
+        {
+            return;
+        }
+
+        db.ChangeTracker.Clear();
+        var row = await db.PendingRegistrations
+            .FirstOrDefaultAsync(p => p.Email == key && p.ProofConsumedAt != null, cancellationToken)
+            .ConfigureAwait(false);
+        if (row?.ProofHash is null
+            || !CryptographicOperations.FixedTimeEquals(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(proof)), row.ProofHash))
+        {
+            return;
+        }
+
+        row.ProofConsumedAt = null;
+        row.UpdatedAt = this.Now();
+        row.Version++;
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // The purge removed the row. The user starts again.
+            db.ChangeTracker.Clear();
+        }
+    }
+
     /// <summary>Deletes pending rows past their expiry.</summary>
     /// <param name="cancellationToken">A token to cancel the call.</param>
     /// <returns>The number of rows deleted.</returns>

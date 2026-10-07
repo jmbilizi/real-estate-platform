@@ -166,6 +166,41 @@ internal static class Program
             .Configure<IOptions<AccountRecoveryOptions>>((identity, recovery) =>
                 identity.SignIn.RequireConfirmedAccount = recovery.Value.RequireConfirmedEmail);
 
+        // Password policy: length and the breached-password check, no composition rules (#654).
+        // Identity's stock PasswordValidator is removed. PasswordPolicyValidator is the only
+        // validator, so register, change, reset and sign-up all follow it. The Identity switches
+        // are cleared too, as a second line should a stock validator return.
+        builder.Services
+            .AddOptions<PasswordPolicyOptions>()
+            .Bind(builder.Configuration.GetSection(PasswordPolicyOptions.SectionName))
+            .Validate(options => options.Validate() is null, "PasswordPolicy configuration is invalid. See PasswordPolicyOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services
+            .AddOptions<IdentityOptions>()
+            .Configure<IOptions<PasswordPolicyOptions>>((identity, policy) =>
+            {
+                identity.Password.RequireDigit = false;
+                identity.Password.RequireLowercase = false;
+                identity.Password.RequireUppercase = false;
+                identity.Password.RequireNonAlphanumeric = false;
+                identity.Password.RequiredLength = policy.Value.MinLength;
+                identity.Password.RequiredUniqueChars = 1;
+            });
+        builder.Services.RemoveAll<IPasswordValidator<ApplicationUser>>();
+        builder.Services.AddScoped<IPasswordValidator<ApplicationUser>, PasswordPolicyValidator>();
+
+        // RemoveAllLoggers: the framework's handler logs the request URI, which holds the SHA-1 prefix.
+        builder.Services
+            .AddHttpClient<IPwnedPasswordsClient, PwnedPasswordsClient>(
+                (sp, http) =>
+                {
+                    var policy = sp.GetRequiredService<IOptions<PasswordPolicyOptions>>().Value;
+                    http.BaseAddress = policy.BreachCheckBaseUrl;
+                    http.Timeout = policy.BreachCheckTimeout + TimeSpan.FromSeconds(1);
+                })
+            .RemoveAllLoggers();
+        builder.Services.AddScoped<SignUpCompletion>();
+
         builder.Services.AddSingleton<AccountRecoveryRateLimiter>();
         builder.Services.AddSingleton<ConfirmationLinkBuilder>();
         builder.Services.AddSingleton<PasswordResetLinkBuilder>();
@@ -281,6 +316,9 @@ internal static class Program
         // Sign-up before an account exists: POST /account/signup/{start,verify,resend,change-email}.
         // Creates no ApplicationUser. See Routes/SignUp.cs.
         app.MapSignUpRoutes();
+
+        // POST /account/signup/complete: creates the account and signs it in. See Routes/SignUpComplete.cs.
+        app.MapSignUpCompleteRoutes();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();

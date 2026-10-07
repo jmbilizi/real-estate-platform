@@ -23,7 +23,7 @@ namespace AccountService.Tests.Integration
     /// </summary>
     public class DeletedAccountSignInTests
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task Login_LiveAccount_StillSignsIn()
@@ -70,7 +70,7 @@ namespace AccountService.Tests.Integration
             using var unknown = await LoginAsync(client, NewEmail("never-registered"), Password);
             var live = NewEmail("wrong-password");
             await RegisterAsync(client, live);
-            using var wrongPassword = await LoginAsync(client, live, "Wrong1234!@#");
+            using var wrongPassword = await LoginAsync(client, live, "Wrong1234!@#Abc");
 
             var deletedBody = await DetailAsync(deleted);
             deleted.StatusCode.Should().Be(HttpStatusCode.Unauthorized);

@@ -18,7 +18,7 @@ namespace AccountService.Tests.Integration
     public class ProfileEndpointTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task GetProfile_ReturnsUnauthorized_WhenNotLoggedIn()

@@ -878,7 +878,7 @@ namespace AccountService.Tests.Integration
             var manager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
             var result = await manager.CreateAsync(
                 new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true },
-                "Test1234!@#");
+                "Test1234!@#Abcd");
             result.Succeeded.Should().BeTrue();
         }
     }

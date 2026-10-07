@@ -29,7 +29,7 @@ namespace AccountService.Tests.Integration
     /// </summary>
     public class EmailConfirmationEndpointTests
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
         private const string RegisterPath = "/account/register";
         private const string LoginPath = "/account/login";
         private const string ConfirmPath = "/account/confirmEmail";
@@ -197,7 +197,7 @@ namespace AccountService.Tests.Integration
             var email = NewEmail("dup-unconfirmed");
 
             var first = await PostTimedAsync(client, RegisterPath, new { email, password = Password });
-            var second = await PostTimedAsync(client, RegisterPath, new { email, password = "Another9876!@#" });
+            var second = await PostTimedAsync(client, RegisterPath, new { email, password = "Another9876!@#Abc" });
 
             first.Status.Should().Be(HttpStatusCode.OK);
             second.Status.Should().Be(first.Status);
@@ -271,7 +271,7 @@ namespace AccountService.Tests.Integration
             var malformed = await PostTimedAsync(client, RegisterPath, new { email = "not-an-address", password = Password });
 
             weakFresh.Status.Should().Be(HttpStatusCode.BadRequest);
-            weakFresh.Body.Should().Contain("Password");
+            weakFresh.Body.Should().Contain("too_short");
 
             // The policy fails before the duplicate check, so the two weak requests are identical.
             weakDuplicate.Status.Should().Be(HttpStatusCode.BadRequest);
@@ -318,7 +318,7 @@ namespace AccountService.Tests.Integration
             await RegisterAsync(client, email);
 
             var unconfirmed = await PostTimedAsync(client, LoginPath, new { email, password = Password });
-            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email, password = "Wrong1234!@#" });
+            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email, password = "Wrong1234!@#Abc" });
             var unknown = await PostTimedAsync(client, LoginPath, new { email = NewEmail("nobody"), password = Password });
 
             unconfirmed.Status.Should().Be(HttpStatusCode.Unauthorized);
@@ -346,7 +346,7 @@ namespace AccountService.Tests.Integration
             await RegisterAsync(client, email);
 
             var unknown = await PostTimedAsync(client, LoginPath, new { email = NewEmail("nobody"), password = Password });
-            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email, password = "Wrong1234!@#" });
+            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email, password = "Wrong1234!@#Abc" });
 
             unknown.Status.Should().Be(HttpStatusCode.Unauthorized);
             wrongPassword.Status.Should().Be(HttpStatusCode.Unauthorized);
@@ -367,12 +367,12 @@ namespace AccountService.Tests.Integration
             // Identity's default lockout: five failures.
             for (var attempt = 0; attempt < 5; attempt++)
             {
-                using var failed = await client.PostAsJsonAsync(LoginPath, new { email = locked, password = "Wrong1234!@#" });
+                using var failed = await client.PostAsJsonAsync(LoginPath, new { email = locked, password = "Wrong1234!@#Abc" });
                 failed.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             }
 
             var lockedOut = await PostTimedAsync(client, LoginPath, new { email = locked, password = Password });
-            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email = reference, password = "Wrong1234!@#" });
+            var wrongPassword = await PostTimedAsync(client, LoginPath, new { email = reference, password = "Wrong1234!@#Abc" });
 
             lockedOut.Status.Should().Be(HttpStatusCode.Unauthorized);
             lockedOut.Body.Should().Be(wrongPassword.Body);

@@ -19,7 +19,7 @@ namespace AccountService.Tests.Integration
     public class WaitlistEndpointTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task GetWaitlist_ReturnsUnauthorized_WhenNotLoggedIn()

@@ -32,6 +32,9 @@ namespace AccountService.Tests.Integration
 
         private readonly string dbName = $"AccountServiceTest-{Guid.NewGuid()}";
 
+        /// <summary>Gets the fake breach client the host uses.</summary>
+        internal AccountService.Tests.Helpers.FakePwnedPasswordsClient Breaches { get; } = new();
+
         /// <summary>Gets every log entry the host wrote.</summary>
         internal CapturingLoggerProvider Logs { get; } = new();
 
@@ -55,6 +58,9 @@ namespace AccountService.Tests.Integration
                 // Re-register with the same in-memory DB name used by CreateHost seeding
                 services.AddDbContext<AccountDbContext>(options =>
                     options.UseInMemoryDatabase(this.dbName));
+
+                // No test reaches the Pwned Passwords API. A test marks a password as breached on the fake.
+                services.AddSingleton<AccountService.Helpers.IPwnedPasswordsClient>(this.Breaches);
 
                 // TestServer requests carry no remote address, so every caller in a shared host
                 // shares one "unknown" bucket. Lift the limits and the timing floor out of the way.
