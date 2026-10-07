@@ -193,6 +193,7 @@ describe('GET /staff/leads/:id', () => {
               listing_id: LEAD,
               listing_title: 'A home',
               listing_address: '1 Main St',
+              listing_state: 'MD',
               listing_price: '500000.00',
               listing_status: 'Active',
               possible_duplicate: false,
@@ -206,6 +207,7 @@ describe('GET /staff/leads/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.email).toBe('jane@example.com');
     expect(res.body.listing.listPrice).toBe(500000);
+    expect(res.body.listing.state).toBe('MD');
     const audit = pool.calls.findIndex((c) => c.sql.includes('INSERT INTO lead_access_audit'));
     const history = pool.calls.findIndex((c) => c.sql.includes('FROM lead_status_events'));
     expect(audit).toBeGreaterThan(-1);

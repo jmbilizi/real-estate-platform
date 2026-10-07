@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { StaffLeadDetail } from '@cribstop/property-contracts';
-import { STAFF_NOTE_MAX_LENGTH } from '@cribstop/property-contracts';
+import type { StaffLeadAssignment, StaffLeadDetail } from '@cribstop/property-contracts';
 import Button from '@/components/Button';
 import Modal from '@/components/Modal';
 import { addLeadNote, fetchLead, StaffApiError, transitionLead } from '@/lib/api/staff-leads';
@@ -11,65 +10,19 @@ import { PRICE_WITHHELD_COPY } from '@/lib/listing-format';
 import {
   ACTION_LABEL,
   actionsFor,
+  canAssign,
+  canUnassign,
   formatDateTime,
   KIND_LABEL,
-  NOTE_HINT,
   noteRequired,
   type StaffAction,
   STATUS_LABEL,
   telHref,
 } from '@/lib/staff-leads';
 import { DuplicateBadge, StatusBadge, VerifiedAccountBadge } from './LeadBadges';
+import { AssignAgentSheet, UnassignSheet } from './AgentSheets';
 import { LeadDetailSkeleton } from './LeadSkeletons';
-
-const FIELD =
-  'w-full rounded-md border border-surface-border bg-white px-3 py-2.5 text-sm text-ink focus:border-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink';
-const LINK =
-  'inline-flex min-h-11 items-center font-semibold text-ink underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink';
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-lg border border-surface-border bg-white p-4 sm:p-5">
-      <h2 className="mb-3 text-base font-bold text-ink">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function NoteField({
-  id,
-  value,
-  onChange,
-  required,
-  label,
-}: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-  label: string;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-semibold text-ink">
-        {label}
-        {required && <span className="font-normal text-ink-muted"> (required)</span>}
-      </label>
-      <textarea
-        id={id}
-        rows={4}
-        maxLength={STAFF_NOTE_MAX_LENGTH}
-        className={FIELD}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-describedby={`${id}-hint`}
-      />
-      <p id={`${id}-hint`} className="mt-1 text-xs text-ink-muted">
-        {NOTE_HINT}
-      </p>
-    </div>
-  );
-}
+import { ErrorLine, LINK, NoteField, Section } from './StaffFields';
 
 function ActionSheet({
   lead,
@@ -116,11 +69,7 @@ function ActionSheet({
   return (
     <Modal open onClose={onClose} title="Take action" mobileStyle="bottom-sheet">
       <div className="space-y-4 pb-[env(safe-area-inset-bottom)]">
-        {error && (
-          <p role="alert" className="rounded-md bg-brand-50 px-3 py-2 text-sm text-brand-900">
-            {error}
-          </p>
-        )}
+        <ErrorLine message={error} />
         {actions.length === 0 && (
           <p className="text-sm text-ink-body">
             No action is available while this request is {STATUS_LABEL[lead.status].toLowerCase()}.
@@ -173,6 +122,25 @@ function ActionSheet({
   );
 }
 
+const END_REASON_LABEL: Record<StaffLeadAssignment['endReason'] & string, string> = {
+  unassigned: 'unassigned by staff',
+  returned: 'returned to verified',
+  closed: 'lead ended',
+};
+
+function SheetFor({
+  kind,
+  ...props
+}: {
+  kind: 'assign' | 'unassign';
+  lead: StaffLeadDetail;
+  onClose: () => void;
+  onDone: () => void;
+  onConflict: () => void;
+}) {
+  return kind === 'assign' ? <AssignAgentSheet {...props} /> : <UnassignSheet {...props} />;
+}
+
 type Phase =
   | { status: 'loading' }
   | { status: 'ready'; lead: StaffLeadDetail }
@@ -186,7 +154,7 @@ type Phase =
  */
 export default function LeadDetail({ id }: { id: string }) {
   const [phase, setPhase] = useState<Phase>({ status: 'loading' });
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheet, setSheet] = useState<'action' | 'assign' | 'unassign' | null>(null);
   const [note, setNote] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -238,6 +206,12 @@ export default function LeadDetail({ id }: { id: string }) {
 
   const { lead } = phase;
   const actions = actionsFor(lead.status);
+  const assignable = canAssign(lead.status);
+  const unassignable = canUnassign(lead.status);
+  const agentName = (profileId: string | null) =>
+    lead.assignments.find((a) => a.agentProfileId === profileId)?.agentDisplayName ?? 'an agent';
+  const openAssignment = lead.assignments.find((a) => a.endedAt === null);
+  const pastAssignments = lead.assignments.filter((a) => a.endedAt !== null);
 
   const addNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,7 +247,9 @@ export default function LeadDetail({ id }: { id: string }) {
         }).format(lead.listing.listPrice);
 
   return (
-    <div className="space-y-4 pb-24 layout:pb-0">
+    <div
+      className={`space-y-4 layout:pb-0 ${actions.length > 0 || assignable || unassignable ? 'pb-24' : ''}`}
+    >
       <Link href="/admin/leads" className={LINK}>
         ← All requests
       </Link>
@@ -288,15 +264,56 @@ export default function LeadDetail({ id }: { id: string }) {
             {KIND_LABEL[lead.kind]} · {formatDateTime(lead.createdAt)}
           </span>
         </div>
-        {actions.length > 0 && (
-          <Button
-            className="mt-4 hidden min-h-11 layout:inline-flex"
-            onClick={() => setSheetOpen(true)}
-          >
-            Take action
-          </Button>
-        )}
+        <div className="mt-4 hidden gap-2 layout:flex">
+          {assignable && (
+            <Button className="min-h-11" onClick={() => setSheet('assign')}>
+              Assign agent
+            </Button>
+          )}
+          {unassignable && (
+            <Button className="min-h-11" variant="secondary" onClick={() => setSheet('unassign')}>
+              Unassign agent
+            </Button>
+          )}
+          {actions.length > 0 && (
+            <Button
+              className="min-h-11"
+              variant={assignable ? 'secondary' : 'primary'}
+              onClick={() => setSheet('action')}
+            >
+              Take action
+            </Button>
+          )}
+        </div>
       </header>
+
+      {lead.assignments.length > 0 && (
+        <Section title="Agent">
+          {openAssignment ? (
+            <p className="text-sm text-ink-body">
+              Assigned to{' '}
+              <span className="font-semibold text-ink">{openAssignment.agentDisplayName}</span>{' '}
+              since{' '}
+              <time dateTime={openAssignment.assignedAt}>
+                {formatDateTime(openAssignment.assignedAt)}
+              </time>
+            </p>
+          ) : (
+            <p className="text-sm text-ink-muted">No agent holds this request now.</p>
+          )}
+          {pastAssignments.length > 0 && (
+            <ul className="mt-3 space-y-1 border-t border-surface-border pt-3 text-sm text-ink-muted">
+              {pastAssignments.map((a) => (
+                <li key={a.id}>
+                  {a.agentDisplayName}, {formatDateTime(a.assignedAt)} to{' '}
+                  {a.endedAt ? formatDateTime(a.endedAt) : ''}
+                  {a.endReason ? ` (${END_REASON_LABEL[a.endReason]})` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
 
       <Section title="Contact">
         <dl className="space-y-1 text-sm">
@@ -392,8 +409,11 @@ export default function LeadDetail({ id }: { id: string }) {
           {lead.history.map((ev) => (
             <li key={ev.id} className="text-sm">
               <p className="font-semibold text-ink">
-                {ev.fromStatus ? `${STATUS_LABEL[ev.fromStatus]} to ` : ''}
-                {STATUS_LABEL[ev.toStatus]}
+                {ev.agentProfileId
+                  ? ev.toStatus === 'assigned'
+                    ? `Assigned to ${agentName(ev.agentProfileId)}`
+                    : `Unassigned from ${agentName(ev.agentProfileId)}`
+                  : `${ev.fromStatus ? `${STATUS_LABEL[ev.fromStatus]} to ` : ''}${STATUS_LABEL[ev.toStatus]}`}
               </p>
               <p className="text-ink-muted">
                 <time dateTime={ev.createdAt}>{formatDateTime(ev.createdAt)}</time> · {ev.actorRole}
@@ -434,21 +454,49 @@ export default function LeadDetail({ id }: { id: string }) {
         </form>
       </Section>
 
-      {actions.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-chrome border-t border-surface-border bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 layout:hidden">
-          <Button className="min-h-11 w-full" onClick={() => setSheetOpen(true)}>
-            Take action
-          </Button>
+      {(actions.length > 0 || assignable || unassignable) && (
+        <div className="fixed inset-x-0 bottom-0 z-chrome flex gap-2 border-t border-surface-border bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 layout:hidden">
+          {assignable && (
+            <Button className="min-h-11 flex-1" onClick={() => setSheet('assign')}>
+              Assign agent
+            </Button>
+          )}
+          {unassignable && (
+            <Button className="min-h-11 flex-1" onClick={() => setSheet('unassign')}>
+              Unassign agent
+            </Button>
+          )}
+          {actions.length > 0 && (
+            <Button
+              className="min-h-11 flex-1"
+              variant={assignable ? 'secondary' : 'primary'}
+              onClick={() => setSheet('action')}
+            >
+              Take action
+            </Button>
+          )}
         </div>
       )}
 
-      {sheetOpen && (
+      {sheet === 'action' && (
         <ActionSheet
           lead={lead}
-          onClose={() => setSheetOpen(false)}
+          onClose={() => setSheet(null)}
           onConflict={() => void load(true)}
           onDone={() => {
-            setSheetOpen(false);
+            setSheet(null);
+            void load(false);
+          }}
+        />
+      )}
+      {(sheet === 'assign' || sheet === 'unassign') && (
+        <SheetFor
+          kind={sheet}
+          lead={lead}
+          onClose={() => setSheet(null)}
+          onConflict={() => void load(true)}
+          onDone={() => {
+            setSheet(null);
             void load(false);
           }}
         />

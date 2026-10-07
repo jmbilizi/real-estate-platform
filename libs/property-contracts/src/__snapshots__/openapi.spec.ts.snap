@@ -2559,6 +2559,10 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "nullable": true,
                 "type": "number",
               },
+              "state": {
+                "nullable": true,
+                "type": "string",
+              },
               "status": {
                 "nullable": true,
                 "type": "string",
@@ -2571,6 +2575,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "id",
               "title",
               "address",
+              "state",
               "listPrice",
               "status",
             ],
