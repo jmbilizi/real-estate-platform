@@ -4,15 +4,37 @@
 
 using System.Net.Http.Json;
 using System.Text.Json;
+using AccountService.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AccountService.Tests.Integration
 {
     /// <summary>
-    /// Helper to register and log in a test user via the Identity API endpoints,
-    /// returning an <see cref="HttpClient"/> with the session cookie set.
+    /// Helper to seed a confirmed test user and log in through the Identity API endpoints,
+    /// returning an <see cref="HttpClient"/> with the session cookie set. The public register
+    /// endpoint is retired (#657), so the user is written through the user manager.
     /// </summary>
     internal static class AuthHelper
     {
+        /// <summary>Creates a confirmed account with the default role, as sign-up completion does.</summary>
+        /// <param name="factory">The host.</param>
+        /// <param name="email">The address. Each caller uses a unique one.</param>
+        /// <param name="password">The password.</param>
+        /// <returns>A task that completes when the account exists.</returns>
+        internal static async Task SeedUserAsync(AccountServiceFactory factory, string email, string password)
+        {
+            using var scope = factory.Services.CreateScope();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var result = await users.CreateAsync(
+                new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true },
+                password);
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException("Seeding failed: " + string.Join(", ", result.Errors.Select(e => e.Code)));
+            }
+        }
+
         internal static async Task<HttpClient> CreateAuthenticatedClientAsync(
             AccountServiceFactory factory,
             string email,
@@ -25,13 +47,7 @@ namespace AccountService.Tests.Integration
                 HandleCookies = true,
             });
 
-            // Register — each caller uses a unique email so this always succeeds.
-            var registerResponse = await client.PostAsJsonAsync("/account/register", new
-            {
-                email,
-                password,
-            });
-            registerResponse.EnsureSuccessStatusCode();
+            await SeedUserAsync(factory, email, password);
 
             // Log in using the cookie-based endpoint
             var loginResponse = await client.PostAsJsonAsync("/account/login?useCookies=true", new
@@ -56,12 +72,7 @@ namespace AccountService.Tests.Integration
                 HandleCookies = false,
             });
 
-            var registerResponse = await client.PostAsJsonAsync("/account/register", new
-            {
-                email,
-                password,
-            });
-            registerResponse.EnsureSuccessStatusCode();
+            await SeedUserAsync(factory, email, password);
 
             var loginResponse = await client.PostAsJsonAsync("/account/login", new
             {
@@ -86,12 +97,7 @@ namespace AccountService.Tests.Integration
                 HandleCookies = false,
             });
 
-            var registerResponse = await client.PostAsJsonAsync("/account/register", new
-            {
-                email,
-                password,
-            });
-            registerResponse.EnsureSuccessStatusCode();
+            await SeedUserAsync(factory, email, password);
 
             var loginResponse = await client.PostAsJsonAsync("/account/login?useCookies=true", new
             {

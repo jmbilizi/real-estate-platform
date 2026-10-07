@@ -22,7 +22,7 @@ namespace AccountService.Helpers;
 /// </para>
 /// <para>
 /// The endpoint is identified by the bound request type, not the path. The arguments are searched,
-/// not indexed: <c>GET /confirmEmail</c> has no request DTO.
+/// not indexed: <c>GET /manage/info</c> has no request DTO.
 /// </para>
 /// <para>
 /// A refused call answers <c>429</c> with <c>Retry-After</c> and is not padded. A refusal is
@@ -59,14 +59,6 @@ internal sealed class AccountRecoveryThrottleFilter(
 
             case ResetPasswordRequest:
                 allowed = rateLimiter.TryRedemption(clientAddress, out retryAfter);
-                break;
-
-            case ResendConfirmationEmailRequest resend:
-                allowed = rateLimiter.TryResend(Normalise(resend.Email), clientAddress, out retryAfter);
-                break;
-
-            case RegisterRequest:
-                allowed = rateLimiter.TryRegistration(clientAddress, out retryAfter);
                 break;
 
             case IdentifyRequest identify:
@@ -123,7 +115,7 @@ internal sealed class AccountRecoveryThrottleFilter(
                 return await PaddedAsync(context, next, startedAt).ConfigureAwait(false);
 
             default:
-                // Refresh, confirmEmail and manage/* pass through.
+                // Refresh and manage/* pass through.
                 return await next(context).ConfigureAwait(false);
         }
 
@@ -163,8 +155,6 @@ internal sealed class AccountRecoveryThrottleFilter(
         {
             if (context.Arguments[i] is ForgotPasswordRequest
                 or ResetPasswordRequest
-                or ResendConfirmationEmailRequest
-                or RegisterRequest
                 or IdentifyRequest
                 or SignUpStartRequest
                 or SignUpResendRequest

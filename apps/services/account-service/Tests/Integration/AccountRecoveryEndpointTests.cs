@@ -36,20 +36,16 @@ namespace AccountService.Tests.Integration
     /// response-timing floor, the lockout clearing, the soft-delete refusal — the test says so.
     /// </para>
     /// <para>
-    /// Registration, confirmation and resend are covered by
-    /// <see cref="EmailConfirmationEndpointTests"/>; the helpers here only register and confirm an
-    /// account as the precondition a reset needs.
+    /// The helpers here seed a confirmed account as the precondition a reset needs. The public
+    /// register endpoint is retired (#657).
     /// </para>
     /// </remarks>
     public class AccountRecoveryEndpointTests
     {
         private const string Password = "Test1234!@#Abcd";
         private const string NewPassword = "Replaced5678!@#";
-        private const string RegisterPath = "/account/register";
         private const string ForgotPath = "/account/forgotPassword";
         private const string ResetPath = "/account/resetPassword";
-        private const string ConfirmPath = "/account/confirmEmail";
-        private const string ResendPath = "/account/resendConfirmationEmail";
 
         [Fact]
         public async Task ForgotPassword_AnswersIdentically_ForRegisteredAndUnregisteredAddresses()
@@ -80,40 +76,6 @@ namespace AccountService.Tests.Integration
 
             knownResponse.Dispose();
             unknownResponse.Dispose();
-        }
-
-        [Fact]
-        public async Task ForgotPassword_IssuesNothing_ForAnAddressThatHasNotBeenConfirmed()
-        {
-            using var factory = new AccountRecoveryFactory(NoDelay);
-            using var client = factory.CreateClient();
-
-            var email = $"unconfirmed-{Guid.NewGuid()}@example.com";
-            await RegisterAsync(client, email);
-
-            // Identity gates the reset on IsEmailConfirmedAsync:
-            //   if (user is not null && await userManager.IsEmailConfirmedAsync(user))
-            // so a registered-but-unconfirmed address gets the same empty 200 and no token at all.
-            //
-            // This test exists to keep that visible rather than surprising, because it is the whole
-            // consequence of the product ruling on #147 that existing accounts are NOT
-            // grandfathered: nothing in this service has ever written EmailConfirmed, so every
-            // account created before confirmation shipped has it false, and this endpoint answers
-            // 200 and issues nothing for all of them until their owner confirms through
-            // /resendConfirmationEmail. That is the intended path, and this is the test that stops
-            // it being rediscovered as a bug.
-            var (response, _, _) = await PostForgotAsync(client, email);
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-            factory.ResetCodes.Should().BeEmpty();
-
-            // Confirm the address and the very same request now issues a token.
-            await ConfirmAsync(factory, client, email);
-            var (afterConfirm, _, _) = await PostForgotAsync(client, email);
-            afterConfirm.StatusCode.Should().Be(HttpStatusCode.OK);
-            factory.ResetCodes.Should().ContainSingle().Which.Email.Should().Be(email);
-
-            response.Dispose();
-            afterConfirm.Dispose();
         }
 
         [Fact]
@@ -369,7 +331,7 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task ResetPassword_EnforcesTheSamePasswordPolicyAsRegistration()
+        public async Task ResetPassword_EnforcesThePasswordPolicy()
         {
             using var factory = new AccountRecoveryFactory(NoDelay);
             using var client = factory.CreateClient();
@@ -384,19 +346,7 @@ namespace AccountService.Tests.Integration
             reset.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             var resetBody = await reset.Content.ReadAsStringAsync();
 
-            using var register = await client.PostAsJsonAsync(
-                RegisterPath,
-                new { email = $"policy-signup-{Guid.NewGuid()}@example.com", password = WeakPassword });
-            register.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-            var registerBody = await register.Content.ReadAsStringAsync();
-
-            // Both surfaces run the same validators and report the same error codes, so the two
-            // cannot drift into different rules for the same field.
-            foreach (var code in new[] { "too_short" })
-            {
-                registerBody.Should().Contain(code);
-                resetBody.Should().Contain(code);
-            }
+            resetBody.Should().Contain("too_short");
 
             // A policy failure is reported as itself, not disguised as a bad token — the caller
             // already proved they hold a valid one, since Identity verifies the token before it
@@ -475,16 +425,14 @@ namespace AccountService.Tests.Integration
         public async Task ThrottleFilter_LeavesNonRecoveryEndpointsAlone()
         {
             // The filter is attached to the WHOLE Identity group, so it also runs for /login,
-            // /refresh, /confirmEmail and /manage/*. It is supposed to pass those straight through.
+            // /refresh and /manage/*. It is supposed to pass those straight through.
             //
-            // Without this test nothing would notice if, say, /login started consuming the
-            // registration budget — every other test either raises the limits out of the way or
-            // lowers only the single limit it is exercising. Here the registration budget is 1 and
-            // is spent immediately, so any bleed from the login path shows up as a 429.
+            // Without this test nothing would notice if, say, /login started consuming a recovery
+            // budget. Here the budgets are 1 and are spent immediately, so any bleed from the
+            // login path shows up as a 429.
             using var factory = new AccountRecoveryFactory(options =>
             {
                 NoDelay(options);
-                options.RegistrationsPerAddress = 1;
                 options.RequestsPerAddress = 1;
                 options.RedemptionsPerAddress = 1;
             });
@@ -505,10 +453,6 @@ namespace AccountService.Tests.Integration
                 using var login = await client.PostAsJsonAsync("/account/login", new { email, password = Password });
                 login.StatusCode.Should().Be(HttpStatusCode.OK, "login is not part of the recovery surface");
             }
-
-            // And so is confirming — which has no request DTO at all, the case that would throw if
-            // the filter indexed arguments instead of searching them.
-            await ConfirmAsync(factory, client, email);
 
             // Meanwhile the budgets really were spent, so the limits are genuinely in force and
             // this test is not passing because the filter is inert everywhere.
@@ -535,16 +479,11 @@ namespace AccountService.Tests.Integration
                 new { email = "a@example.com", resetCode = "x", newPassword = NewPassword });
             reset.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-            using var resend = await client.PostAsJsonAsync(
-                ResendPath,
-                new { email = $"present-resend-{Guid.NewGuid()}@example.com" });
-            resend.StatusCode.Should().Be(HttpStatusCode.OK);
-
             using var response = await client.GetAsync("/openapi/v1.json");
             response.EnsureSuccessStatusCode();
             var document = await response.Content.ReadAsStringAsync();
 
-            foreach (var path in new[] { RegisterPath, ForgotPath, ResetPath, ConfirmPath, ResendPath })
+            foreach (var path in new[] { ForgotPath, ResetPath })
             {
                 document.Should().Contain(path);
             }
@@ -554,33 +493,6 @@ namespace AccountService.Tests.Integration
 
             // The code-based steps (#658) live below /account/password/reset/. The quoted key is the old path itself.
             document.Should().NotContain("\"/account/password/reset\"");
-        }
-
-        [Fact]
-        public async Task ConfirmEmailEndpoint_IsNamed_SoRegistrationCanBuildItsLink()
-        {
-            using var factory = new AccountRecoveryFactory(NoDelay);
-            using var client = factory.CreateClient();
-
-            // MapIdentityApi stores this name in a closure and both /register and
-            // /resendConfirmationEmail resolve the confirmation URL through it. If the endpoint
-            // stops carrying the name, /register throws NotSupportedException *after* the user row
-            // is committed — a 500 against an account that exists and can never be confirmed. This
-            // pins the dependency directly rather than only through its symptom.
-            var endpoints = factory.Services
-                .GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>()
-                .Endpoints;
-
-            endpoints.Should().Contain(
-                endpoint => endpoint.Metadata
-                    .GetMetadata<Microsoft.AspNetCore.Routing.EndpointNameMetadata>() != null &&
-                    endpoint.Metadata
-                        .GetMetadata<Microsoft.AspNetCore.Routing.EndpointNameMetadata>()!
-                        .EndpointName == $"MapIdentityApi-{ConfirmPath}");
-
-            // The symptom, asserted too: registration succeeds and produces a link.
-            await RegisterAsync(client, $"named-{Guid.NewGuid()}@example.com");
-            factory.ConfirmationLinks.Should().ContainSingle();
         }
 
         private static void NoDelay(AccountRecoveryOptions options) =>
@@ -652,45 +564,14 @@ namespace AccountService.Tests.Integration
             (knownElapsed - unknownElapsed).Duration().Should().BeLessThan(TimeSpan.FromMilliseconds(600));
         }
 
-        private static async Task RegisterAsync(HttpClient client, string email)
-        {
-            using var response = await client.PostAsJsonAsync(RegisterPath, new { email, password = Password });
-            response.EnsureSuccessStatusCode();
-        }
-
         /// <summary>
-        /// Confirms an already-registered address by following the link the service issued for it.
+        /// Seeds a confirmed account, the precondition for password reset: Identity issues a reset
+        /// token only for a confirmed address.
         /// </summary>
-        /// <remarks>
-        /// The credential is rebuilt onto the web origin and <c>ConfirmationPath</c>
-        /// (<c>/confirm-email</c>), which is the web app's route, not this service's. Only its query
-        /// string — Identity's <c>userId</c> and <c>code</c> — carries over onto the real
-        /// <c>/account/confirmEmail</c> endpoint, exactly as the web app would call it.
-        /// </remarks>
-        private static async Task ConfirmAsync(
+        private static Task RegisterAndConfirmAsync(
             AccountRecoveryFactory factory,
             HttpClient client,
-            string email)
-        {
-            var link = factory.ConfirmationLinks.Last(message => message.Email == email);
-            var query = new Uri(link.Credential).Query;
-
-            using var response = await client.GetAsync(ConfirmPath + query);
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-        }
-
-        /// <summary>
-        /// Registers an account and confirms its address, which is the precondition for password
-        /// reset: Identity issues a reset token only for a confirmed address.
-        /// </summary>
-        private static async Task RegisterAndConfirmAsync(
-            AccountRecoveryFactory factory,
-            HttpClient client,
-            string email)
-        {
-            await RegisterAsync(client, email);
-            await ConfirmAsync(factory, client, email);
-        }
+            string email) => AuthHelper.SeedUserAsync(factory, email, Password);
 
         private static Task<(HttpResponseMessage Response, string Body, TimeSpan Elapsed)> PostForgotAsync(
             HttpClient client,

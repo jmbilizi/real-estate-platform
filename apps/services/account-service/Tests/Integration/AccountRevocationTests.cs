@@ -33,7 +33,7 @@ namespace AccountService.Tests.Integration
                 AllowAutoRedirect = false,
             });
 
-            await client.PostAsJsonAsync("/account/register", new { email, password = Password });
+            await AuthHelper.SeedUserAsync(factory, email, Password);
             var loginResponse = await client.PostAsJsonAsync(
                 "/account/login?useCookies=true",
                 new { email, password = Password });

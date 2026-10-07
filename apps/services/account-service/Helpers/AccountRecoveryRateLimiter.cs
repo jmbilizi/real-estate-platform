@@ -9,8 +9,8 @@ using Microsoft.Extensions.Options;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// Fixed-window request counters for the unauthenticated Identity endpoints — registration, email
-/// confirmation resend, and password reset — keyed by email address and by client address.
+/// Fixed-window request counters for the unauthenticated account endpoints — sign-up, identify, and
+/// password reset — keyed by email address and by client address.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -116,36 +116,6 @@ internal sealed class AccountRecoveryRateLimiter(
         this.TryConsumeAll(
             out retryAfter,
             new Counter($"pwreset:redeem:addr:{clientAddress ?? "unknown"}", options.Value.RedemptionsPerAddress, options.Value.RequestWindow));
-
-    /// <summary>
-    /// Counts one confirmation resend against the interval, hourly and daily limits for the address
-    /// and against the client-address limit.
-    /// </summary>
-    /// <param name="email">The submitted email address; compared case-insensitively.</param>
-    /// <param name="clientAddress">The client address, or null when unknown.</param>
-    /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
-    /// <returns><see langword="true"/> when the resend may proceed.</returns>
-    internal bool TryResend(string email, string? clientAddress, out TimeSpan retryAfter)
-    {
-        var settings = options.Value;
-        var key = email.ToUpperInvariant();
-
-        return this.TryConsumeAll(
-            out retryAfter,
-            new Counter($"confirm:resend:interval:{key}", 1, settings.ResendMinimumInterval),
-            new Counter($"confirm:resend:hour:{key}", settings.ResendsPerEmailPerHour, TimeSpan.FromHours(1)),
-            new Counter($"confirm:resend:day:{key}", settings.ResendsPerEmailPerDay, TimeSpan.FromHours(24)),
-            new Counter($"confirm:resend:addr:{clientAddress ?? "unknown"}", settings.ResendsPerAddress, settings.RequestWindow));
-    }
-
-    /// <summary>Counts one registration attempt against the client-address limit.</summary>
-    /// <param name="clientAddress">The client address, or null when unknown.</param>
-    /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
-    /// <returns><see langword="true"/> when the registration may proceed.</returns>
-    internal bool TryRegistration(string? clientAddress, out TimeSpan retryAfter) =>
-        this.TryConsumeAll(
-            out retryAfter,
-            new Counter($"register:addr:{clientAddress ?? "unknown"}", options.Value.RegistrationsPerAddress, options.Value.RequestWindow));
 
     /// <summary>
     /// Counts one sign-up send (start, resend or the new address of a change) against the client

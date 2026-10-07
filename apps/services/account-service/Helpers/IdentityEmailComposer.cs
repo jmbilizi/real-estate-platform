@@ -9,9 +9,8 @@ using Microsoft.Extensions.Options;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// Composes every transactional message this service sends: the three Identity asks
-/// <c>IEmailSender&lt;TUser&gt;</c> to send, plus the already-registered notice #147's
-/// non-enumeration guarantee sends by mail instead of by API response.
+/// Composes every transactional message this service sends: the password-reset messages
+/// <c>IEmailSender&lt;TUser&gt;</c> asks for, the already-registered notice, and the one-time code.
 /// </summary>
 /// <remarks>
 /// Every sender, including the Postmark transport (#138), composes through this class. It is the
@@ -21,33 +20,15 @@ namespace AccountService.Helpers;
 /// </remarks>
 /// <param name="email">The sender identity.</param>
 /// <param name="recovery">The account-recovery policy, for the token lifetimes.</param>
-/// <param name="confirmationLinks">The confirmation link builder.</param>
 /// <param name="resetLinks">The password-reset link builder.</param>
 internal sealed class IdentityEmailComposer(
     IOptions<TransactionalEmailOptions> email,
     IOptions<AccountRecoveryOptions> recovery,
-    ConfirmationLinkBuilder confirmationLinks,
     PasswordResetLinkBuilder resetLinks)
 {
-    private const string ConfirmSubject = "Confirm your email address for Cribstop";
     private const string ResetSubject = "Reset your Cribstop password";
     private const string AlreadyRegisteredSubject = "Someone tried to create a Cribstop account with your email address";
-    private const string IgnoreIfNotYou = "If you did not create a Cribstop account, ignore this message.";
     private const string IgnoreIfNotReset = "If you did not ask to reset your password, ignore this message.";
-
-    /// <summary>Composes the email-confirmation message.</summary>
-    /// <param name="to">The recipient.</param>
-    /// <param name="identityLink">The link Identity generated. It is rebuilt onto the web origin.</param>
-    /// <returns>The message.</returns>
-    internal OutboundEmail ConfirmationLink(string to, string identityLink)
-    {
-        var link = confirmationLinks.Rebuild(identityLink);
-        var expiry = FormatLifetime(recovery.Value.ConfirmationTokenLifetime);
-        var body =
-            $"Open this link to confirm your email address for your Cribstop account:\n\n{link}\n\n" +
-            $"This link expires in {expiry}.\n\n{IgnoreIfNotYou}";
-        return this.Compose(EmailKind.Confirmation, to, ConfirmSubject, body);
-    }
 
     /// <summary>Composes the password-reset message from the code Identity issued.</summary>
     /// <remarks>

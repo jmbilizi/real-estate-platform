@@ -528,7 +528,6 @@ namespace AccountService.Tests.Helpers
                         BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
                     }),
                     Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://web.example") }),
-                    new ConfirmationLinkBuilder(Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://web.example") })),
                     new PasswordResetLinkBuilder(Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://web.example") }))),
                 this.sender,
                 this.clock,

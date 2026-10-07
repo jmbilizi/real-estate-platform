@@ -6,7 +6,7 @@ namespace AccountService.Configuration;
 
 /// <summary>
 /// Strongly-typed options for the <c>AccountRecovery</c> configuration section: the policy over the
-/// service's whole unauthenticated account-recovery surface — registration, email confirmation and
+/// service's whole unauthenticated account-recovery surface — sign-up codes, identify and
 /// password reset.
 /// </summary>
 /// <remarks>
@@ -29,23 +29,10 @@ internal sealed class AccountRecoveryOptions
     public const string SectionName = "AccountRecovery";
 
     /// <summary>
-    /// Gets or sets a value indicating whether an unconfirmed account is refused at sign-in.
-    /// Bound to <c>SignInOptions.RequireConfirmedAccount</c>. Every environment sets it explicitly.
-    /// #149 turns it on.
-    /// </summary>
-    public bool RequireConfirmedEmail { get; set; }
-
-    /// <summary>
     /// Gets or sets the public origin of the web app, for example <c>https://cribstop.com</c>.
-    /// The confirmation link is built from it. Required. No default in code (PRD §1).
+    /// The password-reset link is built from it. Required. No default in code (PRD §1).
     /// </summary>
     public Uri? WebBaseUrl { get; set; }
-
-    /// <summary>
-    /// Gets or sets the web route that receives the confirmation link. The settled value is
-    /// <c>/confirm-email</c> (stakeholder ruling 2026-09-16). Required.
-    /// </summary>
-    public string ConfirmationPath { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the web route that receives the password-reset link, carrying <c>email</c> and
@@ -54,29 +41,11 @@ internal sealed class AccountRecoveryOptions
     public string PasswordResetPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets how long a confirmation link stays valid. Enforced by the dedicated
-    /// <c>EmailConfirmationTokenProvider</c>, so it does not change any other Identity token.
-    /// </summary>
-    public TimeSpan ConfirmationTokenLifetime { get; set; } = TimeSpan.FromHours(24);
-
-    /// <summary>
     /// Gets or sets how long an issued password-reset token stays valid. Enforced by the dedicated
     /// <c>PasswordResetTokenProvider</c>, so the configured value is the one actually enforced when
-    /// a token is redeemed, and it does not change the confirmation token's lifetime.
+    /// a token is redeemed.
     /// </summary>
     public TimeSpan TokenLifetime { get; set; } = TimeSpan.FromHours(1);
-
-    /// <summary>
-    /// Gets or sets the minimum time between two confirmation sends for one address.
-    /// <see cref="TimeSpan.Zero"/> disables the interval.
-    /// </summary>
-    public TimeSpan ResendMinimumInterval { get; set; } = TimeSpan.FromSeconds(60);
-
-    /// <summary>Gets or sets the confirmation sends allowed for one address per hour.</summary>
-    public int ResendsPerEmailPerHour { get; set; } = 3;
-
-    /// <summary>Gets or sets the confirmation sends allowed for one address per 24 hours.</summary>
-    public int ResendsPerEmailPerDay { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets the number of password-reset requests allowed for one email address per
@@ -94,12 +63,6 @@ internal sealed class AccountRecoveryOptions
     public int RequestsPerEmail { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the resend requests allowed from one client address per
-    /// <see cref="RequestWindow"/>.
-    /// </summary>
-    public int ResendsPerAddress { get; set; } = 10;
-
-    /// <summary>
     /// Gets or sets the password-reset requests allowed from one client address per
     /// <see cref="RequestWindow"/>.
     /// </summary>
@@ -112,13 +75,6 @@ internal sealed class AccountRecoveryOptions
     /// the policy several times in a row.
     /// </summary>
     public int RedemptionsPerAddress { get; set; } = 30;
-
-    /// <summary>
-    /// Gets or sets the registration attempts allowed from one client address per
-    /// <see cref="RequestWindow"/>. Loose on purpose: one client address is often many people
-    /// behind one NAT.
-    /// </summary>
-    public int RegistrationsPerAddress { get; set; } = 30;
 
     /// <summary>
     /// Gets or sets the sign-up sends (start, resend, change-email) allowed from one client address
@@ -189,19 +145,9 @@ internal sealed class AccountRecoveryOptions
             return $"{SectionName}:{nameof(this.WebBaseUrl)} must use http or https.";
         }
 
-        if (!this.ConfirmationPath.StartsWith('/'))
-        {
-            return $"{SectionName}:{nameof(this.ConfirmationPath)} must start with '/'.";
-        }
-
         if (!this.PasswordResetPath.StartsWith('/'))
         {
             return $"{SectionName}:{nameof(this.PasswordResetPath)} must start with '/'.";
-        }
-
-        if (this.ConfirmationTokenLifetime <= TimeSpan.Zero)
-        {
-            return $"{SectionName}:{nameof(this.ConfirmationTokenLifetime)} must be positive.";
         }
 
         if (this.TokenLifetime <= TimeSpan.Zero)
@@ -211,13 +157,9 @@ internal sealed class AccountRecoveryOptions
 
         // A mistyped override binds to 0 and reads as "refuse everything". Refuse to start instead.
         return FirstNonPositive(
-            (nameof(this.ResendsPerEmailPerHour), this.ResendsPerEmailPerHour),
-            (nameof(this.ResendsPerEmailPerDay), this.ResendsPerEmailPerDay),
             (nameof(this.RequestsPerEmail), this.RequestsPerEmail),
-            (nameof(this.ResendsPerAddress), this.ResendsPerAddress),
             (nameof(this.RequestsPerAddress), this.RequestsPerAddress),
             (nameof(this.RedemptionsPerAddress), this.RedemptionsPerAddress),
-            (nameof(this.RegistrationsPerAddress), this.RegistrationsPerAddress),
             (nameof(this.SignUpSendsPerAddress), this.SignUpSendsPerAddress),
             (nameof(this.SignUpVerifiesPerAddress), this.SignUpVerifiesPerAddress),
             (nameof(this.IdentifiesPerAddress), this.IdentifiesPerAddress),

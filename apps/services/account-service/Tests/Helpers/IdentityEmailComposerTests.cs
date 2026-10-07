@@ -12,56 +12,11 @@ using Xunit;
 namespace AccountService.Tests.Helpers
 {
     /// <summary>
-    /// Unit tests for <see cref="ConfirmationLinkBuilder"/>, <see cref="PasswordResetLinkBuilder"/>,
+    /// Unit tests for <see cref="PasswordResetLinkBuilder"/>,
     /// <see cref="IdentityEmailComposer"/>, and the options they read.
     /// </summary>
     public class IdentityEmailComposerTests
     {
-        private const string InClusterLink =
-            "http://account-service-svc:8080/account/confirmEmail?userId=user-1&amp;code=Q29kZQ";
-
-        [Fact]
-        public void Build_UsesTheConfiguredOriginAndPath_WithIdentitysUserIdAndCode()
-        {
-            var builder = CreateConfirmationBuilder();
-
-            var link = builder.Build("user-1", "Q29kZQ");
-
-            link.Should().Be(new Uri("https://cribstop.example/confirm-email?userId=user-1&code=Q29kZQ"));
-        }
-
-        [Fact]
-        public void Rebuild_ReplacesTheInClusterHost_AndKeepsTheQuery()
-        {
-            var builder = CreateConfirmationBuilder();
-
-            // Identity HTML-encodes the link before it reaches the sender. The in-cluster host is
-            // what LinkGenerator produces behind Ocelot.
-            var link = builder.Rebuild(InClusterLink);
-
-            link.GetLeftPart(UriPartial.Authority).Should().Be("https://cribstop.example");
-            link.AbsolutePath.Should().Be("/confirm-email");
-            link.Query.Should().Be("?userId=user-1&code=Q29kZQ");
-        }
-
-        [Fact]
-        public void Rebuild_CarriesChangedEmail_ForTheEmailChangeFlow()
-        {
-            var link = CreateConfirmationBuilder().Rebuild(InClusterLink + "&amp;changedEmail=new%40example.com");
-
-            link.Query.Should().Contain("changedEmail=new@example.com");
-        }
-
-        [Fact]
-        public void Rebuild_Throws_WhenTheLinkCarriesNoCode()
-        {
-            var builder = CreateConfirmationBuilder();
-
-            var act = () => builder.Rebuild("http://account-service-svc:8080/account/confirmEmail?userId=user-1");
-
-            act.Should().Throw<InvalidOperationException>();
-        }
-
         [Fact]
         public void PasswordResetLinkBuilder_CarriesTheEmailAndTheCode()
         {
@@ -73,23 +28,6 @@ namespace AccountService.Tests.Helpers
             link.GetLeftPart(UriPartial.Path).Should().Be("https://cribstop.example/reset-password");
             query["email"].ToString().Should().Be("person@example.com");
             query["code"].ToString().Should().Be("abc+def");
-        }
-
-        [Fact]
-        public void ConfirmationLink_CarriesTheSettledSenderIdentity_TheRebuiltLink_AndTheConfiguredExpiry()
-        {
-            var composer = CreateComposer();
-
-            var message = composer.ConfirmationLink("person@example.com", InClusterLink);
-
-            message.FromName.Should().Be("Cribstop (Real Broker, LLC)");
-            message.FromAddress.Should().Be("no-reply@cribstop.com");
-            message.ReplyToAddress.Should().Be("contact@cribstop.com");
-            message.To.Should().Be("person@example.com");
-            message.TextBody.Should().Contain("https://cribstop.example/confirm-email?userId=user-1&code=Q29kZQ");
-            message.TextBody.Should().NotContain("account-service-svc");
-            message.TextBody.Should().Contain("expires in 1 day");
-            message.TextBody.Should().EndWith("Cribstop is brokered by Real Broker, LLC.");
         }
 
         [Fact]
@@ -127,13 +65,6 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
-        public void ConfirmationLink_IsTaggedAsAConfirmationMessage()
-        {
-            CreateComposer().ConfirmationLink("person@example.com", InClusterLink).Kind
-                .Should().Be(EmailKind.Confirmation);
-        }
-
-        [Fact]
         public void AlreadyRegistered_IsTaggedAccordingly_AndNamesNoLinkOrCode()
         {
             var message = CreateComposer().AlreadyRegistered("person@example.com");
@@ -162,22 +93,18 @@ namespace AccountService.Tests.Helpers
         [Fact]
         public void AccountRecoveryOptions_RequireAnAbsoluteWebBaseUrl_AndRootedPaths()
         {
-            new AccountRecoveryOptions { ConfirmationPath = "/confirm-email", PasswordResetPath = "/reset-password" }.Validate()
+            new AccountRecoveryOptions { PasswordResetPath = "/reset-password" }.Validate()
                 .Should().Contain("WebBaseUrl");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("ftp://x.example"), ConfirmationPath = "/x", PasswordResetPath = "/y" }.Validate()
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("ftp://x.example"), PasswordResetPath = "/y" }.Validate()
                 .Should().Contain("http");
 
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "confirm", PasswordResetPath = "/y" }.Validate()
-                .Should().Contain("ConfirmationPath");
-
-            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), ConfirmationPath = "/confirm-email", PasswordResetPath = "reset" }.Validate()
+            new AccountRecoveryOptions { WebBaseUrl = new Uri("https://x.example"), PasswordResetPath = "reset" }.Validate()
                 .Should().Contain("PasswordResetPath");
 
             new AccountRecoveryOptions
             {
                 WebBaseUrl = new Uri("https://x.example"),
-                ConfirmationPath = "/confirm-email",
                 PasswordResetPath = "/reset-password",
             }.Validate().Should().BeNull();
         }
@@ -233,18 +160,13 @@ namespace AccountService.Tests.Helpers
             return new Uri(body[start..end]);
         }
 
-        private static ConfirmationLinkBuilder CreateConfirmationBuilder() =>
-            new(Options.Create(CreateRecoveryOptions()));
-
         private static PasswordResetLinkBuilder CreatePasswordResetBuilder() =>
             new(Options.Create(CreateRecoveryOptions()));
 
         private static AccountRecoveryOptions CreateRecoveryOptions() => new()
         {
             WebBaseUrl = new Uri("https://cribstop.example"),
-            ConfirmationPath = "/confirm-email",
             PasswordResetPath = "/reset-password",
-            ConfirmationTokenLifetime = TimeSpan.FromHours(24),
             TokenLifetime = TimeSpan.FromHours(1),
         };
 
@@ -258,7 +180,6 @@ namespace AccountService.Tests.Helpers
                     BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
                 }),
                 Options.Create(CreateRecoveryOptions()),
-                CreateConfirmationBuilder(),
                 CreatePasswordResetBuilder());
     }
 }

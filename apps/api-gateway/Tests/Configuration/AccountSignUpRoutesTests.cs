@@ -44,6 +44,17 @@ namespace ApiGateway.Tests.Configuration
             specific.Should().NotIntersectWith(SignUpPaths);
         }
 
+        [Fact]
+        public void NoRouteNamesARetiredLinkEndpoint()
+        {
+            // #657 retired these. The catch-all still forwards them, and the account service answers 404.
+            var upstream = AccountRoutes().Select(r => (string?)r["UpstreamPathTemplate"] ?? string.Empty);
+
+            upstream.Should().NotContain("/account/register")
+                .And.NotContain("/account/confirmEmail")
+                .And.NotContain("/account/resendConfirmationEmail");
+        }
+
         private static JArray AccountRoutes()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);

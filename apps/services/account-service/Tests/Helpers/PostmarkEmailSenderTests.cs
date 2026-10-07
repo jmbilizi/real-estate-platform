@@ -17,19 +17,15 @@ namespace AccountService.Tests.Helpers
     /// </summary>
     public class PostmarkEmailSenderTests
     {
-        private const string InClusterLink =
-            "http://account-service-svc:8080/account/confirmEmail?userId=user-1&amp;code=Q29kZQ";
-
         [Fact]
-        public async Task SendConfirmationLinkAsync_HandsTheComposedMessage_ToTheDeliverySeam()
+        public async Task SendConfirmationLinkAsync_Throws_AndSendsNothing()
         {
             var (sender, sent) = CreateSender();
 
-            await sender.SendConfirmationLinkAsync(new ApplicationUser(), "person@example.com", InClusterLink);
+            var act = () => sender.SendConfirmationLinkAsync(new ApplicationUser(), "person@example.com", "https://cribstop.example/link");
 
-            var message = sent.Should().ContainSingle().Subject;
-            message.Kind.Should().Be(EmailKind.Confirmation);
-            message.To.Should().Be("person@example.com");
+            await act.Should().ThrowAsync<NotSupportedException>();
+            sent.Should().BeEmpty();
         }
 
         [Fact]
@@ -60,7 +56,6 @@ namespace AccountService.Tests.Helpers
             var recovery = Options.Create(new AccountRecoveryOptions
             {
                 WebBaseUrl = new Uri("https://cribstop.example"),
-                ConfirmationPath = "/confirm-email",
                 PasswordResetPath = "/reset-password",
             });
             var composer = new IdentityEmailComposer(
@@ -72,7 +67,6 @@ namespace AccountService.Tests.Helpers
                     BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
                 }),
                 recovery,
-                new ConfirmationLinkBuilder(recovery),
                 new PasswordResetLinkBuilder(recovery));
 
             var sent = new List<OutboundEmail>();

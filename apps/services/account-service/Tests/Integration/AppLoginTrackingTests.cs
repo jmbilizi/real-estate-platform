@@ -143,15 +143,6 @@ namespace AccountService.Tests.Integration
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────
-        private async Task RegisterAsync(string email)
-        {
-            var client = factory.CreateClient();
-            var response = await client.PostAsJsonAsync("/account/register", new
-            {
-                email,
-                password = Password,
-            });
-            response.EnsureSuccessStatusCode();
-        }
+        private Task RegisterAsync(string email) => AuthHelper.SeedUserAsync(factory, email, Password);
     }
 }

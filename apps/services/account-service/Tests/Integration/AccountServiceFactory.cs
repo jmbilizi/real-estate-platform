@@ -24,9 +24,6 @@ namespace AccountService.Tests.Integration
         /// <summary>The web origin every test host is configured with.</summary>
         internal const string WebOrigin = "https://web.test.example";
 
-        /// <summary>The confirmation path every test host is configured with.</summary>
-        internal const string ConfirmationPath = "/confirm-email";
-
         /// <summary>The password-reset path every test host is configured with.</summary>
         internal const string PasswordResetPath = "/reset-password";
 
@@ -68,16 +65,10 @@ namespace AccountService.Tests.Integration
                 services.Configure<AccountRecoveryOptions>(options =>
                 {
                     options.WebBaseUrl = new Uri(WebOrigin);
-                    options.ConfirmationPath = ConfirmationPath;
                     options.PasswordResetPath = PasswordResetPath;
-                    options.ResendMinimumInterval = TimeSpan.Zero;
-                    options.ResendsPerEmailPerHour = int.MaxValue;
-                    options.ResendsPerEmailPerDay = int.MaxValue;
-                    options.ResendsPerAddress = int.MaxValue;
                     options.RequestsPerEmail = int.MaxValue;
                     options.RequestsPerAddress = int.MaxValue;
                     options.RedemptionsPerAddress = int.MaxValue;
-                    options.RegistrationsPerAddress = int.MaxValue;
                     options.SignUpSendsPerAddress = int.MaxValue;
                     options.SignUpVerifiesPerAddress = int.MaxValue;
                     options.MinimumResponseDuration = TimeSpan.Zero;

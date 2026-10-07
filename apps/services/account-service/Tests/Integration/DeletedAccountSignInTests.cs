@@ -6,9 +6,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AccountService.Data;
-using AccountService.Models;
 using FluentAssertions;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -31,7 +29,7 @@ namespace AccountService.Tests.Integration
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
             var email = NewEmail("live");
-            await RegisterAsync(client, email);
+            await AuthHelper.SeedUserAsync(factory, email, Password);
 
             using var response = await LoginAsync(client, email, Password);
 
@@ -45,7 +43,7 @@ namespace AccountService.Tests.Integration
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
             var email = NewEmail("deleted-bearer");
-            await RegisterAsync(client, email);
+            await AuthHelper.SeedUserAsync(factory, email, Password);
             await SoftDeleteAsync(factory, email);
 
             using var response = await LoginAsync(client, email, Password);
@@ -63,13 +61,13 @@ namespace AccountService.Tests.Integration
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
             var email = NewEmail("deleted-parity");
-            await RegisterAsync(client, email);
+            await AuthHelper.SeedUserAsync(factory, email, Password);
             await SoftDeleteAsync(factory, email);
 
             using var deleted = await LoginAsync(client, email, Password);
             using var unknown = await LoginAsync(client, NewEmail("never-registered"), Password);
             var live = NewEmail("wrong-password");
-            await RegisterAsync(client, live);
+            await AuthHelper.SeedUserAsync(factory, live, Password);
             using var wrongPassword = await LoginAsync(client, live, "Wrong1234!@#Abc");
 
             var deletedBody = await DetailAsync(deleted);
@@ -86,7 +84,7 @@ namespace AccountService.Tests.Integration
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
             var email = NewEmail("deleted-refresh");
-            await RegisterAsync(client, email);
+            await AuthHelper.SeedUserAsync(factory, email, Password);
             using var login = await LoginAsync(client, email, Password);
             var refreshToken = JsonDocument.Parse(await ReadAsync(login))
                 .RootElement.GetProperty("refreshToken").GetString();
@@ -106,7 +104,7 @@ namespace AccountService.Tests.Integration
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
             var email = NewEmail("deleted-endpoint");
-            await RegisterAsync(client, email);
+            await AuthHelper.SeedUserAsync(factory, email, Password);
             using var login = await LoginAsync(client, email, Password);
             var payload = JsonDocument.Parse(await ReadAsync(login)).RootElement;
             var accessToken = payload.GetProperty("accessToken").GetString();
@@ -124,49 +122,7 @@ namespace AccountService.Tests.Integration
             relogin.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
 
-        [Fact]
-        public async Task ConfirmEmail_SoftDeletedAccount_FailsLikeAnyBadLink()
-        {
-            using var factory = new AccountRecoveryFactory();
-            using var client = factory.CreateClient();
-            var email = NewEmail("deleted-confirm");
-            await RegisterAsync(client, email);
-            var query = new Uri(factory.ConfirmationLinks.Last(m => m.Email == email).Credential).Query;
-            await SoftDeleteAsync(factory, email);
-
-            using var response = await client.GetAsync("/account/confirmEmail" + query);
-
-            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-            using var scope = factory.Services.CreateScope();
-            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            var user = await users.FindByEmailAsync(email);
-            user!.EmailConfirmed.Should().BeFalse();
-        }
-
-        [Fact]
-        public async Task Login_SoftDeletedAccount_IsRefused_WhenConfirmationIsRequiredToo()
-        {
-            using var factory = new AccountRecoveryFactory(options => options.RequireConfirmedEmail = true);
-            using var client = factory.CreateClient();
-            var email = NewEmail("deleted-required");
-            await RegisterAsync(client, email);
-            using var confirm = await client.GetAsync(
-                "/account/confirmEmail" + new Uri(factory.ConfirmationLinks.Last(m => m.Email == email).Credential).Query);
-            confirm.StatusCode.Should().Be(HttpStatusCode.OK);
-            await SoftDeleteAsync(factory, email);
-
-            using var response = await LoginAsync(client, email, Password);
-
-            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        }
-
         private static string NewEmail(string tag) => $"{tag}-{Guid.NewGuid():N}@example.com";
-
-        private static async Task RegisterAsync(HttpClient client, string email)
-        {
-            using var response = await client.PostAsJsonAsync("/account/register", new { email, password = Password });
-            response.EnsureSuccessStatusCode();
-        }
 
         private static Task<HttpResponseMessage> LoginAsync(HttpClient client, string email, string password, bool useCookies = false) =>
             client.PostAsJsonAsync(useCookies ? "/account/login?useCookies=true" : "/account/login", new { email, password });

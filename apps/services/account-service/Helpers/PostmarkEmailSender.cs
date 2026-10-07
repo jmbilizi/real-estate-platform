@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Identity;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// The <see cref="IEmailSender{TUser}"/> registered for Identity's three canonical sends.
+/// The <see cref="IEmailSender{TUser}"/> registered for Identity's password-reset sends.
 /// </summary>
 /// <remarks>
 /// A thin adapter: composes through <see cref="IdentityEmailComposer"/> and hands the result to
@@ -22,7 +22,7 @@ internal sealed class PostmarkEmailSender(IdentityEmailComposer composer, IOutbo
 {
     /// <inheritdoc/>
     public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
-        outbound.SendAsync(composer.ConfirmationLink(email, confirmationLink));
+        throw new NotSupportedException("Confirmation links are retired (#657). Only a verified code creates an account.");
 
     /// <inheritdoc/>
     public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink) =>

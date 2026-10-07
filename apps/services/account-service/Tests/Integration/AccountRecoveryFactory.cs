@@ -35,9 +35,6 @@ namespace AccountService.Tests.Integration
         /// <summary>The kind of message the service handed to the delivery seam.</summary>
         internal enum MessageKind
         {
-            /// <summary>An email-confirmation link.</summary>
-            ConfirmationLink,
-
             /// <summary>A password-reset code.</summary>
             PasswordResetCode,
 
@@ -56,10 +53,6 @@ namespace AccountService.Tests.Integration
                 }
             }
         }
-
-        /// <summary>Gets the confirmation links issued so far, in order.</summary>
-        internal IReadOnlyList<SentMessage> ConfirmationLinks =>
-            this.Sent.Where(m => m.Kind == MessageKind.ConfirmationLink).ToList();
 
         /// <summary>Gets the password-reset codes issued so far, in order.</summary>
         internal IReadOnlyList<SentMessage> ResetCodes =>
@@ -90,7 +83,6 @@ namespace AccountService.Tests.Integration
             {
                 services.AddScoped<IEmailSender<ApplicationUser>>(sp => new RecordingEmailSender(
                     sp.GetRequiredService<IdentityEmailComposer>(),
-                    sp.GetRequiredService<ConfirmationLinkBuilder>(),
                     this.Record));
 
                 // The already-registered notice does not go through IEmailSender<TUser>: it is sent
@@ -133,29 +125,20 @@ namespace AccountService.Tests.Integration
         }
 
         /// <summary>A message the service handed to the delivery seam.</summary>
-        /// <param name="Kind">Which of Identity's three sends this was.</param>
+        /// <param name="Kind">Which send this was.</param>
         /// <param name="Email">The address it was issued for.</param>
         /// <param name="Credential">
-        /// For a confirmation, the link as the consumer receives it (web origin, configured path).
-        /// For a reset, the HTML-decoded code or link.
+        /// The HTML-decoded reset code or link.
         /// </param>
         /// <param name="Composed">The message the composer produced.</param>
         internal sealed record SentMessage(MessageKind Kind, string Email, string Credential, OutboundEmail Composed);
 
         private sealed class RecordingEmailSender(
             IdentityEmailComposer composer,
-            ConfirmationLinkBuilder links,
             Action<SentMessage> record) : IEmailSender<ApplicationUser>
         {
-            public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink)
-            {
-                record(new SentMessage(
-                    MessageKind.ConfirmationLink,
-                    email,
-                    links.Rebuild(confirmationLink).ToString(),
-                    composer.ConfirmationLink(email, confirmationLink)));
-                return Task.CompletedTask;
-            }
+            public Task SendConfirmationLinkAsync(ApplicationUser user, string email, string confirmationLink) =>
+                throw new NotSupportedException("Confirmation links are retired.");
 
             public Task SendPasswordResetLinkAsync(ApplicationUser user, string email, string resetLink)
             {

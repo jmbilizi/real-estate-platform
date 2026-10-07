@@ -13,7 +13,7 @@ namespace AccountService.Helpers;
 /// configured reset path, carrying the email address and the reset code.
 /// </summary>
 /// <remarks>
-/// Unlike <see cref="ConfirmationLinkBuilder"/>, this never rebuilds an Identity-generated link.
+/// This never rebuilds an Identity-generated link.
 /// <c>MapIdentityApi</c>'s <c>/forgotPassword</c> endpoint always calls
 /// <c>IEmailSender.SendPasswordResetCodeAsync</c> with a bare code, never a URL, so the link this
 /// service sends is built here from scratch, carrying both the email and the code because

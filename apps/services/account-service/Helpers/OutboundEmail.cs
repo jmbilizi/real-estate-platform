@@ -7,9 +7,6 @@ namespace AccountService.Helpers;
 /// <summary>Which transactional message an <see cref="OutboundEmail"/> is, for logging and metrics.</summary>
 internal enum EmailKind
 {
-    /// <summary>An email-confirmation link.</summary>
-    Confirmation,
-
     /// <summary>A password-reset link.</summary>
     PasswordReset,
 
