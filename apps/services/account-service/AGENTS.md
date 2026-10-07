@@ -285,3 +285,24 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   of an address by five wrong tries, which bounds as in sign-up. The in-memory test provider has no
   unique index, so the database guard has no test.
 - Tests: `Tests/Integration/EmailChangeEndpointTests.cs`.
+
+## Undeliverable email (#664)
+
+- `EmailSuppressions` holds one row per normalized address that Postmark will not deliver to
+  (`HardBounce`, `SpamComplaint`, `ManualSuppression`, `InactiveRecipient`).
+  `EmailSuppressionService` is the only writer. Every call is idempotent.
+- `POST /account/webhooks/postmark` (`Routes/PostmarkWebhook.cs`) takes the Bounce (`Inactive: true`
+  only), SpamComplaint and SubscriptionChange events. `SuppressSending: false` removes the row. It
+  needs HTTP Basic credentials: `POSTMARK_WEBHOOK_USER` and `POSTMARK_WEBHOOK_PASSWORD`. Without
+  both, every call gets `401`. An event on another message stream is ignored. An event the service
+  does not act on gets `200`, so Postmark does not retry it.
+- The path is not under `/internal` on purpose. The gateway forbids a route to `/internal`
+  (`InternalRoutesNotExposedTests`). Postmark reaches the endpoint through its own gateway route
+  (`account-service-routes.json`, 120 per minute). Basic auth is the gate.
+- The sign-up paths (`/signup/start`, `/resend`, `/change-email`, `/identify`) answer `422`
+  `{ "error": "undeliverable" }` for a suppressed address or a domain with no MX, A or AAAA record.
+  Password reset stays neutral. A Postmark `406` on send writes an `InactiveRecipient` row after the
+  response, so the next step shows it.
+- `DnsMailDomainResolver` (DnsClient) checks the domain. A timeout or DNS error fails open. It does
+  not block disposable domains. Tests use `FakeMailDomainResolver` and never query DNS.
+- Nothing logs the address or the body.

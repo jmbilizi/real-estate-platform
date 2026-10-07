@@ -71,6 +71,9 @@
     <!-- Geolocation packages -->
     <PackageVersion Include="MaxMind.GeoIP2" Version="5.4.1" />
     
+    <!-- DNS (MX lookup for the sign-up address check) -->
+    <PackageVersion Include="DnsClient" Version="1.8.0" />
+
     <!-- Configuration packages -->
     <PackageVersion Include="DotNetEnv" Version="3.1.1" />
 

@@ -40,12 +40,17 @@ namespace AccountService.Helpers;
 /// The delay before each retry. Defaults to production delays; a test supplies short ones so a
 /// retry test does not run for a minute of wall-clock time.
 /// </param>
+/// <param name="onRecipientInactive">
+/// Called with the recipient when Postmark answers error 406 (inactive recipient). The caller records
+/// the suppression, so the next sign-up step answers "undeliverable" (#664).
+/// </param>
 internal sealed partial class PostmarkDeliveryQueue(
     Func<PostmarkClient> clientFactory,
     IOptions<PostmarkOptions> options,
     ILogger<PostmarkDeliveryQueue> logger,
     TimeProvider timeProvider,
-    IReadOnlyList<TimeSpan>? retryDelays = null) : BackgroundService, IOutboundEmailSender
+    IReadOnlyList<TimeSpan>? retryDelays = null,
+    Func<string, CancellationToken, Task>? onRecipientInactive = null) : BackgroundService, IOutboundEmailSender
 {
     private static readonly IReadOnlyList<TimeSpan> DefaultRetryDelays =
     [
@@ -128,6 +133,11 @@ internal sealed partial class PostmarkDeliveryQueue(
                 {
                     LogAccepted(logger, message.Kind, Recipient(message), result.MessageId ?? string.Empty);
                     return;
+                }
+
+                if (result.IsInactiveRecipient && onRecipientInactive is not null)
+                {
+                    await onRecipientInactive(message.To, cancellationToken).ConfigureAwait(false);
                 }
 
                 if (!result.IsRetryableFailure || attempt >= this.retryDelays.Count)

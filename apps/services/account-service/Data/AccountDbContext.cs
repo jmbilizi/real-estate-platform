@@ -31,6 +31,9 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
 
+    /// <summary>Gets the addresses Postmark will not deliver to.</summary>
+    public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
+
     public DbSet<AccountSecurityEvent> AccountSecurityEvents => Set<AccountSecurityEvent>();
 
     public DbSet<PasswordResetProof> PasswordResetProofs => Set<PasswordResetProof>();
@@ -256,6 +259,16 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.HasIndex(p => p.Email).IsUnique();
             entity.HasIndex(p => p.ExpiresAt);
             entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // No FK to AspNetUsers: a sign-up has no account. One row per normalized address.
+        builder.Entity<EmailSuppression>(entity =>
+        {
+            entity.ToTable("EmailSuppressions");
+            entity.Property(s => s.Email).IsRequired();
+            entity.Property(s => s.Reason).IsRequired();
+            entity.Property(s => s.Source).IsRequired();
+            entity.HasIndex(s => s.Email).IsUnique();
         });
 
         // Append-only. No FK to AspNetUsers, so the record outlives a deleted account.

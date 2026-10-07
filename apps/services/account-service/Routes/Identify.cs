@@ -28,6 +28,7 @@ internal static class Identify
                     expiresInSeconds = result.ExpiresInSeconds,
                 }),
                 IdentifyStatus.InvalidEmail => Results.Json(new { error = "invalid_email" }, statusCode: StatusCodes.Status400BadRequest),
+                IdentifyStatus.Undeliverable => Results.Json(new { error = SignUp.UndeliverableError }, statusCode: StatusCodes.Status422UnprocessableEntity),
                 _ => Results.StatusCode(StatusCodes.Status503ServiceUnavailable),
             };
         }).AddEndpointFilter<AccountRecoveryThrottleFilter>();

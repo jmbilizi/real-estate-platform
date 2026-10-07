@@ -68,6 +68,12 @@ internal sealed class IdentifyService(
             return new IdentifyResult(IdentifyStatus.Ok, IdentifyNext.Password);
         }
 
+        // Before the send budget: a cooldown must not hide an undeliverable address behind "code sent".
+        if (await signUp.IsUndeliverableAsync(key, entered, cancellationToken).ConfigureAwait(false))
+        {
+            return new IdentifyResult(IdentifyStatus.Undeliverable);
+        }
+
         var expires = EmailCodeService.CeilSeconds(settings.Lifetime);
         if (!limiter.TrySignUpSend(key, clientAddress, settings.ResendCooldown, settings.MaxPerHour, settings.MaxPerDay, out var wait))
         {
@@ -82,6 +88,7 @@ internal sealed class IdentifyService(
             SignUpStatus.Limited => new IdentifyResult(
                 IdentifyStatus.Ok, IdentifyNext.Code, Math.Max(1, started.RetryAfterSeconds), expires),
             SignUpStatus.InvalidEmail => new IdentifyResult(IdentifyStatus.InvalidEmail),
+            SignUpStatus.Undeliverable => new IdentifyResult(IdentifyStatus.Undeliverable),
             _ => new IdentifyResult(IdentifyStatus.Unavailable),
         };
     }
