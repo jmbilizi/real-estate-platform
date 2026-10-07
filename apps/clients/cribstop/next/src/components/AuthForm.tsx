@@ -12,8 +12,8 @@ import {
   CodeTiming,
   identifyEmail,
   RateLimitError,
-  requestPasswordReset,
   SignInFailedError,
+  startPasswordReset,
 } from '@/lib/api/account';
 import AuthCodeStep from '@/components/AuthCodeStep';
 import AuthSetPasswordStep, { SetPasswordFailure } from '@/components/AuthSetPasswordStep';
@@ -29,7 +29,7 @@ function getRememberEmailKey() {
   return `cribstop_remember_email_${typeof window !== 'undefined' ? window.location.hostname : 'default'}`;
 }
 
-type Step = 'email' | 'password' | 'code' | 'setPassword' | 'forgot';
+type Step = 'email' | 'password' | 'code' | 'setPassword' | 'forgot' | 'resetPassword';
 
 const UNAVAILABLE_COPY = 'Sign-up is unavailable right now. Try again soon.';
 
@@ -63,9 +63,10 @@ export default function AuthForm({
   const [formError, setFormError] = useState<string | null>(null);
   // Set on a 401 from /account/login. Wrong password and a lockout look the same on purpose.
   const [loginFailed, setLoginFailed] = useState(false);
-  // Set once the forgot-password request has gone through. The confirmation shown for it must
-  // stay neutral: the server never says whether the address has an account (#147).
-  const [resetRequested, setResetRequested] = useState(false);
+  // The code step serves sign-up and password reset. Its copy must stay neutral for a reset:
+  // the server never says whether the address has an account.
+  const [codeFlow, setCodeFlow] = useState<'signup' | 'reset'>('signup');
+  const [notice, setNotice] = useState<string | null>(null);
   const [codeTiming, setCodeTiming] = useState<CodeTiming>({
     resendAfterSeconds: 0,
     expiresInSeconds: 0,
@@ -75,6 +76,7 @@ export default function AuthForm({
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   // The one-time sign-up proof. It lives in memory only: never in the URL, storage or logs.
   const [signupProof, setSignupProof] = useState<string | null>(null);
+  const [resetProof, setResetProof] = useState<string | null>(null);
   const { login } = useApp();
   const { toast } = useToast();
   const router = useRouter();
@@ -101,7 +103,7 @@ export default function AuthForm({
       'form input:not([type="checkbox"]):not([readonly]):not([disabled])',
     );
     (field ?? headingRef.current)?.focus();
-  }, [step, resetRequested]);
+  }, [step]);
 
   const goToStep = (next: Step) => {
     setStep(next);
@@ -109,7 +111,10 @@ export default function AuthForm({
     setShowPassword(false);
     setFormError(null);
     setLoginFailed(false);
-    setResetRequested(false);
+    setNotice(null);
+    // A proof lives only while its own step shows.
+    if (next !== 'resetPassword') setResetProof(null);
+    if (next !== 'setPassword') setSignupProof(null);
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -130,6 +135,7 @@ export default function AuthForm({
           await changeSignupEmail(pendingEmail, address).catch(() => undefined);
         }
         setPendingEmail(address);
+        setCodeFlow('signup');
         setCodeTiming(result);
         setCodeRun((n) => n + 1);
         goToStep('code');
@@ -173,25 +179,50 @@ export default function AuthForm({
 
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const address = email.trim();
+    if (!address) return;
     setFormError(null);
     setIsSubmitting(true);
     try {
-      await requestPasswordReset(email);
-      setResetRequested(true);
+      const timing = await startPasswordReset(address);
+      setEmail(address);
+      setCodeFlow('reset');
+      setCodeTiming(timing);
+      setCodeRun((n) => n + 1);
+      goToStep('code');
     } catch (err) {
-      if (err instanceof RateLimitError) {
-        toast(`Too many requests. Try again in ${err.retryAfterSeconds} seconds.`, 'error');
-      } else {
-        toast('We could not send the request. Try again.', 'error');
-      }
+      setFormError(
+        err instanceof CodesUnavailableError
+          ? 'Password reset is unavailable right now. Try again soon.'
+          : err instanceof RateLimitError
+            ? entryError(err)
+            : 'We could not send a code. Try again.',
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleVerified = (proof: string) => {
-    setSignupProof(proof);
-    goToStep('setPassword');
+    if (codeFlow === 'reset') {
+      setResetProof(proof);
+      goToStep('resetPassword');
+    } else {
+      setSignupProof(proof);
+      goToStep('setPassword');
+    }
+  };
+
+  const handleResetFailed = () => {
+    setResetProof(null);
+    goToStep('forgot');
+    setFormError('That reset timed out. Start again.');
+  };
+
+  const handleResetDone = () => {
+    setResetProof(null);
+    goToStep('password');
+    setNotice('Password updated. Sign in again.');
   };
 
   const handleSetPasswordFailed = (reason: SetPasswordFailure) => {
@@ -239,16 +270,18 @@ export default function AuthForm({
           {step === 'code' && 'Check your email'}
           {step === 'setPassword' && 'Last step'}
           {step === 'forgot' && 'Reset your password'}
+          {step === 'resetPassword' && 'Set a new password'}
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted">
           {step === 'email' && 'Sign in or join Cribstop. One email, no fuss.'}
           {step === 'password' && <>Enter your password for {emailChip}.</>}
-          {step === 'code' && <>We sent a 6-digit code to {emailChip}.</>}
+          {step === 'code' && codeFlow === 'signup' && <>We sent a 6-digit code to {emailChip}.</>}
+          {step === 'code' && codeFlow === 'reset' && (
+            <>If an account exists for {emailChip}, we sent a 6-digit code.</>
+          )}
           {step === 'setPassword' && <>Pick a password for {emailChip}.</>}
-          {step === 'forgot' &&
-            (resetRequested
-              ? 'Check your email for a link to reset your password'
-              : "Enter your email and we'll send a reset link")}
+          {step === 'forgot' && "Enter your email and we'll send a code."}
+          {step === 'resetPassword' && <>Pick a new password for {emailChip}.</>}
         </p>
 
         {showSocial && (
@@ -413,6 +446,7 @@ export default function AuthForm({
               {loginFailed && (
                 <p role="alert">We could not sign you in with that email and password.</p>
               )}
+              {!loginFailed && notice && <p role="status">{notice}</p>}
             </div>
 
             <div className="flex justify-center text-sm">
@@ -428,10 +462,11 @@ export default function AuthForm({
             <AuthCodeStep
               key={codeRun}
               email={email}
+              flow={codeFlow}
               resendAfterSeconds={codeTiming.resendAfterSeconds}
               expiresInSeconds={codeTiming.expiresInSeconds}
               onVerified={handleVerified}
-              onChangeEmail={() => goToStep('email')}
+              onChangeEmail={() => goToStep(codeFlow === 'reset' ? 'forgot' : 'email')}
             />
           </div>
         )}
@@ -440,61 +475,67 @@ export default function AuthForm({
           <div className="mt-6">
             <AuthSetPasswordStep
               email={email}
-              signupProof={signupProof}
-              onSignedIn={handleSignedIn}
+              proof={signupProof}
+              onDone={handleSignedIn}
               onFailed={handleSetPasswordFailed}
             />
           </div>
         )}
 
-        {step === 'forgot' &&
-          (resetRequested ? (
-            <div className="mt-6 flex flex-col gap-4 text-center">
-              <p className="text-sm text-ink-muted">
-                If an account exists for <span className="font-medium text-ink">{email}</span>, a
-                reset link is on its way. The link expires soon, so use it right away.
-              </p>
-              <button
-                type="button"
-                onClick={() => setResetRequested(false)}
-                className={`${linkButton} justify-center text-sm`}
+        {step === 'resetPassword' && resetProof && (
+          <div className="mt-6">
+            <AuthSetPasswordStep
+              email={email}
+              flow="reset"
+              proof={resetProof}
+              onDone={handleResetDone}
+              onFailed={handleResetFailed}
+            />
+          </div>
+        )}
+
+        {step === 'forgot' && (
+          <form onSubmit={handleForgotSubmit} className="mt-6 flex flex-col gap-4">
+            <div>
+              <label
+                htmlFor="auth-reset-email"
+                className="mb-1 block text-sm font-medium text-ink-muted"
               >
-                Try a different email
-              </button>
+                Email
+              </label>
+              <input
+                id="auth-reset-email"
+                type="email"
+                required
+                autoComplete="username"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="input-field min-h-11"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
-          ) : (
-            <form onSubmit={handleForgotSubmit} className="mt-6 flex flex-col gap-4">
-              <div>
-                <label
-                  htmlFor="auth-reset-email"
-                  className="mb-1 block text-sm font-medium text-ink-muted"
-                >
-                  Email
-                </label>
-                <input
-                  id="auth-reset-email"
-                  type="email"
-                  required
-                  autoComplete="username"
-                  inputMode="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className="input-field min-h-11"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <button
-                type="submit"
-                className="btn-primary min-h-11 w-full py-3"
-                disabled={isSubmitting}
-                aria-busy={isSubmitting}
-              >
-                {isSubmitting ? 'Please wait...' : 'Send Reset Link'}
-              </button>
-            </form>
-          ))}
+
+            <div aria-live="polite" className="empty:hidden text-center text-sm">
+              {formError && (
+                <p role="alert" className="text-red-600">
+                  {formError}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="btn-primary min-h-11 w-full py-3"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? 'Please wait...' : 'Send code'}
+            </button>
+          </form>
+        )}
 
         {step === 'forgot' && (
           <p className="mt-6 text-center text-sm text-ink-muted">

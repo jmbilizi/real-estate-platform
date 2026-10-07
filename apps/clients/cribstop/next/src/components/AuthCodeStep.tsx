@@ -5,6 +5,8 @@ import {
   CodesUnavailableError,
   RateLimitError,
   resendSignupCode,
+  startPasswordReset,
+  verifyResetCode,
   verifySignupCode,
 } from '@/lib/api/account';
 import { useCountdown } from '@/lib/useCountdown';
@@ -23,22 +25,37 @@ function triesLeftCopy(attemptsLeft: number | null): string {
 }
 
 /**
- * The code step of sign-up. The email address is shown with a way to change it. A correct code
- * hands the one-time proof to the parent, which keeps it in memory only.
+ * The code step of sign-up and of password reset. A correct code hands the one-time proof to the
+ * parent, which keeps it in memory only.
  */
 export default function AuthCodeStep({
   email,
+  flow = 'signup',
   resendAfterSeconds,
   expiresInSeconds,
   onVerified,
   onChangeEmail,
 }: {
   email: string;
+  flow?: 'signup' | 'reset';
   resendAfterSeconds: number;
   expiresInSeconds: number;
-  onVerified: (signupProof: string) => void;
+  onVerified: (proof: string) => void;
   onChangeEmail: () => void;
 }) {
+  const verifyCode = async (address: string, value: string) => {
+    if (flow === 'reset') {
+      const r = await verifyResetCode(address, value);
+      return r.ok ? { ok: true as const, proof: r.resetProof } : r;
+    }
+    const r = await verifySignupCode(address, value);
+    return r.ok ? { ok: true as const, proof: r.signupProof } : r;
+  };
+  const resendCode = flow === 'reset' ? startPasswordReset : resendSignupCode;
+  const unavailableCopy =
+    flow === 'reset'
+      ? 'Password reset is unavailable right now. Try again soon.'
+      : 'Sign-up is unavailable right now. Try again soon.';
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -63,9 +80,9 @@ export default function AuthCodeStep({
     setNotice(null);
     setIsChecking(true);
     try {
-      const result = await verifySignupCode(email, value);
+      const result = await verifyCode(email, value);
       if (result.ok) {
-        onVerified(result.signupProof);
+        onVerified(result.proof);
         return;
       }
       setError(triesLeftCopy(result.attemptsLeft));
@@ -76,7 +93,7 @@ export default function AuthCodeStep({
         lock.start(err.retryAfterSeconds);
         setError(`Too many tries. Try again in ${err.retryAfterSeconds} seconds.`);
       } else if (err instanceof CodesUnavailableError) {
-        setError('Sign-up is unavailable right now. Try again soon.');
+        setError(unavailableCopy);
       } else {
         setError('We could not check that code. Try again.');
       }
@@ -97,7 +114,7 @@ export default function AuthCodeStep({
     setNotice(null);
     setIsSending(true);
     try {
-      const timing = await resendSignupCode(email);
+      const timing = await resendCode(email);
       resend.start(timing.resendAfterSeconds);
       expiry.start(timing.expiresInSeconds);
       setExpiryArmed(timing.expiresInSeconds > 0);
@@ -110,7 +127,7 @@ export default function AuthCodeStep({
         resend.start(err.retryAfterSeconds);
         setError(`You can ask for another code in ${err.retryAfterSeconds} seconds.`);
       } else if (err instanceof CodesUnavailableError) {
-        setError('Sign-up is unavailable right now. Try again soon.');
+        setError(unavailableCopy);
       } else {
         setError('We could not send a new code. Try again.');
       }
