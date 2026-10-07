@@ -8,7 +8,7 @@ Automated tooling for Kubernetes infrastructure development and validation.
 ## Quick Start
 
 ```bash
-# One-time setup (installs Kustomize + adds to PATH)
+# One-time setup (installs Kustomize; PATH is set for that run only)
 pnpm run infra:setup
 
 # Validate all environments
@@ -21,7 +21,7 @@ pnpm run infra:validate
 
 - **Purpose**: Kubernetes manifest templating and validation
 - **Auto-installed**: Yes (Windows/Linux/macOS)
-- **PATH**: Automatically configured
+- **PATH**: Set for that run only. Add `~/.local/bin` to your PATH yourself.
 - **Location**: `~/.local/bin/kustomize`
 
 ### kubectl (Optional)
@@ -65,7 +65,7 @@ Automatically validates infrastructure changes:
 1. **First-time setup**: `pnpm run infra:setup`
    - Downloads Kustomize binary for your OS
    - Installs to `~/.local/bin`
-   - Adds to PATH permanently
+   - Adds to PATH for that run only
    - Refreshes current session (no restart needed)
 
 2. **Subsequent runs**: Idempotent

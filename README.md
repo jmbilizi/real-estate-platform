@@ -22,7 +22,7 @@ pnpm run hooks:setup
 
 # Language-specific setup (as needed)
 pnpm run python:env:full    # Python + UV + Poetry
-pnpm run dotnet:env         # .NET development
+pnpm run dotnet:env         # .NET check (human use; PATH for one run only)
 pnpm run infra:setup        # Kubernetes/Kustomize (for infrastructure work)
 
 # Local cluster setup (optional - for local K8s development)

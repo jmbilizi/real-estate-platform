@@ -97,7 +97,8 @@ guide.
     `python:env*`, `infra:setup`, or any script that writes the user PATH, the registry, `setx`, or
     a shell profile, or that installs an SDK. These scripts are for humans. If a toolchain is
     missing, set PATH inline for that one command. Or stop and file a `human-action` ticket. The
-    scripts change the persistent PATH only with `--persist-path`.
+    scripts never write the persistent PATH, the registry, or a shell profile. They set PATH for one
+    run only and print the entries for a human to add.
 
 ## Writing Standard (ASD-STE100)
 

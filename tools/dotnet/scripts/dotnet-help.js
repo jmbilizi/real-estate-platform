@@ -18,7 +18,7 @@ function main() {
     '  pnpm run dotnet:env           - Check the .NET environment (human use only; agents never run it)',
   );
   console.log(
-    '  pnpm run dotnet:env -- --install-tools  - Also install global tools (flags: --install-sdk, --install-nx-plugin, --persist-path)',
+    '  pnpm run dotnet:env -- --install-tools  - Also install global tools (flag: --install-nx-plugin)',
   );
   console.log('  pnpm run dotnet:help          - Show this help message');
 

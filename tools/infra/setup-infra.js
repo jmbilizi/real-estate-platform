@@ -36,7 +36,6 @@ const {
   info,
   run,
   addToPath,
-  migrateLegacyEnvMarkers,
   installBinary,
 } = require('../lib/binary-installer');
 
@@ -130,8 +129,6 @@ async function main() {
   info('  • kind       — Kubernetes-in-Docker clusters');
   info('  • kubectl    — Kubernetes CLI');
   log('');
-
-  migrateLegacyEnvMarkers();
 
   logStep('Podman');
   const podmanReady = ensurePodman();

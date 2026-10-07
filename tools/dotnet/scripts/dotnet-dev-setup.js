@@ -14,21 +14,14 @@ const os = require('os');
 const args = process.argv.slice(2);
 const installTools = args.includes('--install-tools');
 const installNxPlugin = args.includes('--install-nx-plugin');
-const persistPath = args.includes('--persist-path');
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log('Usage: node dotnet-dev-setup.js [options]');
   console.log('');
   console.log('Options:');
   console.log('  --help, -h     Display this help message');
-  console.log(
-    '  --install-sdk  Install the .NET SDK if it is missing or has the wrong major version',
-  );
   console.log('  --install-tools  Install the .NET global tools');
   console.log('  --install-nx-plugin  Run pnpm add -D @nx/dotnet if the plugin is missing');
-  console.log(
-    '  --persist-path Write PATH to the user PATH or shell profiles (default: print only)',
-  );
   console.log('');
   console.log('Description:');
   console.log(
@@ -39,8 +32,12 @@ if (args.includes('--help') || args.includes('-h')) {
   );
   console.log('');
   console.log('Actions:');
-  console.log('  1. Checks for .NET SDK installation');
-  console.log('  2. Verifies .NET SDK version');
+  console.log(
+    '  1. Checks for the .NET SDK (prints the download link if missing; never installs it)',
+  );
+  console.log(
+    '  2. Sets PATH for this process only. It never writes the registry or a shell profile.',
+  );
   console.log('  3. Installs .NET global tools (only with --install-tools)');
   console.log('  4. Checks the NX .NET plugin (installs it only with --install-nx-plugin)');
   process.exit(0);
@@ -52,130 +49,34 @@ const requiredDotNetMajor = '10'; // Required .NET SDK major version
 // Determine if we're running on Windows
 const isWindows = os.platform() === 'win32';
 
+const sdkDownloadUrl = `https://dotnet.microsoft.com/download/dotnet/${requiredDotNetMajor}.0`;
+
 /**
- * Automatically writes PATH entries to the user's shell profile if not already present.
- * Handles ~/.zshrc (zsh), ~/.bashrc and ~/.bash_profile (bash) on macOS/Linux.
- * On Windows, uses setx to persist the PATH change.
+ * Put the .NET paths on PATH for this process, and on GITHUB_PATH when set (CI).
+ * This function never writes the registry, a shell profile, or any other persistent setting.
+ * It prints the entries for the developer to add by hand.
  */
-function persistDotNetPaths() {
+function exportDotNetPaths() {
   const dotnetHome = path.join(os.homedir(), '.dotnet');
   const dotnetTools = path.join(dotnetHome, 'tools');
-
-  if (!persistPath) {
-    // Persistent writes are opt-in. CI reads GITHUB_PATH, so append there.
-    process.env.PATH = [dotnetHome, dotnetTools, process.env.PATH].join(path.delimiter);
-    if (process.env.GITHUB_PATH) {
-      try {
-        fs.appendFileSync(process.env.GITHUB_PATH, `${dotnetHome}\n${dotnetTools}\n`);
-        console.log('✓ Added .NET paths to GITHUB_PATH.');
-      } catch (e) {
-        console.warn('Could not write GITHUB_PATH:', e.message);
-      }
+  process.env.PATH = [dotnetHome, dotnetTools, process.env.PATH].join(path.delimiter);
+  if (process.env.GITHUB_PATH) {
+    try {
+      fs.appendFileSync(process.env.GITHUB_PATH, `${dotnetHome}\n${dotnetTools}\n`);
+      console.log('✓ Added .NET paths to GITHUB_PATH.');
+    } catch (e) {
+      console.warn('Could not write GITHUB_PATH:', e.message);
     }
-    console.log('PATH was not changed. Add these entries to your PATH yourself:');
-    console.log(`  ${dotnetHome}`);
-    console.log(`  ${dotnetTools}`);
-    console.log('Or run again with --persist-path to write them for you.');
-    return;
   }
-
+  console.log('PATH is changed for this run only. To keep it, add these entries to your PATH:');
+  console.log(`  ${dotnetHome}`);
+  console.log(`  ${dotnetTools}`);
   if (isWindows) {
-    try {
-      // Use PowerShell to safely read and update the user PATH via registry (avoids setx truncation and %PATH% expansion issues)
-      const ps = `
-        $current = [Environment]::GetEnvironmentVariable('PATH', 'User');
-        $entries = @('${dotnetHome.replace(/\\/g, '\\\\')}', '${dotnetTools.replace(/\\/g, '\\\\')}');
-        foreach ($e in $entries) {
-          if ($current -notlike "*$e*") { $current = "$e;$current" }
-        }
-        [Environment]::SetEnvironmentVariable('PATH', $current, 'User');
-      `.trim();
-      execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, { stdio: 'pipe' });
-      console.log('✓ Added .NET paths to Windows user PATH (restart terminal to apply).');
-    } catch (e) {
-      console.warn('Could not update Windows PATH automatically:', e.message);
-    }
-    return;
-  }
-
-  const home = os.homedir();
-  const triggerFile = path.join(home, '.dotnet-env-refresh');
-  const shell = process.env.SHELL || '';
-  const isZsh = shell.includes('zsh');
-
-  // Profiles to update
-  const profiles = isZsh
-    ? [path.join(home, '.zshrc'), path.join(home, '.zprofile')]
-    : [path.join(home, '.bashrc'), path.join(home, '.bash_profile')];
-
-  const pathMarker = '# Added by dotnet:env setup';
-  const pathBlock = `\n${pathMarker}\nexport PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"\n`;
-
-  // Auto-refresh hook: sources the profile when trigger file exists.
-  // Fires automatically at the next shell prompt after `pnpm run dotnet:env` returns,
-  // so `dotnet` becomes available without closing the terminal.
-  const hookMarker = '# dotnet:env auto-refresh hook';
-  const zshHook = `
-${hookMarker}
-_dotnet_env_refresh() {
-  local trigger="$HOME/.dotnet-env-refresh"
-  if [ -f "$trigger" ]; then
-    rm -f "$trigger"
-    source "$HOME/.zshrc"
-  fi
-}
-precmd_functions+=(_dotnet_env_refresh)
-`;
-  const bashHook = `
-${hookMarker}
-_dotnet_env_refresh() {
-  local trigger="$HOME/.dotnet-env-refresh"
-  if [ -f "$trigger" ]; then
-    rm -f "$trigger"
-    source "$HOME/.bashrc"
-  fi
-}
-PROMPT_COMMAND="_dotnet_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
-`;
-  const hook = isZsh ? zshHook : bashHook;
-
-  // Write PATH exports and auto-refresh hook to shell profiles
-  for (const profile of profiles) {
-    try {
-      const existing = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf-8') : '';
-      let content = existing;
-      let changed = false;
-
-      if (!existing.includes(pathMarker)) {
-        content += pathBlock;
-        changed = true;
-        console.log(`✓ Added .NET PATH entries to ${profile}`);
-      } else {
-        console.log(`✓ PATH already configured in ${profile}`);
-      }
-
-      if (!existing.includes(hookMarker)) {
-        content += hook;
-        changed = true;
-        console.log(`✓ Added auto-refresh hook to ${profile}`);
-      }
-
-      if (changed) {
-        fs.writeFileSync(profile, content, 'utf-8');
-      }
-    } catch (e) {
-      console.warn(`Could not update ${profile}:`, e.message);
-    }
-  }
-
-  // Write the trigger file — the hook above will detect it on the next prompt
-  // and source the profile, making `dotnet` available immediately without
-  // closing the terminal.
-  try {
-    fs.writeFileSync(triggerFile, '', 'utf-8');
-    console.log('✓ Terminal PATH will refresh automatically at the next prompt.');
-  } catch (e) {
-    console.warn('Could not write refresh trigger:', e.message);
+    console.log('Windows: Settings > "Edit environment variables for your account" > Path > New.');
+  } else {
+    console.log(
+      `Or run: echo 'export PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"' >> ~/.profile`,
+    );
   }
 }
 
@@ -219,9 +120,6 @@ const commonTools = [
   },
 ];
 
-// Opt-in: the SDK installer runs only with --install-sdk.
-const AUTO_INSTALL_ENABLED = args.includes('--install-sdk');
-
 // Utility functions
 function executeCommand(command, silent = false) {
   try {
@@ -245,87 +143,6 @@ function checkNxDotNetPluginInstalled() {
   } catch {
     return false;
   }
-}
-
-function downloadFile(url, destinationPath) {
-  console.log(`Downloading from ${url} to ${destinationPath}...`);
-  try {
-    // Use PowerShell to download the file on Windows
-    if (isWindows) {
-      const powershellCommand = `
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
-        Invoke-WebRequest -Uri "${url}" -OutFile "${destinationPath}"
-      `;
-      execSync(`powershell -Command "${powershellCommand}"`, {
-        stdio: 'inherit',
-      });
-      return true;
-    } else {
-      // For Unix systems use curl or wget
-      const curlCommand = `curl -L "${url}" -o "${destinationPath}"`;
-      execSync(curlCommand, { stdio: 'inherit' });
-      return true;
-    }
-  } catch (error) {
-    console.error(`Failed to download file: ${error.message}`);
-    return false;
-  }
-}
-
-function installDotNetSdk() {
-  console.log('\nAttempting to automatically install .NET SDK...');
-
-  // Creating a temporary directory for the installer
-  const tempDir = path.join(os.tmpdir(), 'dotnet-installer');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-
-  // Determine the correct installer URL based on OS
-  let installerPath;
-  // Use the official dotnet-install script which always fetches the latest patch for the channel
-  const channel = `${requiredDotNetMajor}.0`;
-
-  if (isWindows) {
-    installerPath = path.join(tempDir, 'dotnet-install.ps1');
-    const downloaded = downloadFile('https://dot.net/v1/dotnet-install.ps1', installerPath);
-    if (!downloaded) return false;
-    try {
-      execSync(
-        `powershell -ExecutionPolicy Bypass -File "${installerPath}" -Channel ${channel} -InstallDir "$env:ProgramFiles\\dotnet"`,
-        { stdio: 'inherit' },
-      );
-    } catch (error) {
-      console.error(`Installation failed: ${error.message}`);
-      return false;
-    }
-  } else if (os.platform() === 'darwin' || os.platform() === 'linux') {
-    installerPath = path.join(tempDir, 'dotnet-install.sh');
-    const downloaded = downloadFile('https://dot.net/v1/dotnet-install.sh', installerPath);
-    if (!downloaded) return false;
-    try {
-      execSync(`bash "${installerPath}" --channel ${channel}`, { stdio: 'inherit' });
-    } catch (error) {
-      console.error(`Installation failed: ${error.message}`);
-      return false;
-    }
-  } else {
-    console.log('Automatic installation is not supported on this platform.');
-    console.log(
-      `Please install .NET ${requiredDotNetMajor} SDK manually: https://dotnet.microsoft.com/download/dotnet/${channel}`,
-    );
-    return false;
-  }
-
-  // Clean up installer script
-  try {
-    fs.unlinkSync(installerPath);
-  } catch {
-    // Ignore cleanup errors
-  }
-
-  console.log(`.NET ${requiredDotNetMajor} SDK installation completed.`);
-  return true;
 }
 
 // Function to list installed .NET SDKs
@@ -422,33 +239,10 @@ async function setupDotNetEnvironment() {
       console.warn(
         `\nWARNING: Installed .NET SDK version (${dotnetVersion}) is not .NET ${requiredDotNetMajor}.x.`,
       );
-
-      if (AUTO_INSTALL_ENABLED) {
-        console.log(`\nAttempting to install latest .NET ${requiredDotNetMajor} SDK...`);
-        const installSuccess = installDotNetSdk();
-
-        if (!installSuccess) {
-          console.warn('Failed to automatically install the required SDK version.');
-          console.warn(
-            'Continuing with the current version, but you may encounter compatibility issues.',
-          );
-        } else {
-          try {
-            const newVersion = execSync('dotnet --version', { stdio: 'pipe' }).toString().trim();
-            console.log(`Now using .NET SDK version: ${newVersion}`);
-          } catch {
-            // Ignore errors
-          }
-        }
-      } else {
-        console.warn(
-          `Please install .NET ${requiredDotNetMajor} SDK: https://dotnet.microsoft.com/download/dotnet/${requiredDotNetMajor}.0`,
-        );
-      }
+      console.warn(`Install the .NET SDK ${requiredDotNetMajor}.0 yourself: ${sdkDownloadUrl}`);
     } else {
       console.log(`✓ .NET ${requiredDotNetMajor}.x SDK found (${dotnetVersion})`);
-      // Ensure PATH is persisted and refresh hook is in place for the current terminal
-      persistDotNetPaths();
+      exportDotNetPaths();
     }
   } catch (error) {
     console.error('ERROR: .NET SDK is not installed or not in PATH.');
@@ -505,74 +299,8 @@ async function setupDotNetEnvironment() {
       }
     }
 
-    if (AUTO_INSTALL_ENABLED && !dotnetFoundButNotInPath) {
-      // Attempt automatic installation
-      const installSuccess = installDotNetSdk();
-
-      if (installSuccess) {
-        // After install, dotnet lands in ~/.dotnet — add it to PATH for this process
-        const dotnetHome = path.join(os.homedir(), '.dotnet');
-        if (fs.existsSync(dotnetHome)) {
-          process.env.PATH = `${dotnetHome}${isWindows ? ';' : ':'}${process.env.PATH}`;
-          console.log(`\nAdded ${dotnetHome} to PATH for this session.`);
-        }
-
-        // Check if installation succeeded by trying to run dotnet again
-        try {
-          const installedVersion = execSync('dotnet --version', {
-            stdio: 'pipe',
-            env: process.env,
-          })
-            .toString()
-            .trim();
-          console.log(`\nSuccessfully installed .NET SDK version: ${installedVersion}`);
-
-          // Automatically persist PATH to shell profile
-          persistDotNetPaths();
-
-          // List all installed SDKs
-          listInstalledDotNetSdks();
-
-          // Continue with the script since we now have .NET installed
-        } catch {
-          // Try adding ~/.dotnet to PATH and retry once more
-          const dotnetHome = path.join(os.homedir(), '.dotnet');
-          process.env.PATH = `${dotnetHome}${isWindows ? ';' : ':'}${process.env.PATH}`;
-          try {
-            const retryVersion = execSync('dotnet --version', { stdio: 'pipe', env: process.env })
-              .toString()
-              .trim();
-            console.log(`\nSuccessfully installed .NET SDK version: ${retryVersion}`);
-
-            // Automatically persist PATH to shell profile
-            persistDotNetPaths();
-          } catch {
-            console.error(
-              'Installation appeared to succeed, but dotnet command still not available.',
-            );
-            console.error('Please add to your shell profile: export PATH="$HOME/.dotnet:$PATH"');
-            console.error('Then restart your terminal and run: pnpm run dotnet:env');
-            process.exit(1);
-          }
-        }
-      } else {
-        // If auto-install failed, show manual instructions
-        const majorVersion = requiredDotNetMajor.split('.')[0];
-        console.log(`\nPlease install .NET SDK ${majorVersion}.0 or higher manually:`);
-        console.log(`  - Windows: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
-        console.log(
-          `  - macOS/Linux: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`,
-        );
-        process.exit(1);
-      }
-    } else if (!AUTO_INSTALL_ENABLED) {
-      // Auto-install is disabled, show manual instructions
-      const majorVersion = requiredDotNetMajor.split('.')[0];
-      console.log(`\nPlease install .NET SDK ${majorVersion}.0 or higher:`);
-      console.log(`  - Windows: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
-      console.log(
-        `  - macOS/Linux: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`,
-      );
+    if (!dotnetFoundButNotInPath) {
+      console.log(`\nInstall the .NET SDK ${requiredDotNetMajor}.0 yourself: ${sdkDownloadUrl}`);
       process.exit(1);
     }
   }
@@ -618,22 +346,6 @@ async function setupDotNetEnvironment() {
   console.log('\nProjects will be automatically tagged when you run:');
   console.log('  pnpm run nx:reset     # Triggers auto-tagging');
   console.log('  pnpm run nx:tag-projects  # Manual tagging if needed');
-
-  // Reload the current shell so dotnet is available immediately without
-  // closing the terminal. `exec zsh` replaces the current shell process
-  // with a fresh one that sources ~/.zshrc — making dotnet available right away.
-  //
-  // Skip in CI / non-interactive contexts: spawning a login shell with
-  // stdio:'inherit' has no TTY to attach to there, and can hang the step
-  // (e.g. CI's `pnpm run dotnet:env`) until the job times out.
-  const isCI = Boolean(process.env.CI);
-  const isInteractive = Boolean(process.stdout.isTTY && process.stdin.isTTY);
-  if (!isWindows && !isCI && isInteractive) {
-    const shell = process.env.SHELL || '/bin/zsh';
-    console.log('\n🔄 Reloading shell to apply PATH changes...');
-    // Use spawnSync with stdio:'inherit' so the new shell takes over the terminal
-    spawnSync(shell, ['-l'], { stdio: 'inherit' });
-  }
 }
 
 // Run the setup
