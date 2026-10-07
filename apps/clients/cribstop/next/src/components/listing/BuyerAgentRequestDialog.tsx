@@ -2,10 +2,17 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { InquiryKind } from '@cribstop/property-contracts';
+import {
+  CONSENT_TEXTS,
+  type ConsentChannel,
+  CURRENT_CONSENT_TEXT_VERSION,
+  type InquiryKind,
+} from '@cribstop/property-contracts';
 import { BRAND } from '@/lib/brand';
 import { useApp } from '@/lib/context';
+import { getProfile } from '@/lib/api/account';
 import { InquiryError, submitInquiry } from '@/lib/api/inquiries';
+import { normalizeUsPhone } from '@/lib/phone';
 
 const MESSAGE_MAX = 2000;
 const FOCUSABLE =
@@ -82,6 +89,29 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     }));
   }, [accountName, accountEmail]);
 
+  // The session knows the email but not whether it is confirmed. The profile says so. Until it
+  // answers, or if it fails, the email stays editable: the service enforces the lock anyway.
+  const signedIn = Boolean(user);
+  const [lockedEmail, setLockedEmail] = useState<string | null>(null);
+  useEffect(() => {
+    if (!signedIn) {
+      setLockedEmail(null);
+      return;
+    }
+    let live = true;
+    getProfile()
+      .then((profile) => {
+        if (live) setLockedEmail(profile.emailConfirmed && profile.email ? profile.email : null);
+      })
+      .catch(() => {
+        if (live) setLockedEmail(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [signedIn]);
+  const emailValue = lockedEmail ?? values.email;
+
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null;
     const root = document.documentElement;
@@ -128,9 +158,11 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     const next: Errors = {};
     if (!values.name.trim()) next.name = 'Enter your name.';
     else if (values.name.trim().length > 200) next.name = 'Enter a shorter name.';
-    if (!values.email.trim()) next.email = 'Enter your email address.';
-    else if (!EMAIL_PATTERN.test(values.email.trim())) next.email = 'Enter a valid email address.';
-    if (values.phone.trim().length > 40) next.phone = 'Enter a shorter phone number.';
+    if (!emailValue.trim()) next.email = 'Enter your email address.';
+    else if (!EMAIL_PATTERN.test(emailValue.trim())) next.email = 'Enter a valid email address.';
+    if (values.phone.trim() && !normalizeUsPhone(values.phone)) {
+      next.phone = 'Enter a 10-digit US phone number, or leave it blank.';
+    }
     if (kind === 'message' && !values.message.trim()) next.message = 'Write a message.';
     if (values.message.length > MESSAGE_MAX) {
       next.message = `Keep your message under ${MESSAGE_MAX} characters.`;
@@ -153,13 +185,20 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
 
     sendingRef.current = true;
     setPhase({ status: 'sending' });
+    const phone = values.phone.trim() ? normalizeUsPhone(values.phone) : null;
+    // The disclosure beside the button covers email, phone call and text.
+    const consentChannels: ConsentChannel[] = phone
+      ? ['email', 'phone_call', 'phone_text']
+      : ['email'];
     try {
       await submitInquiry(listingId, {
         kind,
         name: values.name.trim(),
-        email: values.email.trim(),
-        ...(values.phone.trim() && { phone: values.phone.trim() }),
+        email: emailValue.trim(),
+        ...(phone && { phone }),
         ...(values.message.trim() && { message: values.message.trim() }),
+        consentTextVersion: CURRENT_CONSENT_TEXT_VERSION,
+        consentChannels,
       });
       setPhase({ status: 'sent' });
       requestAnimationFrame(() => doneRef.current?.focus());
@@ -197,6 +236,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   }
 
   const sending = phase.status === 'sending';
+  const submitLabel = sending ? 'Sending…' : phase.status === 'failed' ? 'Try Again' : copy.submit;
 
   function renderField(
     field: Field,
@@ -204,6 +244,8 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     props: React.InputHTMLAttributes<HTMLInputElement>,
   ) {
     const errorId = `${titleId}-${field}-error`;
+    const noteId = `${titleId}-${field}-note`;
+    const locked = field === 'email' && lockedEmail !== null;
     return (
       <div>
         <label htmlFor={`${titleId}-${field}`} className="mb-1 block text-sm font-medium text-ink">
@@ -213,13 +255,21 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
           id={`${titleId}-${field}`}
           name={field}
           className="input-field"
-          value={values[field]}
+          value={field === 'email' ? emailValue : values[field]}
           onChange={(e) => update(field, e.target.value)}
           aria-invalid={errors[field] ? true : undefined}
-          aria-describedby={errors[field] ? errorId : undefined}
-          readOnly={sending}
+          aria-describedby={
+            [errors[field] ? errorId : '', locked ? noteId : ''].filter(Boolean).join(' ') ||
+            undefined
+          }
+          readOnly={sending || locked}
           {...props}
         />
+        {locked && (
+          <p id={noteId} className="mt-1 text-sm text-ink-muted">
+            From your account
+          </p>
+        )}
         {errors[field] && (
           <p id={errorId} className="mt-1 text-sm text-red-700">
             {errors[field]}
@@ -250,8 +300,9 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               We have your request
             </h2>
             <p className="mt-2 text-sm leading-snug text-ink-muted">
-              {BRAND.siteName}, brokered by {BRAND.brokerage}, has your{' '}
-              {kind === 'tour_request' ? 'tour request' : 'message'}.
+              {BRAND.siteName}, brokered by <span className="font-semibold">{BRAND.brokerage}</span>
+              , has your {kind === 'tour_request' ? 'tour request' : 'message'}. We review it and
+              match you with an agent when one is available.
               {kind === 'tour_request' && ' A tour request is not a booking.'}
             </p>
             <button
@@ -330,13 +381,20 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               </p>
             )}
 
+            {!(phase.status === 'failed' && !phase.retryable) && (
+              <p className="text-sm leading-snug text-ink" data-testid="consent-disclosure">
+                By selecting “{phase.status === 'failed' ? 'Try Again' : copy.submit}”:{' '}
+                {CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION]}
+              </p>
+            )}
+
             {phase.status === 'failed' && !phase.retryable ? (
               <button type="button" className="btn-secondary min-h-11 w-full" onClick={onClose}>
                 Close
               </button>
             ) : (
               <button type="submit" className="btn-primary min-h-11 w-full" aria-disabled={sending}>
-                {sending ? 'Sending…' : phase.status === 'failed' ? 'Try Again' : copy.submit}
+                {submitLabel}
               </button>
             )}
           </form>

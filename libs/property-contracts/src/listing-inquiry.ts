@@ -94,8 +94,9 @@ export const listingInquiryRequestSchema = z
     consentTextVersion: consentTextVersionSchema
       .optional()
       .describe(
-        'The consent text version the consumer saw. Optional for now. The server stores the ' +
-          'text for that version, never a client string. Defaults to the current version.',
+        'Required for new clients (#631). The consent text version the consumer saw. An older ' +
+          'client may omit it, and the server then records `v1`. The server stores the text ' +
+          'for the version, never a client string. Needs `consentToContact` true.',
       ),
     consentChannels: z
       .array(consentChannelSchema)
