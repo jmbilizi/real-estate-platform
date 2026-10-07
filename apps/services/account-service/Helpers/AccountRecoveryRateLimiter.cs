@@ -53,6 +53,12 @@ internal sealed class AccountRecoveryRateLimiter(
     IOptions<AccountRecoveryOptions> options,
     TimeProvider timeProvider) : IDisposable
 {
+    /// <summary>The counter scope of the sign-up steps.</summary>
+    internal const string SignUpScope = "signup";
+
+    /// <summary>The counter scope of the password-reset steps. A reset never spends a sign-up counter.</summary>
+    internal const string PasswordResetScope = "pwreset";
+
     /// <summary>The share of the counter cache dropped when it is full.</summary>
     private const double CompactionShare = 0.1;
 
@@ -155,6 +161,7 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <param name="perHour">The sends allowed per email per hour.</param>
     /// <param name="perDay">The sends allowed per email per 24 hours.</param>
     /// <param name="retryAfter">When refused, how long until every refusing window rolls over.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
     /// <returns><see langword="true"/> when the send may proceed.</returns>
     internal bool TrySignUpSend(
         string email,
@@ -162,8 +169,9 @@ internal sealed class AccountRecoveryRateLimiter(
         TimeSpan cooldown,
         int perHour,
         int perDay,
-        out TimeSpan retryAfter) =>
-        this.TryConsumeAll(out retryAfter, this.SignUpSendCounters(email, clientAddress, cooldown, perHour, perDay));
+        out TimeSpan retryAfter,
+        string scope = SignUpScope) =>
+        this.TryConsumeAll(out retryAfter, this.SignUpSendCounters(email, clientAddress, cooldown, perHour, perDay, scope));
 
     /// <summary>
     /// Counts one sign-up code check against the client address. The engine locks one email after
@@ -171,11 +179,12 @@ internal sealed class AccountRecoveryRateLimiter(
     /// </summary>
     /// <param name="clientAddress">The client address, or null when unknown.</param>
     /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
     /// <returns><see langword="true"/> when the check may proceed.</returns>
-    internal bool TrySignUpVerify(string? clientAddress, out TimeSpan retryAfter) =>
+    internal bool TrySignUpVerify(string? clientAddress, out TimeSpan retryAfter, string scope = SignUpScope) =>
         this.TryConsumeAll(
             out retryAfter,
-            new Counter($"signup:verify:addr:{clientAddress ?? "unknown"}", options.Value.SignUpVerifiesPerAddress, options.Value.RequestWindow));
+            new Counter($"{scope}:verify:addr:{clientAddress ?? "unknown"}", options.Value.SignUpVerifiesPerAddress, options.Value.RequestWindow));
 
     /// <summary>
     /// Counts one sign-up email change against the client address, against the old email, and
@@ -217,6 +226,7 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <param name="failureWindow">How long wrong tries count after the last one.</param>
     /// <param name="attemptsLeft">When allowed, the tries left before the lock.</param>
     /// <param name="retryAfter">When locked, how long until the lock ends.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
     /// <returns><see langword="true"/> while tries are left. <see langword="false"/> at the lock.</returns>
     internal bool TryDecoyWrongTry(
         string email,
@@ -224,9 +234,10 @@ internal sealed class AccountRecoveryRateLimiter(
         TimeSpan lockDuration,
         TimeSpan failureWindow,
         out int attemptsLeft,
-        out TimeSpan retryAfter)
+        out TimeSpan retryAfter,
+        string scope = SignUpScope)
     {
-        var key = DecoyKey(email);
+        var key = DecoyKey(email, scope);
         var now = timeProvider.GetUtcNow();
         attemptsLeft = 0;
 
@@ -269,13 +280,14 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <summary>Reports whether <see cref="TryDecoyWrongTry"/> has locked the email.</summary>
     /// <param name="email">The submitted address; compared case-insensitively.</param>
     /// <param name="retryAfter">When locked, how long until the lock ends.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
     /// <returns><see langword="true"/> when the email is locked.</returns>
-    internal bool IsDecoyLocked(string email, out TimeSpan retryAfter)
+    internal bool IsDecoyLocked(string email, out TimeSpan retryAfter, string scope = SignUpScope)
     {
         var now = timeProvider.GetUtcNow();
         lock (this.gate)
         {
-            if (this.cache.TryGetValue(DecoyKey(email), out DecoyState? state)
+            if (this.cache.TryGetValue(DecoyKey(email, scope), out DecoyState? state)
                 && state is not null
                 && state.LockedUntil > now)
             {
@@ -294,11 +306,12 @@ internal sealed class AccountRecoveryRateLimiter(
     /// </summary>
     /// <param name="clientAddress">The client address, or null when unknown.</param>
     /// <param name="retryAfter">When refused, how long until the window rolls over.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
     /// <returns><see langword="true"/> when the request may proceed.</returns>
-    internal bool TrySignUpInvalid(string? clientAddress, out TimeSpan retryAfter) =>
+    internal bool TrySignUpInvalid(string? clientAddress, out TimeSpan retryAfter, string scope = SignUpScope) =>
         this.TryConsumeAll(
             out retryAfter,
-            new Counter($"signup:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow));
+            new Counter($"{scope}:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow));
 
     /// <summary>
     /// Counts one identify call against the client address, then against the email.
@@ -327,22 +340,23 @@ internal sealed class AccountRecoveryRateLimiter(
             new Counter($"identify:email:{email.ToUpperInvariant()}", settings.IdentifiesPerEmail, settings.RequestWindow));
     }
 
-    private static string DecoyKey(string email) => $"signup:decoy:{email.ToUpperInvariant()}";
+    private static string DecoyKey(string email, string scope) => $"{scope}:decoy:{email.ToUpperInvariant()}";
 
     private Counter[] SignUpSendCounters(
         string email,
         string? clientAddress,
         TimeSpan cooldown,
         int perHour,
-        int perDay)
+        int perDay,
+        string scope = SignUpScope)
     {
         var key = email.ToUpperInvariant();
         return
         [
-            new Counter($"signup:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow),
-            new Counter($"signup:send:interval:{key}", 1, cooldown),
-            new Counter($"signup:send:hour:{key}", perHour, TimeSpan.FromHours(1)),
-            new Counter($"signup:send:day:{key}", perDay, TimeSpan.FromHours(24)),
+            new Counter($"{scope}:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow),
+            new Counter($"{scope}:send:interval:{key}", 1, cooldown),
+            new Counter($"{scope}:send:hour:{key}", perHour, TimeSpan.FromHours(1)),
+            new Counter($"{scope}:send:day:{key}", perDay, TimeSpan.FromHours(24)),
         ];
     }
 

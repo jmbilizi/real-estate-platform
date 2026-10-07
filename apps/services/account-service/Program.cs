@@ -214,6 +214,7 @@ internal static class Program
             .ValidateOnStart();
         builder.Services.AddScoped<SignUpService>();
         builder.Services.AddScoped<IdentifyService>();
+        builder.Services.AddScoped<PasswordResetService>();
         builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam
@@ -320,6 +321,9 @@ internal static class Program
 
         // POST /account/signup/complete: creates the account and signs it in. See Routes/SignUpComplete.cs.
         app.MapSignUpCompleteRoutes();
+
+        // Password reset by code: POST /account/password/reset/{start,verify,complete}. See Routes/PasswordReset.cs.
+        app.MapPasswordResetRoutes();
 
         // Email-first routing: POST /account/identify. See Routes/Identify.cs.
         app.MapIdentifyRoutes();
