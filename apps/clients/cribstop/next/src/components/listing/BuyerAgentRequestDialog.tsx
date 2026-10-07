@@ -8,19 +8,19 @@ import {
   CURRENT_CONSENT_TEXT_VERSION,
   type InquiryKind,
 } from '@cribstop/property-contracts';
+import AuthForm from '@/components/AuthForm';
 import { BRAND } from '@/lib/brand';
 import { useApp } from '@/lib/context';
-import { getProfile } from '@/lib/api/account';
 import { InquiryError, submitInquiry } from '@/lib/api/inquiries';
 import { normalizeUsPhone } from '@/lib/phone';
 
 const MESSAGE_MAX = 2000;
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type Field = 'name' | 'email' | 'phone' | 'message';
+type Field = 'phone' | 'message';
 type Errors = Partial<Record<Field, string>>;
+type View = 'form' | 'auth';
 type Phase =
   | { status: 'editing' }
   | { status: 'sending' }
@@ -52,6 +52,9 @@ interface Props {
  * Fields are contact intent only (Fair Housing, PRD §6): no household, age, occupancy or
  * accessibility field, and no prompt that invites one.
  *
+ * A request needs an account (#688). A signed-out buyer meets the email-code sign-in inside this
+ * dialog, so the typed phone and message stay. Name and email come from the account.
+ *
  * Rendered in a portal with its own key handling, because it opens over the listing modal. The
  * listing modal's Escape and Tab handlers sit on `window`, so this handler stops the event first.
  */
@@ -63,54 +66,40 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   const sendingRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const touched = useRef(new Set<Field>());
 
-  const [values, setValues] = useState<Record<Field, string>>({
-    name: '',
-    email: '',
-    phone: '',
-    message: '',
-  });
+  const [values, setValues] = useState<Record<Field, string>>({ phone: '', message: '' });
   const [errors, setErrors] = useState<Errors>({});
   const alertRef = useRef<HTMLParagraphElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
   const [phase, setPhase] = useState<Phase>({ status: 'editing' });
+  // `auth` shows the sign-in flow in place of the form. The typed input stays in state.
+  const [view, setView] = useState<View>('form');
+  const viewRef = useRef<View>('form');
+  viewRef.current = view;
+  // Set when a request met a 401. The request runs once more after sign-in.
+  const [retryAfterAuth, setRetryAfterAuth] = useState(false);
+  const autoRetryRef = useRef(false);
+  // The account that met the 401. Only that account may send the kept request without a new click.
+  const retryEmailRef = useRef('');
 
-  // Prefill from the account. The profile can arrive after the dialog opens, so an untouched
-  // field takes the late value. A field the user edited is never overwritten.
-  const accountName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.name || '';
-  const accountEmail = user?.email ?? '';
-  useEffect(() => {
-    setValues((prev) => ({
-      ...prev,
-      name: touched.current.has('name') ? prev.name : accountName,
-      email: touched.current.has('email') ? prev.email : accountEmail,
-    }));
-  }, [accountName, accountEmail]);
-
-  // The session knows the email but not whether it is confirmed. The profile says so. Until it
-  // answers, or if it fails, the email stays editable: the service enforces the lock anyway.
+  // A new account has no name, and the session name is then its email.
   const signedIn = Boolean(user);
-  const [lockedEmail, setLockedEmail] = useState<string | null>(null);
-  useEffect(() => {
-    if (!signedIn) {
-      setLockedEmail(null);
-      return;
-    }
-    let live = true;
-    getProfile()
-      .then((profile) => {
-        if (live) setLockedEmail(profile.emailConfirmed && profile.email ? profile.email : null);
-      })
-      .catch(() => {
-        if (live) setLockedEmail(null);
-      });
-    return () => {
-      live = false;
-    };
-  }, [signedIn]);
-  const emailValue = lockedEmail ?? values.email;
+  const accountEmail = user?.email ?? '';
+  const accountName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.name || accountEmail;
+
+  // Back, Escape or the backdrop leave the sign-in step. A pending retry is dropped.
+  function showForm() {
+    setRetryAfterAuth(false);
+    setView('form');
+    requestAnimationFrame(() => cardRef.current?.querySelector<HTMLElement>('input')?.focus());
+  }
+  function signedInToForm() {
+    setView('form');
+    requestAnimationFrame(() => cardRef.current?.querySelector<HTMLElement>('input')?.focus());
+  }
+  const showFormRef = useRef(showForm);
+  showFormRef.current = showForm;
 
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null;
@@ -123,7 +112,9 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onCloseRef.current();
+        // Leaving the sign-in step returns to the form. It never closes the whole dialog.
+        if (viewRef.current === 'auth') showFormRef.current();
+        else onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -150,16 +141,11 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   }, []);
 
   function update(field: Field, value: string) {
-    touched.current.add(field);
     setValues((prev) => ({ ...prev, [field]: value }));
   }
 
   function validate(): Errors {
     const next: Errors = {};
-    if (!values.name.trim()) next.name = 'Enter your name.';
-    else if (values.name.trim().length > 200) next.name = 'Enter a shorter name.';
-    if (!emailValue.trim()) next.email = 'Enter your email address.';
-    else if (!EMAIL_PATTERN.test(emailValue.trim())) next.email = 'Enter a valid email address.';
     if (values.phone.trim() && !normalizeUsPhone(values.phone)) {
       next.phone = 'Enter a 10-digit US phone number, or leave it blank.';
     }
@@ -170,19 +156,28 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     return next;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     // A second submit while one is in flight must not send a second request.
     if (sendingRef.current) return;
     const found = validate();
     setErrors(found);
     if (Object.keys(found).length > 0) {
-      const firstInvalid = (['name', 'email', 'phone', 'message'] as Field[]).find((f) => found[f]);
+      const firstInvalid = (['phone', 'message'] as Field[]).find((f) => found[f]);
       if (firstInvalid)
         cardRef.current?.querySelector<HTMLElement>(`[name="${firstInvalid}"]`)?.focus();
       return;
     }
+    autoRetryRef.current = false;
+    if (!signedIn) {
+      setView('auth');
+      return;
+    }
+    void send();
+  }
 
+  async function send() {
+    if (sendingRef.current) return;
     sendingRef.current = true;
     setPhase({ status: 'sending' });
     const phone = values.phone.trim() ? normalizeUsPhone(values.phone) : null;
@@ -193,8 +188,8 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     try {
       await submitInquiry(listingId, {
         kind,
-        name: values.name.trim(),
-        email: emailValue.trim(),
+        name: accountName,
+        email: accountEmail,
         ...(phone && { phone }),
         ...(values.message.trim() && { message: values.message.trim() }),
         consentTextVersion: CURRENT_CONSENT_TEXT_VERSION,
@@ -204,30 +199,44 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
       requestAnimationFrame(() => doneRef.current?.focus());
     } catch (err) {
       const failure = err instanceof InquiryError ? err.failure : 'retryable';
+      if (failure === 'unauthorized' && !autoRetryRef.current) {
+        // The session ended. Sign in again, then send once more.
+        setPhase({ status: 'editing' });
+        retryEmailRef.current = accountEmail;
+        setRetryAfterAuth(true);
+        setView('auth');
+        return;
+      }
       setPhase(
-        failure === 'unavailable'
+        failure === 'unauthorized'
           ? {
               status: 'failed',
-              retryable: false,
-              message: 'This home is no longer available, so we could not send your request.',
+              retryable: true,
+              message: 'Your session ended. Select Try Again to sign in, then send your request.',
             }
-          : failure === 'invalid'
+          : failure === 'unavailable'
             ? {
                 status: 'failed',
-                retryable: true,
-                message: 'Check your details and try again.',
+                retryable: false,
+                message: 'This home is no longer available, so we could not send your request.',
               }
-            : failure === 'rate_limited'
+            : failure === 'invalid'
               ? {
                   status: 'failed',
                   retryable: true,
-                  message: 'Too many requests right now. Wait a moment, then try again.',
+                  message: 'Check your details and try again.',
                 }
-              : {
-                  status: 'failed',
-                  retryable: true,
-                  message: 'We could not send your request. Check your connection and try again.',
-                },
+              : failure === 'rate_limited'
+                ? {
+                    status: 'failed',
+                    retryable: true,
+                    message: 'Too many requests right now. Wait a moment, then try again.',
+                  }
+                : {
+                    status: 'failed',
+                    retryable: true,
+                    message: 'We could not send your request. Check your connection and try again.',
+                  },
       );
       requestAnimationFrame(() => alertRef.current?.focus());
     } finally {
@@ -235,55 +244,34 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     }
   }
 
-  const sending = phase.status === 'sending';
-  const submitLabel = sending ? 'Sending…' : phase.status === 'failed' ? 'Try Again' : copy.submit;
+  // After a mid-request sign-in as the same account, send the kept request once.
+  useEffect(() => {
+    if (!retryAfterAuth || view !== 'form' || !signedIn) return;
+    setRetryAfterAuth(false);
+    // A different account sees its own details and consent text first, then sends by choice.
+    if (accountEmail !== retryEmailRef.current) return;
+    autoRetryRef.current = true;
+    void send();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryAfterAuth, view, signedIn]);
 
-  function renderField(
-    field: Field,
-    label: string,
-    props: React.InputHTMLAttributes<HTMLInputElement>,
-  ) {
-    const errorId = `${titleId}-${field}-error`;
-    const noteId = `${titleId}-${field}-note`;
-    const locked = field === 'email' && lockedEmail !== null;
-    return (
-      <div>
-        <label htmlFor={`${titleId}-${field}`} className="mb-1 block text-sm font-medium text-ink">
-          {label}
-        </label>
-        <input
-          id={`${titleId}-${field}`}
-          name={field}
-          className="input-field"
-          value={field === 'email' ? emailValue : values[field]}
-          onChange={(e) => update(field, e.target.value)}
-          aria-invalid={errors[field] ? true : undefined}
-          aria-describedby={
-            [errors[field] ? errorId : '', locked ? noteId : ''].filter(Boolean).join(' ') ||
-            undefined
-          }
-          readOnly={sending || locked}
-          {...props}
-        />
-        {locked && (
-          <p id={noteId} className="mt-1 text-sm text-ink-muted">
-            From your account
-          </p>
-        )}
-        {errors[field] && (
-          <p id={errorId} className="mt-1 text-sm text-red-700">
-            {errors[field]}
-          </p>
-        )}
-      </div>
-    );
-  }
+  const sending = phase.status === 'sending';
+  const submitLabel = !signedIn
+    ? 'Sign in to continue'
+    : sending
+      ? 'Sending…'
+      : phase.status === 'failed'
+        ? 'Try Again'
+        : copy.submit;
+  const phoneErrorId = `${titleId}-phone-error`;
 
   return createPortal(
     <div
       className="fixed inset-0 z-request-dialog flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        if (view === 'auth') showForm();
+        else onClose();
       }}
     >
       <div
@@ -292,9 +280,29 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid="buyer-agent-request-dialog"
-        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:max-w-md sm:rounded-2xl sm:p-6"
+        className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-2xl ${
+          view === 'auth' ? 'sm:bg-transparent sm:shadow-none' : 'p-5 sm:p-6'
+        }`}
       >
-        {phase.status === 'sent' ? (
+        {view === 'auth' ? (
+          <div>
+            <p id={titleId} className="sr-only">
+              Sign in to send your request
+            </p>
+            <button
+              type="button"
+              className="ml-2 mt-2 inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-medium text-ink-muted hover:bg-surface-soft sm:bg-white"
+              onClick={showForm}
+            >
+              <span aria-hidden="true">&larr;</span> Back to your request
+            </button>
+            <p className="px-6 pt-2 text-center text-sm leading-snug text-ink-muted">
+              This request goes to {BRAND.siteName}, brokered by{' '}
+              <span className="font-semibold">{BRAND.brokerage}</span>.
+            </p>
+            <AuthForm variant="modal" onSuccess={signedInToForm} />
+          </div>
+        ) : phase.status === 'sent' ? (
           <div role="status">
             <h2 id={titleId} className="text-xl font-semibold text-ink">
               We have your request
@@ -339,9 +347,49 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
                 ' A tour request is not a booking. Touring with an agent may require a written buyer agreement.'}
             </p>
 
-            {renderField('name', 'Name', { type: 'text', autoComplete: 'name' })}
-            {renderField('email', 'Email', { type: 'email', autoComplete: 'email' })}
-            {renderField('phone', 'Phone (optional)', { type: 'tel', autoComplete: 'tel' })}
+            {signedIn ? (
+              <div
+                data-testid="account-contact"
+                className="rounded-xl bg-surface-soft px-4 py-3 text-sm"
+              >
+                <p className="text-ink-muted">From your account</p>
+                {accountName !== accountEmail && (
+                  <p className="font-medium text-ink [overflow-wrap:anywhere]">{accountName}</p>
+                )}
+                <p className="font-medium text-ink [overflow-wrap:anywhere]">{accountEmail}</p>
+              </div>
+            ) : (
+              <p className="text-sm leading-snug text-ink" data-testid="account-required">
+                You need a Cribstop account to send this request. Next, you sign in or create one
+                with a code sent to your email. What you typed here stays.
+              </p>
+            )}
+
+            <div>
+              <label
+                htmlFor={`${titleId}-phone`}
+                className="mb-1 block text-sm font-medium text-ink"
+              >
+                Phone (optional)
+              </label>
+              <input
+                id={`${titleId}-phone`}
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                className="input-field min-h-11"
+                value={values.phone}
+                onChange={(e) => update('phone', e.target.value)}
+                aria-invalid={errors.phone ? true : undefined}
+                aria-describedby={errors.phone ? phoneErrorId : undefined}
+                readOnly={sending}
+              />
+              {errors.phone && (
+                <p id={phoneErrorId} className="mt-1 text-sm text-red-700">
+                  {errors.phone}
+                </p>
+              )}
+            </div>
 
             <div>
               <label
@@ -381,7 +429,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               </p>
             )}
 
-            {!(phase.status === 'failed' && !phase.retryable) && (
+            {signedIn && !(phase.status === 'failed' && !phase.retryable) && (
               <p className="text-sm leading-snug text-ink" data-testid="consent-disclosure">
                 By selecting “{phase.status === 'failed' ? 'Try Again' : copy.submit}”:{' '}
                 {CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION]}
