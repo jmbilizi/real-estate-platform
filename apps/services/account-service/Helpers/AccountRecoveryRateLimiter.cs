@@ -300,6 +300,33 @@ internal sealed class AccountRecoveryRateLimiter(
             out retryAfter,
             new Counter($"signup:send:addr:{clientAddress ?? "unknown"}", options.Value.SignUpSendsPerAddress, options.Value.RequestWindow));
 
+    /// <summary>
+    /// Counts one identify call against the client address, then against the email.
+    /// </summary>
+    /// <remarks>
+    /// The address counter comes first, so one address cannot drain a victim's email budget. A null
+    /// email (a malformed address) counts against the address only. A routed call and a refused
+    /// call count the same.
+    /// </remarks>
+    /// <param name="email">The normalised address, or null when malformed.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="retryAfter">When refused, how long until the refusing window rolls over.</param>
+    /// <returns><see langword="true"/> when the call may proceed.</returns>
+    internal bool TryIdentify(string? email, string? clientAddress, out TimeSpan retryAfter)
+    {
+        var settings = options.Value;
+        var addressCounter = new Counter($"identify:addr:{clientAddress ?? "unknown"}", settings.IdentifiesPerAddress, settings.RequestWindow);
+        if (email is null)
+        {
+            return this.TryConsumeAll(out retryAfter, addressCounter);
+        }
+
+        return this.TryConsumeAll(
+            out retryAfter,
+            addressCounter,
+            new Counter($"identify:email:{email.ToUpperInvariant()}", settings.IdentifiesPerEmail, settings.RequestWindow));
+    }
+
     private static string DecoyKey(string email) => $"signup:decoy:{email.ToUpperInvariant()}";
 
     private Counter[] SignUpSendCounters(

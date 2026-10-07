@@ -178,6 +178,7 @@ internal static class Program
             .Validate(options => options.Validate() is null, "SignUp configuration is invalid. See SignUpOptions.Validate.")
             .ValidateOnStart();
         builder.Services.AddScoped<SignUpService>();
+        builder.Services.AddScoped<IdentifyService>();
         builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam
@@ -281,6 +282,9 @@ internal static class Program
         // Sign-up before an account exists: POST /account/signup/{start,verify,resend,change-email}.
         // Creates no ApplicationUser. See Routes/SignUp.cs.
         app.MapSignUpRoutes();
+
+        // Email-first routing: POST /account/identify. See Routes/Identify.cs.
+        app.MapIdentifyRoutes();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();

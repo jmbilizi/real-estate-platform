@@ -177,6 +177,26 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - Email key: trim and upper case only. Plus tags and dots stay (`Helpers/SignUpEmail.cs`).
 - Tests: `Tests/Integration/SignUpEndpointTests.cs`. Gateway: `AccountSignUpRoutesTests`.
 
+## Identify (#653)
+
+- `POST /account/identify` (anonymous, `Routes/Identify.cs`, logic in `Helpers/IdentifyService.cs`)
+  answers `{ next, resendAfterSeconds, expiresInSeconds }`. A confirmed, active account gets
+  `next: "password"` with both numbers `0`. Every other valid address gets `next: "code"` after
+  `SignUpService.StartAsync`. Bad address: `400`. No engine key: `503`.
+- **Decision (stakeholder default, #653): the route is revealed.** The route is the only thing the
+  endpoint reveals. Both routes have one JSON shape and run under the timing floor. A cooldown or
+  lock in the code engine answers `next: "code"` with the wait in `resendAfterSeconds`, not `429`.
+  So a pending, locked or undeliverable address looks like a new one. The service has no suppression
+  store, so there is no `undeliverable` answer. Do not add one.
+- Soft-deleted and unconfirmed accounts get `code`. `/start` sends them the already-registered
+  notice, not a code. #654 refuses a soft-deleted account at the set-password step.
+- **Limits** (`AccountRecovery:IdentifiesPerAddress` 20, `IdentifiesPerEmail` 5, per
+  `RequestWindow`): `AccountRecoveryRateLimiter.TryIdentify`, in the throttle filter. The address
+  counter runs first. A bad address counts against the address only. `429` with `Retry-After`.
+- Bot challenge (Turnstile) is not built. Add it if the logs show identify abuse: sustained `429`
+  from many client addresses.
+- Tests: `Tests/Integration/IdentifyEndpointTests.cs`.
+
 ## Staff roles (#628)
 
 - `Agent` is a role facet, never a persona. Introspection returns `roles` (array), `email` and

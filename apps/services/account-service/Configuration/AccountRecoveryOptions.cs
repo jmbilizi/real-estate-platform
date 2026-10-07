@@ -133,6 +133,17 @@ internal sealed class AccountRecoveryOptions
     /// </summary>
     public int SignUpVerifiesPerAddress { get; set; } = 20;
 
+    /// <summary>
+    /// Gets or sets the identify calls (#653) allowed from one client address per
+    /// <see cref="RequestWindow"/>. Valid and invalid addresses both count.
+    /// </summary>
+    public int IdentifiesPerAddress { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the identify calls (#653) allowed for one email per <see cref="RequestWindow"/>.
+    /// </summary>
+    public int IdentifiesPerEmail { get; set; } = 5;
+
     /// <summary>Gets or sets the window for the per-client-address counters.</summary>
     public TimeSpan RequestWindow { get; set; } = TimeSpan.FromMinutes(15);
 
@@ -209,6 +220,8 @@ internal sealed class AccountRecoveryOptions
             (nameof(this.RegistrationsPerAddress), this.RegistrationsPerAddress),
             (nameof(this.SignUpSendsPerAddress), this.SignUpSendsPerAddress),
             (nameof(this.SignUpVerifiesPerAddress), this.SignUpVerifiesPerAddress),
+            (nameof(this.IdentifiesPerAddress), this.IdentifiesPerAddress),
+            (nameof(this.IdentifiesPerEmail), this.IdentifiesPerEmail),
             (nameof(this.MaxTrackedKeys), this.MaxTrackedKeys));
     }
 
