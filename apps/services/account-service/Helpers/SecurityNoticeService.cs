@@ -138,6 +138,7 @@ internal sealed partial class SecurityNoticeService(
         string eventKind,
         Func<string, DateTime, Uri, OutboundEmail> compose)
     {
+        SecureAccountToken? row = null;
         try
         {
             if (!SignUpEmail.TryNormalize(address, out var key, out var to))
@@ -154,7 +155,10 @@ internal sealed partial class SecurityNoticeService(
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
             var token = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(TokenBytes));
-            db.SecureAccountTokens.Add(new SecureAccountToken
+
+            // Build the message first: a bad link setting must not leave an orphan token row.
+            var message = compose(to, now, this.BuildLink(token));
+            row = new SecureAccountToken
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
@@ -162,17 +166,23 @@ internal sealed partial class SecurityNoticeService(
                 TokenHash = HashToken(token),
                 CreatedAt = now,
                 ExpiresAt = now + TokenLifetime,
-            });
+            };
+            db.SecureAccountTokens.Add(row);
             await db.SaveChangesAsync().ConfigureAwait(false);
 
-            await sender.SendAsync(compose(to, now, this.BuildLink(token))).ConfigureAwait(false);
+            await sender.SendAsync(message).ConfigureAwait(false);
         }
 #pragma warning disable CA1031 // A notice must never fail the action it reports.
         catch (Exception ex)
 #pragma warning restore CA1031
         {
             // The action is done. A notice must not undo it. Log the type only: a message can hold an address.
-            db.ChangeTracker.Clear();
+            if (row is not null)
+            {
+                // Detach only the notice row. The caller shares this context and tracks its own entities.
+                db.Entry(row).State = EntityState.Detached;
+            }
+
             LogFailed(logger, kind, ex.GetType().Name);
         }
     }

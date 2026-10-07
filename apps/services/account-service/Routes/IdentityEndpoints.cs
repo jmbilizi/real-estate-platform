@@ -78,6 +78,14 @@ internal static class IdentityEndpoints
                 return Results.Json(new { error = EmailChange.SessionRequiredError }, statusCode: StatusCodes.Status403Forbidden);
             }
 
+            // An account with no password adds its first one through the framework branch. It has no current password to check.
+            var users = http.RequestServices.GetRequiredService<AppUserManager>();
+            if (await users.FindByIdAsync(session.UserId).ConfigureAwait(false) is { } existing
+                && !await users.HasPasswordAsync(existing).ConfigureAwait(false))
+            {
+                return await next(context).ConfigureAwait(false);
+            }
+
             var result = await http.RequestServices.GetRequiredService<PasswordChangeService>()
                 .ChangeAsync(
                     session.UserId,
@@ -94,7 +102,11 @@ internal static class IdentityEndpoints
                     var signIn = http.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>();
                     signIn.AuthenticationScheme = session.Bearer ? IdentityConstants.BearerScheme : IdentityConstants.ApplicationScheme;
                     await signIn.SignInAsync(result.User!, session.Persistent).ConfigureAwait(false);
-                    return Results.Empty;
+
+                    // A bearer sign-in wrote the token body. A cookie sign-in wrote only the cookie, so answer as the framework does.
+                    return session.Bearer
+                        ? Results.Empty
+                        : Results.Ok(new InfoResponse { Email = result.User!.Email!, IsEmailConfirmed = result.User.EmailConfirmed });
                 case PasswordChangeStatus.CurrentRequired:
                     return Problem("OldPasswordRequired", "The current password is required.");
                 case PasswordChangeStatus.CurrentWrong:

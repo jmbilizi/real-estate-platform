@@ -121,6 +121,7 @@ namespace AccountService.Tests.Integration
             var response = await current.PostAsJsonAsync(InfoPath, new { oldPassword = Password, newPassword = NewPassword });
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("email").GetString().Should().Be(Old);
             (await UserAsync(factory, id)).SecurityStamp.Should().NotBe(stampBefore);
             (await current.GetAsync("/account/profile")).StatusCode.Should().Be(HttpStatusCode.OK);
             (await other.GetAsync("/account/profile")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
