@@ -306,6 +306,7 @@ internal static class Program
 
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
+        app.MapContactLookupRoutes();
 
         // Postmark bounce, spam complaint and subscription-change webhook (#664).
         app.MapPostmarkWebhookRoutes();

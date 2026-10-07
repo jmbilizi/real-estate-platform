@@ -186,6 +186,16 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - Every grant and removal in `Routes/Admin.cs` writes a `RoleGrantAudits` row. The README says how a
   human grants the first `SuperAdmin`.
 
+## Contact lookup (#689)
+
+- `POST /internal/account/contacts` (`Routes/ContactLookup.cs`) takes `{ accountIds }` (1 to 100
+  UUIDs). It returns `{ contacts: [{ accountId, displayName, email, emailConfirmed }] }`. Unknown
+  and soft-deleted ids are omitted. An empty or over-limit batch returns `400`.
+- Same trust as introspection: in-cluster only, no gateway route, hidden from OpenAPI. Any hardening
+  of introspection (#97) applies here too. The handler never logs an email or a display name.
+- Not a directory: no search, no listing.
+- Tests: `Tests/Integration/ContactLookupEndpointTests.cs`.
+
 ## Complete sign-up and password policy (#654)
 
 - `POST /account/signup/complete` (`Routes/SignUpComplete.cs`, `Helpers/SignUpCompletion.cs`) takes
