@@ -209,7 +209,12 @@ Unit tests are not end-to-end verification — when a ticket's acceptance criter
 behavior (an endpoint responding, a page rendering, services talking through the gateway), run the
 stack and exercise it. Everything needed is scripted; the only host prerequisite is Node
 (`pnpm install && pnpm run hooks:setup`, then `pnpm run infra:local:cluster:setup` once for the
-local Kind/Podman cluster — `dotnet:env` / `python:env:full` if those toolchains aren't set up yet).
+local Kind/Podman cluster).
+
+**Never run `dotnet:env`, `python:env*`, or `infra:setup`.** Those setup scripts are for humans.
+Before .NET work, run `dotnet --version`. Before Python work, run `uv --version`. If the tool works,
+do nothing. If it fails, stop and report a `human-action` item. Tell every lane the same rule.
+
 Skaffold is the local development path; never invoke `skaffold`/`kubectl` raw.
 
 **The entire local infrastructure lifecycle is scripted, so managing it is your job — never ask the

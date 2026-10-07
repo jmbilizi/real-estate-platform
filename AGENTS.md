@@ -93,6 +93,12 @@ guide.
     descriptions, commit messages, and replies to the user. See
     [Writing Standard](#writing-standard).
 
+11. **Agents never run the environment setup scripts.** Do not run `dotnet:env`, `python:env*`, or
+    `infra:setup`. They are for humans. They install SDKs and write the user PATH and shell
+    profiles. Before .NET work, run `dotnet --version`. Before Python work, run `uv --version`. If
+    the tool works, do nothing. If it fails, stop and report a `human-action` item. The scripts are
+    idempotent: they read the current state and write only what is missing.
+
 ## Writing Standard (ASD-STE100)
 
 Every agent writes in Simplified Technical English. The rules that matter most here:

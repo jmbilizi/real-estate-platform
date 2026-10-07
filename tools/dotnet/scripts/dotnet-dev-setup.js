@@ -9,10 +9,16 @@ const fs = require('fs');
 const path = require('path');
 const { execSync, spawnSync } = require('child_process');
 const os = require('os');
+const {
+  computeMissingPathEntries,
+  computeMissingTools,
+  splitPath,
+} = require('../../lib/path-entries');
 
 // Process command line arguments
 const args = process.argv.slice(2);
 const skipTools = args.includes('--skip-tools');
+const updateTools = args.includes('--update-tools');
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log('Usage: node dotnet-dev-setup.js [options]');
@@ -20,6 +26,11 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log('Options:');
   console.log('  --help, -h     Display this help message');
   console.log('  --skip-tools   Skip installation of .NET global tools');
+  console.log('  --update-tools Also update the global tools that are already installed');
+  console.log('');
+  console.log(
+    'Every step is idempotent: it reads the current state and writes only what is missing.',
+  );
   console.log('');
   console.log('Description:');
   console.log(
@@ -43,27 +54,61 @@ const requiredDotNetMajor = '10'; // Required .NET SDK major version
 // Determine if we're running on Windows
 const isWindows = os.platform() === 'win32';
 
+// True when this run wrote a shell profile. The shell reload at the end needs it.
+let profileChanged = false;
+
+/** Read a persistent Windows PATH ('User' or 'Machine'). This is a read-only query. */
+function readWindowsPath(scope) {
+  try {
+    return execSync(
+      `powershell -NoProfile -NonInteractive -Command "[Environment]::GetEnvironmentVariable('PATH', '${scope}')"`,
+      { stdio: 'pipe' },
+    )
+      .toString()
+      .trim();
+  } catch {
+    return '';
+  }
+}
+
 /**
- * Automatically writes PATH entries to the user's shell profile if not already present.
- * Handles ~/.zshrc (zsh), ~/.bashrc and ~/.bash_profile (bash) on macOS/Linux.
- * On Windows, uses setx to persist the PATH change.
+ * Writes PATH entries only when they are missing. It first reads the current state and skips
+ * every write when the state is already correct.
+ * Windows: user PATH via the registry. macOS/Linux: ~/.zshrc or ~/.bashrc, guarded by a marker.
  */
 function persistDotNetPaths() {
   if (isWindows) {
     try {
       const dotnetHome = path.join(os.homedir(), '.dotnet');
       const dotnetTools = path.join(dotnetHome, 'tools');
-      // Use PowerShell to safely read and update the user PATH via registry (avoids setx truncation and %PATH% expansion issues)
+      // Read the persistent PATH (read-only). Do not use the process PATH: this run may have
+      // prepended entries to it, and that would hide a missing persistent entry.
+      const userPath = readWindowsPath('User');
+      const persistentPath = `${userPath};${readWindowsPath('Machine')}`;
+      const resolvesFromPersistentPath = (tool) =>
+        splitPath(persistentPath, ';').some((dir) => fs.existsSync(path.join(dir, `${tool}.exe`)));
+      const missing = computeMissingPathEntries({
+        pathValue: persistentPath,
+        delimiter: ';',
+        candidates: [{ dir: dotnetHome, tool: 'dotnet' }, { dir: dotnetTools }],
+        dirExists: fs.existsSync,
+        resolves: resolvesFromPersistentPath,
+      });
+      if (missing.length === 0) {
+        console.log('✓ PATH already configured');
+        return;
+      }
+      // Write the user PATH through the registry (avoids setx truncation and %PATH% expansion).
+      const prefix = missing.map((e) => e.replace(/'/g, "''")).join(';');
       const ps = `
         $current = [Environment]::GetEnvironmentVariable('PATH', 'User');
-        $entries = @('${dotnetHome.replace(/\\/g, '\\\\')}', '${dotnetTools.replace(/\\/g, '\\\\')}');
-        foreach ($e in $entries) {
-          if ($current -notlike "*$e*") { $current = "$e;$current" }
-        }
+        if ($current) { $current = '${prefix};' + $current } else { $current = '${prefix}' }
         [Environment]::SetEnvironmentVariable('PATH', $current, 'User');
       `.trim();
       execSync(`powershell -NoProfile -NonInteractive -Command "${ps}"`, { stdio: 'pipe' });
-      console.log('✓ Added .NET paths to Windows user PATH (restart terminal to apply).');
+      console.log(
+        `✓ Added to Windows user PATH: ${missing.join(', ')} (restart terminal to apply).`,
+      );
     } catch (e) {
       console.warn('Could not update Windows PATH automatically:', e.message);
     }
@@ -111,7 +156,7 @@ PROMPT_COMMAND="_dotnet_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 `;
   const hook = isZsh ? zshHook : bashHook;
 
-  // Write PATH exports and auto-refresh hook to shell profiles
+  // Write PATH exports and auto-refresh hook to shell profiles. Each write needs its marker absent.
   for (const profile of profiles) {
     try {
       const existing = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf-8') : '';
@@ -134,15 +179,16 @@ PROMPT_COMMAND="_dotnet_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 
       if (changed) {
         fs.writeFileSync(profile, content, 'utf-8');
+        profileChanged = true;
       }
     } catch (e) {
       console.warn(`Could not update ${profile}:`, e.message);
     }
   }
 
-  // Write the trigger file — the hook above will detect it on the next prompt
-  // and source the profile, making `dotnet` available immediately without
-  // closing the terminal.
+  // Write the trigger file only when a profile changed. The hook above detects it on the next
+  // prompt and sources the profile, so `dotnet` works without closing the terminal.
+  if (!profileChanged) return;
   try {
     fs.writeFileSync(triggerFile, '', 'utf-8');
     console.log('✓ Terminal PATH will refresh automatically at the next prompt.');
@@ -334,8 +380,7 @@ function installTool(tool) {
   });
 
   if (result.status !== 0) {
-    console.log(`Tool ${tool.name} may already be installed. Attempting to update...`);
-    updateTool(tool);
+    console.error(`✗ Failed to install ${tool.name}.`);
   } else {
     console.log(`✓ Installed ${tool.name} successfully.`);
   }
@@ -358,13 +403,24 @@ function updateTool(tool) {
 function installDotNetTools() {
   console.log('\nSetting up .NET code quality tools...');
 
-  // Install each tool
-  for (const tool of commonTools) {
+  // List once. Install only what is missing. Update only with --update-tools.
+  const list = spawnSync('dotnet', ['tool', 'list', '--global'], { encoding: 'utf8' });
+  const listOutput = list.status === 0 ? list.stdout : '';
+  const missing = computeMissingTools(listOutput, commonTools);
+
+  if (missing.length === 0) {
+    console.log('✓ All .NET tools are already installed.');
+  }
+  for (const tool of missing) {
     installTool(tool);
+  }
+  if (updateTools) {
+    for (const tool of commonTools) {
+      updateTool(tool);
+    }
   }
 
   console.log('\n✅ .NET code quality tools setup complete!');
-  console.log('You can now use these tools in your .NET projects.');
 }
 
 // Main setup steps
@@ -395,7 +451,13 @@ async function setupDotNetEnvironment() {
         `\nWARNING: Installed .NET SDK version (${dotnetVersion}) is not .NET ${requiredDotNetMajor}.x.`,
       );
 
-      if (AUTO_INSTALL_ENABLED) {
+      const hasRequiredSdk = listInstalledDotNetSdks().some(
+        (v) => v.split('.')[0] === requiredDotNetMajor,
+      );
+      if (hasRequiredSdk) {
+        console.log(`✓ .NET ${requiredDotNetMajor}.x SDK is already installed. No install needed.`);
+        persistDotNetPaths();
+      } else if (AUTO_INSTALL_ENABLED) {
         console.log(`\nAttempting to install latest .NET ${requiredDotNetMajor} SDK...`);
         const installSuccess = installDotNetSdk();
 
@@ -598,7 +660,7 @@ async function setupDotNetEnvironment() {
   // (e.g. CI's `pnpm run dotnet:env`) until the job times out.
   const isCI = Boolean(process.env.CI);
   const isInteractive = Boolean(process.stdout.isTTY && process.stdin.isTTY);
-  if (!isWindows && !isCI && isInteractive) {
+  if (!isWindows && !isCI && isInteractive && profileChanged) {
     const shell = process.env.SHELL || '/bin/zsh';
     console.log('\n🔄 Reloading shell to apply PATH changes...');
     // Use spawnSync with stdio:'inherit' so the new shell takes over the terminal

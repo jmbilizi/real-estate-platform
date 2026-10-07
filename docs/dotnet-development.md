@@ -6,7 +6,10 @@
 pnpm run dotnet:env
 ```
 
-Installs .NET SDK (if missing), global tools, and Nx plugin.
+Installs .NET SDK (if missing), global tools, and Nx plugin. The script is idempotent. It reads the
+current state first and writes only what is missing: PATH entries, shell profile blocks, global
+tools, the SDK, the Nx plugin. A run on a correct machine changes nothing. Pass `-- --update-tools`
+to also update installed global tools.
 
 ## Creating Projects
 

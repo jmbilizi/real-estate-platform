@@ -14,6 +14,7 @@ const https = require('https');
 const http = require('http');
 const path = require('path');
 const os = require('os');
+const { computeMissingPathEntries } = require('./path-entries');
 
 const PLATFORM = os.platform(); // win32 | darwin | linux
 const ARCH = os.arch(); // x64 | arm64
@@ -134,8 +135,16 @@ function addToPath(binDir) {
       "[System.Environment]::GetEnvironmentVariable('PATH','User')",
     ]);
     if (cur.success) {
-      const existing = cur.output.trim().split(';').map(norm).filter(Boolean);
-      if (!existing.includes(target)) {
+      // Write only when the entry is missing from the user PATH and the directory exists.
+      const missing = computeMissingPathEntries({
+        pathValue: cur.output,
+        delimiter: ';',
+        candidates: [{ dir: binDir }],
+        dirExists: fs.existsSync,
+      });
+      if (missing.length === 0) {
+        ok('PATH already configured');
+      } else {
         const r = run('powershell', [
           '-NoProfile',
           '-Command',
@@ -198,6 +207,7 @@ PROMPT_COMMAND="_dev_tools_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 `;
     const hook = isZsh ? zshHook : bashHook;
 
+    let profileChanged = false;
     for (const profile of profiles) {
       try {
         const existing = fs.existsSync(profile) ? fs.readFileSync(profile, 'utf8') : '';
@@ -216,20 +226,26 @@ PROMPT_COMMAND="_dev_tools_env_refresh\${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
           ok(`Added auto-refresh hook to ${profile}`);
         }
 
-        if (changed) fs.writeFileSync(profile, content, 'utf8');
+        if (changed) {
+          fs.writeFileSync(profile, content, 'utf8');
+          profileChanged = true;
+        }
       } catch (e) {
         warn(`Could not update ${profile}: ${e.message}`);
       }
     }
 
-    // Write trigger file — the hook above detects it at the next shell prompt
-    // and sources the profile, making the new tool available without reopening
-    // the terminal.
-    try {
-      fs.writeFileSync(triggerFile, '', 'utf8');
-      ok('Terminal PATH will refresh automatically at the next prompt.');
-    } catch (e) {
-      warn(`Could not write refresh trigger: ${e.message}`);
+    // Write trigger file only when a profile changed. The hook above detects it at the next
+    // shell prompt and sources the profile, so the tool works without reopening the terminal.
+    if (profileChanged) {
+      try {
+        fs.writeFileSync(triggerFile, '', 'utf8');
+        ok('Terminal PATH will refresh automatically at the next prompt.');
+      } catch (e) {
+        warn(`Could not write refresh trigger: ${e.message}`);
+      }
+    } else {
+      ok('PATH already configured');
     }
 
     // Also update current process so subsequent checks in this run work
