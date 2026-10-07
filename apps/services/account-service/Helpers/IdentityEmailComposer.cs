@@ -95,6 +95,20 @@ internal sealed class IdentityEmailComposer(
         return this.Compose(EmailKind.AlreadyRegistered, to, AlreadyRegisteredSubject, body);
     }
 
+    /// <summary>Composes the one-time code message. The code is the only sensitive content.</summary>
+    /// <param name="to">The recipient.</param>
+    /// <param name="code">The code, digits only, so a mail client can offer to autofill it.</param>
+    /// <param name="lifetime">How long the code works.</param>
+    /// <returns>The message.</returns>
+    internal OutboundEmail Code(string to, string code, TimeSpan lifetime)
+    {
+        var body =
+            $"Your Cribstop code:\n\n{code}\n\n" +
+            $"It expires in {FormatLifetime(lifetime)}.\n\n" +
+            "Not you? Ignore this message.";
+        return this.Compose(EmailKind.Code, to, $"{code} is your Cribstop code", body);
+    }
+
     /// <summary>Formats a token lifetime for the reader, e.g. "24 hours" or "1 hour".</summary>
     private static string FormatLifetime(TimeSpan lifetime)
     {

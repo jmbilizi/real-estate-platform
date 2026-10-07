@@ -25,6 +25,10 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<RoleGrantAudit> RoleGrantAudits => Set<RoleGrantAudit>();
 
+    public DbSet<EmailCode> EmailCodes => Set<EmailCode>();
+
+    public DbSet<EmailCodeThrottle> EmailCodeThrottles => Set<EmailCodeThrottle>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -208,6 +212,28 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(a => a.Action).IsRequired();
             entity.Property(a => a.OccurredAt).HasDefaultValueSql("NOW()").ValueGeneratedOnAdd();
             entity.HasIndex(a => a.GranteeUserId);
+        });
+
+        // No FK to AspNetUsers: a code can target an address with no account. The hash is a keyed
+        // HMAC; the key never reaches the database.
+        builder.Entity<EmailCode>(entity =>
+        {
+            entity.ToTable("EmailCodes");
+            entity.Property(c => c.Email).IsRequired();
+            entity.Property(c => c.Purpose).HasConversion<string>().IsRequired();
+            entity.Property(c => c.CodeHash).IsRequired();
+            entity.HasIndex(c => new { c.Email, c.Purpose, c.CreatedAt });
+            entity.Property(c => c.Version).IsConcurrencyToken();
+            entity.HasIndex(c => c.ExpiresAt);
+        });
+
+        builder.Entity<EmailCodeThrottle>(entity =>
+        {
+            entity.ToTable("EmailCodeThrottles");
+            entity.HasKey(t => new { t.Email, t.Purpose });
+            entity.Property(t => t.Purpose).HasConversion<string>();
+            entity.Property(t => t.Version).IsConcurrencyToken();
+            entity.HasIndex(t => t.UpdatedAt);
         });
     }
 }

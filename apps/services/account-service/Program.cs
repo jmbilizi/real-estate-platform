@@ -23,6 +23,9 @@ internal static class Program
     /// <summary>The event id of the startup warning while the confirmation requirement is off.</summary>
     internal static readonly EventId ConfirmationNotEnforcedEvent = new(1364, "EmailConfirmationNotEnforced");
 
+    /// <summary>The event id of the startup warning while the email code engine has no key.</summary>
+    internal static readonly EventId EmailCodesNotConfiguredEvent = new(1384, "EmailCodesNotConfigured");
+
     private const string ConfirmationNotEnforcedMessage =
         "Email confirmation is not enforced (AccountRecovery:RequireConfirmedEmail = false). " +
         "Accounts can sign in with an unverified address. #149 turns enforcement on.";
@@ -79,6 +82,20 @@ internal static class Program
                 }
             })
             .Validate(options => options.Validate() is null, "Postmark configuration is invalid. See PostmarkOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services
+            .AddOptions<EmailCodeOptions>()
+            .Bind(builder.Configuration.GetSection(EmailCodeOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                // Overwrites whatever the section bound: the key comes only from the environment.
+                // Any other environment with no key leaves the engine unconfigured, and it refuses every call.
+                var key = builder.Configuration[EmailCodeOptions.KeyVariable];
+                options.HmacKey = !string.IsNullOrWhiteSpace(key) ? key
+                    : builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") ? EmailCodeOptions.DevelopmentKey
+                    : string.Empty;
+            })
+            .Validate(options => options.Validate() is null, "EmailCodes configuration is invalid. See EmailCodeOptions.Validate.")
             .ValidateOnStart();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
@@ -153,6 +170,8 @@ internal static class Program
         builder.Services.AddSingleton<ConfirmationLinkBuilder>();
         builder.Services.AddSingleton<PasswordResetLinkBuilder>();
         builder.Services.AddSingleton<IdentityEmailComposer>();
+        builder.Services.AddScoped<EmailCodeService>();
+        builder.Services.AddHostedService<EmailCodePurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam
         // (IOutboundEmailSender) and as the hosted service that drains it. Enqueuing never blocks
@@ -204,6 +223,12 @@ internal static class Program
         var app = builder.Build();
 
         WarnIfConfirmationIsNotEnforced(app);
+        if (!app.Services.GetRequiredService<IOptions<EmailCodeOptions>>().Value.IsConfigured)
+        {
+#pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
+            app.Logger.LogWarning(EmailCodesNotConfiguredEvent, "Email codes are not configured: no usable EMAIL_CODE_HMAC_KEY. Every call is refused.");
+#pragma warning restore CA1848
+        }
 
         // Seed platform roles after the app starts listening so the readiness probe
         // is not blocked by a slow DB connection on startup.

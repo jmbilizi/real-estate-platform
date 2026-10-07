@@ -130,6 +130,20 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `AccountRecoveryFactory` (one host per test, records sent messages). The base factory lifts the
   limits and the floor.
 
+## Email code engine (#650)
+
+- `Helpers/EmailCodeService.cs` issues, verifies and voids 6-digit codes. No endpoint calls it yet.
+  Purposes: `EmailCodePurpose` (`SignUp`, `PasswordReset`, `EmailChangeNew`, `EmailChangeOld`).
+  Policy: `Configuration/EmailCodeOptions.cs` (`EmailCodes` section).
+- Tables: `EmailCodes` (keyed HMAC of the code, never the code) and `EmailCodeThrottles` (wrong
+  tries and lock per email and purpose). The throttle row is separate so a resend does not reset it.
+- Resend caps count `EmailCodes` rows. The purge keeps a spent row for 24 hours for that reason.
+- Limits return a result with `RetryAfterSeconds`, never an exception. A caller maps them to `429`.
+- The HMAC key is `EMAIL_CODE_HMAC_KEY` (flat env var). With no usable key, every call returns
+  `Unavailable` and startup logs event `1380`. Only Development and Testing use a fixed dev key.
+- The code message logs by `EmailKind` only. `PostmarkDeliveryQueue` redacts the recipient for it.
+- A striped in-process lock serializes one email and purpose. Two replicas can still race.
+
 ## Staff roles (#628)
 
 - `Agent` is a role facet, never a persona. Introspection returns `roles` (array), `email` and

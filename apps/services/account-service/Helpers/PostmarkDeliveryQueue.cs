@@ -84,7 +84,7 @@ internal sealed partial class PostmarkDeliveryQueue(
                 // message queued after it would then go undelivered, forever, with no further log
                 // (#138 code review). DeliverAsync already handles every failure mode this
                 // transport anticipates; this is the backstop for the one it does not.
-                LogFailed(logger, message.Kind, message.To, ex.Message);
+                LogFailed(logger, message.Kind, Recipient(message), Detail(message, ex.Message));
             }
 
             this.Delivered?.Invoke(message);
@@ -103,11 +103,19 @@ internal sealed partial class PostmarkDeliveryQueue(
     [LoggerMessage(1373, LogLevel.Error, "{Kind} for {To} could not be delivered after retries: {Detail}", EventName = "PostmarkSendFailedAfterRetries")]
     private static partial void LogFailed(ILogger logger, EmailKind kind, string to, string detail);
 
+    // A code message logs by kind only: the address would tie a login attempt to a person in the logs.
+    private static string Recipient(OutboundEmail message) =>
+        message.Kind == EmailKind.Code ? "[redacted]" : message.To;
+
+    // Postmark error text can echo the recipient, so a code message drops it.
+    private static string Detail(OutboundEmail message, string detail) =>
+        message.Kind == EmailKind.Code ? "[redacted]" : detail;
+
     private async Task DeliverAsync(OutboundEmail message, CancellationToken cancellationToken)
     {
         if (!options.Value.IsConfigured)
         {
-            LogSuppressed(logger, message.Kind, message.To);
+            LogSuppressed(logger, message.Kind, Recipient(message));
             return;
         }
 
@@ -118,7 +126,7 @@ internal sealed partial class PostmarkDeliveryQueue(
                 var result = await clientFactory().SendAsync(message, cancellationToken).ConfigureAwait(false);
                 if (result.Success)
                 {
-                    LogAccepted(logger, message.Kind, message.To, result.MessageId ?? string.Empty);
+                    LogAccepted(logger, message.Kind, Recipient(message), result.MessageId ?? string.Empty);
                     return;
                 }
 
@@ -127,7 +135,7 @@ internal sealed partial class PostmarkDeliveryQueue(
                     // Either a permanent rejection (bad token, invalid recipient) that a retry
                     // cannot change, or every retry for a retryable one (rate limit, Postmark 5xx)
                     // is spent.
-                    LogRejected(logger, message.Kind, message.To, result.ErrorCode, result.Detail);
+                    LogRejected(logger, message.Kind, Recipient(message), result.ErrorCode, Detail(message, result.Detail));
                     return;
                 }
 
@@ -137,7 +145,7 @@ internal sealed partial class PostmarkDeliveryQueue(
             {
                 if (attempt >= this.retryDelays.Count)
                 {
-                    LogFailed(logger, message.Kind, message.To, ex.Message);
+                    LogFailed(logger, message.Kind, Recipient(message), Detail(message, ex.Message));
                     return;
                 }
 

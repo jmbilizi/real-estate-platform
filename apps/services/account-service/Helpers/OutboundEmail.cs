@@ -15,6 +15,9 @@ internal enum EmailKind
 
     /// <summary>A notice that someone tried to register an address that already has an account.</summary>
     AlreadyRegistered,
+
+    /// <summary>A one-time sign-in or verification code.</summary>
+    Code,
 }
 
 /// <summary>A composed transactional message, ready for a transport.</summary>

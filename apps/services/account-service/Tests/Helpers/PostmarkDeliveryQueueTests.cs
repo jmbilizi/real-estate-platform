@@ -44,6 +44,40 @@ namespace AccountService.Tests.Helpers
             AssertNeverLeaksTheSecret(entry.Message);
         }
 
+        [Theory]
+        [InlineData(PostmarkOptions.PlaceholderServerToken, 1370)]
+        [InlineData("real-server-token", 1371)]
+        public async Task DeliverAsync_ForACodeMessage_LogsNeitherTheAddressNorTheCode(string token, int eventId)
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.OK,
+                new { ErrorCode = 0, Message = "OK", MessageID = "msg-1" }));
+            var message = IdentityEmailComposerTests.ComposeCodeMessage("person@example.com", "482913");
+
+            var (logger, _) = await RunOneMessageAsync(handler, serverToken: token, message: message);
+
+            var entry = logger.Entries.Should().ContainSingle().Subject;
+            entry.EventId.Id.Should().Be(eventId);
+            entry.Message.Should().NotContain("person@example.com");
+            entry.Message.Should().NotContain("482913");
+            entry.Message.Should().Contain("Code");
+        }
+
+        [Fact]
+        public async Task DeliverAsync_ForACodeMessage_DropsAPostmarkErrorThatEchoesTheAddress()
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.UnprocessableEntity,
+                new { ErrorCode = 406, Message = "Inactive recipient: person@example.com" }));
+            var message = IdentityEmailComposerTests.ComposeCodeMessage("person@example.com", "482913");
+
+            var (logger, _) = await RunOneMessageAsync(handler, message: message);
+
+            var entry = logger.Entries.Should().ContainSingle().Subject;
+            entry.EventId.Id.Should().Be(1372);
+            entry.Message.Should().NotContain("person@example.com");
+        }
+
         [Fact]
         public async Task DeliverAsync_OnAcceptance_LogsTheAcceptedEvent_WithTheMessageId_NeverTheBody()
         {
@@ -173,7 +207,8 @@ namespace AccountService.Tests.Helpers
         private static async Task<(RecordingLogger<PostmarkDeliveryQueue> Logger, FakeHttpMessageHandler Handler)> RunOneMessageAsync(
             FakeHttpMessageHandler handler,
             string serverToken = "real-server-token",
-            IReadOnlyList<TimeSpan>? retryDelays = null)
+            IReadOnlyList<TimeSpan>? retryDelays = null,
+            OutboundEmail? message = null)
         {
             using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.postmarkapp.com/") };
             var client = new PostmarkClient(httpClient, Options.Create(new PostmarkOptions { ServerToken = serverToken }));
@@ -189,7 +224,7 @@ namespace AccountService.Tests.Helpers
             queue.Delivered += _ => delivered.TrySetResult();
 
             await queue.StartAsync(CancellationToken.None);
-            await queue.SendAsync(Message);
+            await queue.SendAsync(message ?? Message);
             await delivered.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await queue.StopAsync(CancellationToken.None);
 
