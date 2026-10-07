@@ -10,7 +10,7 @@ namespace AccountService.Migrations
 {
     /// <inheritdoc />
     [DbContext(typeof(AccountDbContext))]
-    [Migration("20261009100000_AddEmailChange")]
+    [Migration("20261009110000_AddEmailChange")]
     public partial class AddEmailChange : Migration
     {
         /// <inheritdoc />
