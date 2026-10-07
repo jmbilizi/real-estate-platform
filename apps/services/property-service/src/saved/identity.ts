@@ -43,7 +43,9 @@ export async function authenticate(
     return checked(await introspection.introspect(headers));
   }
   const accountId = await introspection.resolveAccountId(headers);
-  return checked(accountId === null ? { kind: 'signed-out' } : { kind: 'account', accountId });
+  return checked(
+    accountId === null ? { kind: 'signed-out' } : { kind: 'account', accountId, roles: [] },
+  );
 }
 
 /**

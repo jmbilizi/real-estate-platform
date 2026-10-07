@@ -370,10 +370,10 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task IntrospectionResponse_CarriesIdentityAndValidityOnly()
+        public async Task IntrospectionResponse_CarriesIdentityValidityRolesAndEmailOnly()
         {
-            // Pins the whole property set, so the "no PII, no role, no user_type" requirement
-            // (PRD §11.2) fails a test rather than a review if a field is ever added.
+            // Pins the whole property set, so a persona field such as user_type (PRD §11.2) or other
+            // PII fails a test rather than a review if one is ever added. Roles are a list.
             var cookieHeader = await AuthHelper.CreateSessionCookieHeaderAsync(
                 factory,
                 $"introspect-shape-{Guid.NewGuid()}@example.com",
@@ -385,7 +385,8 @@ namespace AccountService.Tests.Integration
             var payload = await ReadPayloadAsync(await client.PostAsync(EndpointPath, content: null));
 
             payload.EnumerateObject().Select(property => property.Name)
-                .Should().BeEquivalentTo("isValid", "credentialType", "accountId", "isRevoked", "isExpired");
+                .Should().BeEquivalentTo(
+                    "isValid", "credentialType", "accountId", "isRevoked", "isExpired", "roles", "email", "emailConfirmed");
         }
 
         [Fact]

@@ -288,6 +288,7 @@ internal static class Program
             Roles.Moderator,
             Roles.Support,
             Roles.Developer,
+            Roles.Agent,
             Roles.User,
         ];
 

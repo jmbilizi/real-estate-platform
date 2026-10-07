@@ -129,3 +129,11 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   and `Tests/Integration/AccountRecoveryEndpointTests.cs` (password reset). Both use
   `AccountRecoveryFactory` (one host per test, records sent messages). The base factory lifts the
   limits and the floor.
+
+## Staff roles (#628)
+
+- `Agent` is a role facet, never a persona. Introspection returns `roles` (array), `email` and
+  `emailConfirmed` only when `isValid` is true. `/internal/*` has no gateway route. The gateway test
+  `InternalRoutesNotExposedTests` guards it.
+- Every grant and removal in `Routes/Admin.cs` writes a `RoleGrantAudits` row. The README says how a
+  human grants the first `SuperAdmin`.

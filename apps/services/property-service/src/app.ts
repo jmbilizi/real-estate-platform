@@ -15,6 +15,7 @@ import type { SyncQueryable } from './jobs/bright-sync/store';
 import { createInquiriesRouter } from './inquiries/routes';
 import { createSavedStateReader } from './saved/identity';
 import { createSavedHomesRouter } from './saved/routes';
+import { createStaffRouter } from './staff/routes';
 import {
   createHttpIntrospectionClient,
   type IntrospectionClient,
@@ -192,6 +193,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   );
   app.use(createSavedHomesRouter({ pool, introspection }));
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
+  app.use(createStaffRouter({ introspection }));
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));
 
   /**
