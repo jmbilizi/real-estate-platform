@@ -23,6 +23,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<WaitlistInterest> WaitlistInterests => Set<WaitlistInterest>();
 
+    public DbSet<RoleGrantAudit> RoleGrantAudits => Set<RoleGrantAudit>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -194,6 +196,18 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
             // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
             // with a DB CHECK constraint — same approach as the onboarding intents above.
+        });
+
+        // Append-only. No FK to AspNetUsers, so the record outlives a deleted grantor or grantee.
+        builder.Entity<RoleGrantAudit>(entity =>
+        {
+            entity.ToTable("RoleGrantAudits");
+            entity.Property(a => a.GrantorUserId).IsRequired();
+            entity.Property(a => a.GranteeUserId).IsRequired();
+            entity.Property(a => a.Role).IsRequired();
+            entity.Property(a => a.Action).IsRequired();
+            entity.Property(a => a.OccurredAt).HasDefaultValueSql("NOW()").ValueGeneratedOnAdd();
+            entity.HasIndex(a => a.GranteeUserId);
         });
     }
 }

@@ -23,6 +23,7 @@ namespace AccountService.Tests.Models
                 Roles.Moderator,
                 Roles.Support,
                 Roles.Developer,
+                Roles.Agent,
                 Roles.User,
             };
 
@@ -39,6 +40,7 @@ namespace AccountService.Tests.Models
                 Roles.Moderator,
                 Roles.Support,
                 Roles.Developer,
+                Roles.Agent,
                 Roles.User,
             };
 
@@ -51,6 +53,7 @@ namespace AccountService.Tests.Models
         [InlineData(Roles.Moderator, "Moderator")]
         [InlineData(Roles.Support, "Support")]
         [InlineData(Roles.Developer, "Developer")]
+        [InlineData(Roles.Agent, "Agent")]
         [InlineData(Roles.User, "User")]
         public void RoleConstant_ShouldMatchExpectedValue(string actual, string expected)
         {

@@ -319,6 +319,40 @@ namespace AccountService.Migrations
                     b.ToTable("Locales", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.RoleGrantAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("GranteeUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("GrantorUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GranteeUserId");
+
+                    b.ToTable("RoleGrantAudits", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.UserApp", b =>
                 {
                     b.Property<string>("UserId")

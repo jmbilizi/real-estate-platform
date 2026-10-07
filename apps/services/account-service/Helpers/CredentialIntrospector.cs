@@ -45,11 +45,13 @@ namespace AccountService.Helpers;
 /// <param name="cookieOptions">Monitor used to read the Identity application cookie's name and ticket format.</param>
 /// <param name="bearerOptions">Monitor used to read the Identity bearer token's protector.</param>
 /// <param name="signInManager">Sign-in manager used for the explicit security-stamp check.</param>
+/// <param name="userManager">User manager used to read the resolved account's roles.</param>
 /// <param name="db">Database context used to validate API keys.</param>
 internal sealed class CredentialIntrospector(
     IOptionsMonitor<CookieAuthenticationOptions> cookieOptions,
     IOptionsMonitor<BearerTokenOptions> bearerOptions,
     SignInManager<ApplicationUser> signInManager,
+    UserManager<ApplicationUser> userManager,
     AccountDbContext db)
 {
     private const string CookieCredentialType = "cookie";
@@ -166,9 +168,8 @@ internal sealed class CredentialIntrospector(
 
         return validation.Status switch
         {
-            ApiKeyValidationStatus.Valid => IntrospectionResult.Valid(
-                ApiKeyCredentialType,
-                validation.ApiKey!.User!.Id),
+            ApiKeyValidationStatus.Valid => await ValidAsync(ApiKeyCredentialType, validation.ApiKey!.User!)
+                .ConfigureAwait(false),
             ApiKeyValidationStatus.Revoked or ApiKeyValidationStatus.OwnerUnavailable =>
                 IntrospectionResult.Invalid(ApiKeyCredentialType, revoked: true),
             ApiKeyValidationStatus.Expired =>
@@ -205,6 +206,12 @@ internal sealed class CredentialIntrospector(
             return IntrospectionResult.Invalid(credentialType, revoked: true);
         }
 
-        return IntrospectionResult.Valid(credentialType, user.Id);
+        return await ValidAsync(credentialType, user).ConfigureAwait(false);
+    }
+
+    private async Task<IntrospectionResult> ValidAsync(string credentialType, ApplicationUser user)
+    {
+        var roles = await userManager.GetRolesAsync(user).ConfigureAwait(false);
+        return IntrospectionResult.Valid(credentialType, user.Id, roles.ToArray(), user.Email, user.EmailConfirmed);
     }
 }

@@ -22,6 +22,9 @@ internal static class Roles
     /// <summary>Handles user account issues and disputes. Read-only access to user data.</summary>
     public const string Support = "Support";
 
+    /// <summary>Handles assigned buyer leads. A facet that combines with every other role.</summary>
+    public const string Agent = "Agent";
+
     /// <summary>Internal engineering access for diagnostics and tooling.</summary>
     public const string Developer = "Developer";
 

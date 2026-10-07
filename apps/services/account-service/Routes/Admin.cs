@@ -3,6 +3,7 @@
 // </copyright>
 
 using System.Security.Claims;
+using AccountService.Data;
 using AccountService.Dtos;
 using AccountService.Models;
 using Microsoft.AspNetCore.Identity;
@@ -20,6 +21,7 @@ internal static class Admin
             Roles.Moderator,
             Roles.Support,
             Roles.Developer,
+            Roles.Agent,
             Roles.User,
         };
 
@@ -53,13 +55,14 @@ internal static class Admin
         }).RequireAuthorization();
 
         // POST /account/{userId}/roles — assign a role (Admin or SuperAdmin only)
-        // SuperAdmin can assign any role; Admin can only assign Moderator, Developer, User.
+        // SuperAdmin can assign any role; Admin can only assign Moderator, Support, Developer, Agent, User.
         app.MapPost("/account/{userId}/roles", async (
             string userId,
             AssignRoleRequest request,
             ClaimsPrincipal principal,
             UserManager<ApplicationUser> userManager,
-            RoleManager<IdentityRole> roleManager) =>
+            RoleManager<IdentityRole> roleManager,
+            AccountDbContext db) =>
         {
             var isSuperAdmin = principal.IsInRole(Roles.SuperAdmin);
             var isAdmin = principal.IsInRole(Roles.Admin);
@@ -96,9 +99,14 @@ internal static class Admin
             }
 
             var result = await userManager.AddToRoleAsync(user, request.Role).ConfigureAwait(false);
-            return result.Succeeded
-                ? Results.NoContent()
-                : Results.ValidationProblem(result.Errors
+            if (result.Succeeded)
+            {
+                await RecordAsync(db, userManager.GetUserId(principal), user.Id, request.Role, RoleGrantAudit.Granted)
+                    .ConfigureAwait(false);
+                return Results.NoContent();
+            }
+
+            return Results.ValidationProblem(result.Errors
                     .GroupBy(e => e.Code)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
         }).RequireAuthorization();
@@ -109,7 +117,8 @@ internal static class Admin
             string userId,
             string role,
             ClaimsPrincipal principal,
-            UserManager<ApplicationUser> userManager) =>
+            UserManager<ApplicationUser> userManager,
+            AccountDbContext db) =>
         {
             var requestingUserId = userManager.GetUserId(principal);
             var isSuperAdmin = principal.IsInRole(Roles.SuperAdmin);
@@ -142,13 +151,32 @@ internal static class Admin
             }
 
             var result = await userManager.RemoveFromRoleAsync(user, role).ConfigureAwait(false);
-            return result.Succeeded
-                ? Results.NoContent()
-                : Results.ValidationProblem(result.Errors
+            if (result.Succeeded)
+            {
+                await RecordAsync(db, requestingUserId, user.Id, role, RoleGrantAudit.Removed)
+                    .ConfigureAwait(false);
+                return Results.NoContent();
+            }
+
+            return Results.ValidationProblem(result.Errors
                     .GroupBy(e => e.Code)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.Description).ToArray()));
         }).RequireAuthorization();
 
         return app;
+    }
+
+    private static async Task RecordAsync(AccountDbContext db, string? grantorId, string granteeId, string role, string action)
+    {
+        db.RoleGrantAudits.Add(new RoleGrantAudit
+        {
+            Id = Guid.NewGuid(),
+            GrantorUserId = grantorId ?? string.Empty,
+            GranteeUserId = granteeId,
+            Role = role,
+            Action = action,
+            OccurredAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync().ConfigureAwait(false);
     }
 }

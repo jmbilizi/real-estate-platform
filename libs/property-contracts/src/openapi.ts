@@ -9,6 +9,7 @@ import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } f
 import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
+import { staffMeSchema } from './staff';
 import {
   MAX_RESULT_OFFSET,
   maxReachablePage,
@@ -82,6 +83,7 @@ function componentSchemas() {
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
+  registry.add(staffMeSchema, { id: 'StaffMe' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
 
   const { schemas } = z.toJSONSchema(registry, {
@@ -627,6 +629,27 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/me': {
+        get: {
+          operationId: 'getStaffMe',
+          summary: 'The roles of the signed-in account',
+          description:
+            'Requires sign-in, and no particular role. Returns the roles of the calling account ' +
+            'as a list and nothing else. A buyer-only account gets `["User"]`. The response is ' +
+            '`private, no-store`.',
+          responses: {
+            '200': {
+              description: 'The roles of the calling account.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffMe' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },

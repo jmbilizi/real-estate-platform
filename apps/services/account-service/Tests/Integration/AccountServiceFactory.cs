@@ -89,7 +89,7 @@ namespace AccountService.Tests.Integration
             string[] roles =
             [
                 Roles.SuperAdmin, Roles.Admin, Roles.Moderator,
-                Roles.Support, Roles.Developer, Roles.User,
+                Roles.Support, Roles.Developer, Roles.Agent, Roles.User,
             ];
             foreach (var role in roles)
             {

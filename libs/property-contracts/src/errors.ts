@@ -11,6 +11,7 @@ export const errorBodySchema = z.object({
       'rate_limited',
       'unauthenticated',
       'unavailable',
+      'forbidden',
     ]),
     message: z.string(),
   }),
@@ -103,6 +104,25 @@ export const UNAVAILABLE_BODY = Object.freeze({
   error: Object.freeze({
     code: 'unavailable',
     message: 'Saved homes are briefly unavailable. Try again.',
+  } as const),
+} as const);
+
+/**
+ * The single 401 body for the role guard (#628). It gives no reason: a missing, expired or revoked
+ * credential all read the same.
+ */
+export const SIGN_IN_REQUIRED_BODY = Object.freeze({
+  error: Object.freeze({
+    code: 'unauthenticated',
+    message: 'Sign in to continue.',
+  } as const),
+} as const);
+
+/** The single 403 body for the role guard (#628): a valid credential with no allowed role. */
+export const FORBIDDEN_BODY = Object.freeze({
+  error: Object.freeze({
+    code: 'forbidden',
+    message: 'This account cannot use this resource.',
   } as const),
 } as const);
 

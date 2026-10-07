@@ -19,6 +19,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "rate_limited",
                   "unauthenticated",
                   "unavailable",
+                  "forbidden",
                 ],
                 "type": "string",
               },
@@ -1752,6 +1753,21 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         "required": [
           "propertyId",
           "saved",
+        ],
+        "type": "object",
+      },
+      "StaffMe": {
+        "additionalProperties": false,
+        "properties": {
+          "roles": {
+            "items": {
+              "type": "string",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "roles",
         ],
         "type": "object",
       },
@@ -3494,6 +3510,55 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Remove a saved home by its home id",
+      },
+    },
+    "/staff/me": {
+      "get": {
+        "description": "Requires sign-in, and no particular role. Returns the roles of the calling account as a list and nothing else. A buyer-only account gets \`["User"]\`. The response is \`private, no-store\`.",
+        "operationId": "getStaffMe",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMe",
+                },
+              },
+            },
+            "description": "The roles of the calling account.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "The roles of the signed-in account",
       },
     },
   },
