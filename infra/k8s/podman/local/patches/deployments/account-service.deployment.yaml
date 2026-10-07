@@ -30,9 +30,6 @@ spec:
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: "Development"
-            # Email confirmation is not enforced yet (#147). #149 turns it on.
-            - name: AccountRecovery__RequireConfirmedEmail
-              value: "false"
-            # Public origin of the web app. Confirmation links point here (#147).
+            # Public origin of the web app. Password-reset links point here.
             - name: AccountRecovery__WebBaseUrl
               value: "http://localhost:3000"

@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using AccountService.Configuration;
+using AccountService.Dtos;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.Extensions.Options;
 
@@ -21,7 +22,7 @@ namespace AccountService.Helpers;
 /// </para>
 /// <para>
 /// The endpoint is identified by the bound request type, not the path. The arguments are searched,
-/// not indexed: <c>GET /confirmEmail</c> has no request DTO.
+/// not indexed: <c>GET /manage/info</c> has no request DTO.
 /// </para>
 /// <para>
 /// A refused call answers <c>429</c> with <c>Retry-After</c> and is not padded. A refusal is
@@ -30,9 +31,11 @@ namespace AccountService.Helpers;
 /// </remarks>
 /// <param name="rateLimiter">The shared counters.</param>
 /// <param name="options">The account-recovery options.</param>
+/// <param name="codeOptions">The email code options. The sign-up send limits follow its resend caps.</param>
 internal sealed class AccountRecoveryThrottleFilter(
     AccountRecoveryRateLimiter rateLimiter,
-    IOptions<AccountRecoveryOptions> options) : IEndpointFilter
+    IOptions<AccountRecoveryOptions> options,
+    IOptions<EmailCodeOptions> codeOptions) : IEndpointFilter
 {
     /// <inheritdoc/>
     public async ValueTask<object?> InvokeAsync(
@@ -50,20 +53,62 @@ internal sealed class AccountRecoveryThrottleFilter(
 
         switch (FindRequest(context))
         {
-            case ForgotPasswordRequest forgot:
-                allowed = rateLimiter.TryRequest(Normalise(forgot.Email), clientAddress, out retryAfter);
+            case IdentifyRequest identify:
+                allowed = rateLimiter.TryIdentify(
+                    SignUpEmail.TryNormalize(identify.Email, out var identifyKey, out _) ? identifyKey : null,
+                    clientAddress,
+                    out retryAfter);
                 break;
 
-            case ResetPasswordRequest:
-                allowed = rateLimiter.TryRedemption(clientAddress, out retryAfter);
+            case SignUpStartRequest start:
+                allowed = this.TrySignUpSend(start.Email, clientAddress, out retryAfter);
                 break;
 
-            case ResendConfirmationEmailRequest resend:
-                allowed = rateLimiter.TryResend(Normalise(resend.Email), clientAddress, out retryAfter);
+            case SignUpResendRequest signUpResend:
+                allowed = this.TrySignUpSend(signUpResend.Email, clientAddress, out retryAfter);
                 break;
 
-            case RegisterRequest:
-                allowed = rateLimiter.TryRegistration(clientAddress, out retryAfter);
+            case SignUpVerifyRequest or SignUpCompleteRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter);
+                break;
+
+            case PasswordResetStartRequest resetStart:
+                allowed = this.TrySignUpSend(resetStart.Email, clientAddress, out retryAfter, AccountRecoveryRateLimiter.PasswordResetScope);
+                break;
+
+            case PasswordResetVerifyRequest or PasswordResetCompleteRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.PasswordResetScope);
+                break;
+
+            case EmailChangeStartRequest changeStart:
+                allowed = this.TrySignUpSend(changeStart.NewEmail, clientAddress, out retryAfter, AccountRecoveryRateLimiter.EmailChangeScope);
+                break;
+
+            case EmailChangeVerifyRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.EmailChangeScope);
+                break;
+
+            case SecureAccountRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.SecureAccountScope);
+                break;
+
+            case SignUpChangeEmailRequest change:
+                if (!SignUpEmail.TryNormalize(change.OldEmail, out var oldKey, out _)
+                    || !SignUpEmail.TryNormalize(change.NewEmail, out var newKey, out _))
+                {
+                    allowed = rateLimiter.TrySignUpInvalid(clientAddress, out retryAfter);
+                    break;
+                }
+
+                var codes = codeOptions.Value;
+                allowed = rateLimiter.TrySignUpChange(
+                    oldKey,
+                    newKey,
+                    clientAddress,
+                    codes.ResendCooldown,
+                    codes.MaxPerHour,
+                    codes.MaxPerDay,
+                    out retryAfter);
                 break;
 
             case LoginRequest:
@@ -74,7 +119,7 @@ internal sealed class AccountRecoveryThrottleFilter(
                 return await PaddedAsync(context, next, startedAt).ConfigureAwait(false);
 
             default:
-                // Refresh, confirmEmail and manage/* pass through.
+                // Refresh and manage/* pass through.
                 return await next(context).ConfigureAwait(false);
         }
 
@@ -112,10 +157,18 @@ internal sealed class AccountRecoveryThrottleFilter(
     {
         for (var i = 0; i < context.Arguments.Count; i++)
         {
-            if (context.Arguments[i] is ForgotPasswordRequest
-                or ResetPasswordRequest
-                or ResendConfirmationEmailRequest
-                or RegisterRequest
+            if (context.Arguments[i] is IdentifyRequest
+                or SignUpStartRequest
+                or SignUpResendRequest
+                or SignUpVerifyRequest
+                or SignUpCompleteRequest
+                or SignUpChangeEmailRequest
+                or PasswordResetStartRequest
+                or PasswordResetVerifyRequest
+                or PasswordResetCompleteRequest
+                or EmailChangeStartRequest
+                or EmailChangeVerifyRequest
+                or SecureAccountRequest
                 or LoginRequest)
             {
                 return context.Arguments[i];
@@ -124,8 +177,6 @@ internal sealed class AccountRecoveryThrottleFilter(
 
         return null;
     }
-
-    private static string Normalise(string? email) => email?.Trim() ?? string.Empty;
 
     private static IResult TooManyRequests(HttpContext context, TimeSpan retryAfter)
     {
@@ -149,6 +200,22 @@ internal sealed class AccountRecoveryThrottleFilter(
             // replace a uniform 200 with an exception out of the filter.
             await Task.Delay(remaining, CancellationToken.None).ConfigureAwait(false);
         }
+    }
+
+    private bool TrySignUpSend(
+        string? email,
+        string? clientAddress,
+        out TimeSpan retryAfter,
+        string scope = AccountRecoveryRateLimiter.SignUpScope)
+    {
+        // An address that fails the syntax check gets a 400. It counts against the caller only.
+        if (!SignUpEmail.TryNormalize(email, out var key, out _))
+        {
+            return rateLimiter.TrySignUpInvalid(clientAddress, out retryAfter, scope);
+        }
+
+        var codes = codeOptions.Value;
+        return rateLimiter.TrySignUpSend(key, clientAddress, codes.ResendCooldown, codes.MaxPerHour, codes.MaxPerDay, out retryAfter, scope);
     }
 
     private async ValueTask<object?> PaddedAsync(

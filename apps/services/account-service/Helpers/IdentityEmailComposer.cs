@@ -2,80 +2,23 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-using System.Net;
 using AccountService.Configuration;
 using Microsoft.Extensions.Options;
 
 namespace AccountService.Helpers;
 
 /// <summary>
-/// Composes every transactional message this service sends: the three Identity asks
-/// <c>IEmailSender&lt;TUser&gt;</c> to send, plus the already-registered notice #147's
-/// non-enumeration guarantee sends by mail instead of by API response.
+/// Composes every transactional message this service sends: the one-time code, the
+/// already-registered notice, and the security notices.
 /// </summary>
 /// <remarks>
-/// Every sender, including the Postmark transport (#138), composes through this class. It is the
-/// one place the sender identity and the links are applied. Every body ends with the configured
-/// brokerage disclosure (PRD §6 brand prominence) and states the real configured token lifetime,
-/// so the expiry statement can never drift from what is actually enforced.
+/// Every sender composes through this class. It is the one place the sender identity and the links
+/// are applied. Every body ends with the configured brokerage disclosure (PRD §6 brand prominence).
 /// </remarks>
 /// <param name="email">The sender identity.</param>
-/// <param name="recovery">The account-recovery policy, for the token lifetimes.</param>
-/// <param name="confirmationLinks">The confirmation link builder.</param>
-/// <param name="resetLinks">The password-reset link builder.</param>
-internal sealed class IdentityEmailComposer(
-    IOptions<TransactionalEmailOptions> email,
-    IOptions<AccountRecoveryOptions> recovery,
-    ConfirmationLinkBuilder confirmationLinks,
-    PasswordResetLinkBuilder resetLinks)
+internal sealed class IdentityEmailComposer(IOptions<TransactionalEmailOptions> email)
 {
-    private const string ConfirmSubject = "Confirm your email address for Cribstop";
-    private const string ResetSubject = "Reset your Cribstop password";
     private const string AlreadyRegisteredSubject = "Someone tried to create a Cribstop account with your email address";
-    private const string IgnoreIfNotYou = "If you did not create a Cribstop account, ignore this message.";
-    private const string IgnoreIfNotReset = "If you did not ask to reset your password, ignore this message.";
-
-    /// <summary>Composes the email-confirmation message.</summary>
-    /// <param name="to">The recipient.</param>
-    /// <param name="identityLink">The link Identity generated. It is rebuilt onto the web origin.</param>
-    /// <returns>The message.</returns>
-    internal OutboundEmail ConfirmationLink(string to, string identityLink)
-    {
-        var link = confirmationLinks.Rebuild(identityLink);
-        var expiry = FormatLifetime(recovery.Value.ConfirmationTokenLifetime);
-        var body =
-            $"Open this link to confirm your email address for your Cribstop account:\n\n{link}\n\n" +
-            $"This link expires in {expiry}.\n\n{IgnoreIfNotYou}";
-        return this.Compose(EmailKind.Confirmation, to, ConfirmSubject, body);
-    }
-
-    /// <summary>Composes the password-reset message from the code Identity issued.</summary>
-    /// <remarks>
-    /// <c>MapIdentityApi</c>'s <c>/forgotPassword</c> endpoint calls only this member, never
-    /// <see cref="PasswordResetLink"/> — it always issues a bare code, never a URL. The consumer
-    /// still receives a link: this builds one from the configured web origin so #137's page can read
-    /// the email and the code Identity's <c>/resetPassword</c> requires.
-    /// </remarks>
-    /// <param name="to">The recipient.</param>
-    /// <param name="resetCode">The reset code. Identity HTML-encodes it.</param>
-    /// <returns>The message.</returns>
-    internal OutboundEmail PasswordResetCode(string to, string resetCode)
-    {
-        var code = WebUtility.HtmlDecode(resetCode);
-        var link = resetLinks.Build(to, code);
-        return this.PasswordResetMessage(to, link);
-    }
-
-    /// <summary>Composes the password-reset message from a link Identity generated.</summary>
-    /// <remarks>
-    /// Unreachable through <c>MapIdentityApi</c> as shipped (see <see cref="PasswordResetCode"/>).
-    /// Implemented so the transport satisfies <c>IEmailSender&lt;TUser&gt;</c> in full (#138).
-    /// </remarks>
-    /// <param name="to">The recipient.</param>
-    /// <param name="resetLink">The reset link. Identity HTML-encodes it.</param>
-    /// <returns>The message.</returns>
-    internal OutboundEmail PasswordResetLink(string to, string resetLink) =>
-        this.PasswordResetMessage(to, new Uri(WebUtility.HtmlDecode(resetLink)));
 
     /// <summary>
     /// Composes the notice sent when a registration is attempted for an address that already has a
@@ -94,6 +37,59 @@ internal sealed class IdentityEmailComposer(
             "If you did not try to create an account, ignore this message.";
         return this.Compose(EmailKind.AlreadyRegistered, to, AlreadyRegisteredSubject, body);
     }
+
+    /// <summary>Composes the one-time code message. The code is the only sensitive content.</summary>
+    /// <param name="to">The recipient.</param>
+    /// <param name="code">The code, digits only, so a mail client can offer to autofill it.</param>
+    /// <param name="lifetime">How long the code works.</param>
+    /// <returns>The message.</returns>
+    internal OutboundEmail Code(string to, string code, TimeSpan lifetime)
+    {
+        var body =
+            $"Your Cribstop code:\n\n{code}\n\n" +
+            $"It expires in {FormatLifetime(lifetime)}.\n\n" +
+            "Not you? Ignore this message.";
+        return this.Compose(EmailKind.Code, to, $"{code} is your Cribstop code", body);
+    }
+
+    /// <summary>Composes the notice sent to the old address after an email change.</summary>
+    /// <param name="to">The old address.</param>
+    /// <param name="maskedNewEmail">The new address with the middle masked.</param>
+    /// <param name="when">When the change happened, in UTC.</param>
+    /// <param name="secureLink">The "This wasn't me" link.</param>
+    /// <param name="linkLifetime">How long the link works.</param>
+    /// <returns>The message.</returns>
+    internal OutboundEmail EmailChangedNotice(string to, string maskedNewEmail, DateTime when, Uri secureLink, TimeSpan linkLifetime)
+    {
+        var body =
+            $"The email address on your Cribstop account changed to {maskedNewEmail}.\n\n" +
+            $"When: {FormatTime(when)}.\n\n" +
+            "If you made this change, you do not need to do anything.\n\n" +
+            this.NotMeSection(secureLink, linkLifetime);
+        return this.Compose(EmailKind.EmailChangedNotice, to, "Your Cribstop email address changed", body);
+    }
+
+    /// <summary>Composes the notice sent after a password change or reset.</summary>
+    /// <param name="to">The account address.</param>
+    /// <param name="reset"><see langword="true"/> for a reset, <see langword="false"/> for a change.</param>
+    /// <param name="when">When the change happened, in UTC.</param>
+    /// <param name="secureLink">The "This wasn't me" link.</param>
+    /// <param name="linkLifetime">How long the link works.</param>
+    /// <returns>The message.</returns>
+    internal OutboundEmail PasswordChangedNotice(string to, bool reset, DateTime when, Uri secureLink, TimeSpan linkLifetime)
+    {
+        var what = reset ? "was reset" : "changed";
+        var body =
+            $"The password on your Cribstop account {what}.\n\n" +
+            $"When: {FormatTime(when)}.\n\n" +
+            "If you made this change, you do not need to do anything.\n\n" +
+            this.NotMeSection(secureLink, linkLifetime);
+        return this.Compose(EmailKind.PasswordChangedNotice, to, $"Your Cribstop password {what}", body);
+    }
+
+    /// <summary>Formats a time for the notices, e.g. "October 7, 2026 at 14:05 UTC".</summary>
+    private static string FormatTime(DateTime when) =>
+        when.ToUniversalTime().ToString("MMMM d, yyyy 'at' HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Formats a token lifetime for the reader, e.g. "24 hours" or "1 hour".</summary>
     private static string FormatLifetime(TimeSpan lifetime)
@@ -114,14 +110,10 @@ internal sealed class IdentityEmailComposer(
         return minutes == 1 ? "1 minute" : $"{minutes} minutes";
     }
 
-    private OutboundEmail PasswordResetMessage(string to, Uri link)
-    {
-        var expiry = FormatLifetime(recovery.Value.TokenLifetime);
-        var body =
-            $"Open this link to reset your Cribstop password:\n\n{link}\n\n" +
-            $"This link expires in {expiry}.\n\n{IgnoreIfNotReset}";
-        return this.Compose(EmailKind.PasswordReset, to, ResetSubject, body);
-    }
+    private string NotMeSection(Uri secureLink, TimeSpan linkLifetime) =>
+        $"If this was not you, open this link to secure your account:\n\n{secureLink}\n\n" +
+        $"The link works once and expires in {FormatLifetime(linkLifetime)}. " +
+        $"If the link does not work, reply to this message at {email.Value.ReplyToAddress}.";
 
     private OutboundEmail Compose(EmailKind kind, string to, string subject, string body)
     {

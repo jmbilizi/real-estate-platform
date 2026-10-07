@@ -29,7 +29,7 @@ namespace AccountService.Tests.Integration
         ExpiredBearerTokenFactory expiredBearerFactory)
         : IClassFixture<AccountServiceFactory>, IClassFixture<ExpiredBearerTokenFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
         private const string EndpointPath = "/internal/account/introspect";
         private const string IdentityCookieName = ".AspNetCore.Identity.Application";
 

@@ -20,12 +20,8 @@ namespace AccountService;
 
 internal static class Program
 {
-    /// <summary>The event id of the startup warning while the confirmation requirement is off.</summary>
-    internal static readonly EventId ConfirmationNotEnforcedEvent = new(1364, "EmailConfirmationNotEnforced");
-
-    private const string ConfirmationNotEnforcedMessage =
-        "Email confirmation is not enforced (AccountRecovery:RequireConfirmedEmail = false). " +
-        "Accounts can sign in with an unverified address. #149 turns enforcement on.";
+    /// <summary>The event id of the startup warning while the email code engine has no key.</summary>
+    internal static readonly EventId EmailCodesNotConfiguredEvent = new(1384, "EmailCodesNotConfigured");
 
     public static async Task Main(string[] args)
     {
@@ -77,8 +73,35 @@ internal static class Program
                 {
                     options.ServerToken = token;
                 }
+
+                // Flat env vars too. The webhook stays closed until both are set (#664).
+                var webhookUser = builder.Configuration["POSTMARK_WEBHOOK_USER"];
+                if (!string.IsNullOrWhiteSpace(webhookUser))
+                {
+                    options.WebhookUser = webhookUser;
+                }
+
+                var webhookPassword = builder.Configuration["POSTMARK_WEBHOOK_PASSWORD"];
+                if (!string.IsNullOrWhiteSpace(webhookPassword))
+                {
+                    options.WebhookPassword = webhookPassword;
+                }
             })
             .Validate(options => options.Validate() is null, "Postmark configuration is invalid. See PostmarkOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services
+            .AddOptions<EmailCodeOptions>()
+            .Bind(builder.Configuration.GetSection(EmailCodeOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                // Overwrites whatever the section bound: the key comes only from the environment.
+                // Any other environment with no key leaves the engine unconfigured, and it refuses every call.
+                var key = builder.Configuration[EmailCodeOptions.KeyVariable];
+                options.HmacKey = !string.IsNullOrWhiteSpace(key) ? key
+                    : builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") ? EmailCodeOptions.DevelopmentKey
+                    : string.Empty;
+            })
+            .Validate(options => options.Validate() is null, "EmailCodes configuration is invalid. See EmailCodeOptions.Validate.")
             .ValidateOnStart();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
@@ -99,60 +122,71 @@ internal static class Program
         });
 
         builder.Services
-            .AddIdentityApiEndpoints<ApplicationUser>(options =>
-            {
-                options.Tokens.EmailConfirmationTokenProvider = EmailConfirmationTokenProvider.ProviderName;
-                options.Tokens.PasswordResetTokenProvider = PasswordResetTokenProvider.ProviderName;
-            })
+            .AddIdentityApiEndpoints<ApplicationUser>()
             .AddRoles<IdentityRole>()
             .AddUserManager<AppUserManager>()
             .AddSignInManager<AppSignInManager>()
-            .AddEntityFrameworkStores<AccountDbContext>()
-            .AddTokenProvider<EmailConfirmationTokenProvider>(EmailConfirmationTokenProvider.ProviderName)
-            .AddTokenProvider<PasswordResetTokenProvider>(PasswordResetTokenProvider.ProviderName);
+            .AddEntityFrameworkStores<AccountDbContext>();
 
-        // Own provider, own lifetime: Identity's built-in providers share one
-        // DataProtectionTokenProviderOptions, so a lifetime set there would move every token.
+        // Password policy: length and the breached-password check, no composition rules (#654).
+        // Identity's stock PasswordValidator is removed. PasswordPolicyValidator is the only
+        // validator, so register, change, reset and sign-up all follow it. The Identity switches
+        // are cleared too, as a second line should a stock validator return.
         builder.Services
-            .AddOptions<EmailConfirmationTokenProviderOptions>()
-            .Configure<IOptions<AccountRecoveryOptions>>((tokenOptions, recovery) =>
-            {
-                tokenOptions.Name = EmailConfirmationTokenProvider.ProviderName;
-                tokenOptions.TokenLifespan = recovery.Value.ConfirmationTokenLifetime;
-            });
-
-        // Password reset runs on its own token provider so its lifetime — and its data-protection
-        // purpose — are independent of every other Identity token. That independence now matters
-        // rather than being theoretical: Identity's built-in providers all resolve the single
-        // DataProtectionTokenProviderOptions instance, so a reset lifetime configured through it
-        // would also shorten the *email confirmation* token. Bound from options rather than read
-        // from configuration here, so a test (or a later environment override) that replaces
-        // AccountRecoveryOptions is the value the provider actually enforces.
-        builder.Services
-            .AddOptions<PasswordResetTokenProviderOptions>()
-            .Configure<IOptions<AccountRecoveryOptions>>((tokenOptions, recovery) =>
-            {
-                tokenOptions.Name = PasswordResetTokenProvider.ProviderName;
-                tokenOptions.TokenLifespan = recovery.Value.TokenLifetime;
-            });
-
-        // The enforcement switch. Registered after AddIdentityApiEndpoints so this Configure runs
-        // last. Bound through options, not read inline, so a test override changes the behaviour.
-        //
-        // The default is false and that is deliberate, not an omission: Identity's /register issues
-        // its confirmation link through IEmailSender<ApplicationUser>, and until #133 provisions a
-        // transactional provider nothing can deliver it — so requiring confirmation today would mean
-        // no one can create a usable account. See AccountRecoveryOptions for the two things this
-        // flag does not do. Flipping it is #149's job.
+            .AddOptions<PasswordPolicyOptions>()
+            .Bind(builder.Configuration.GetSection(PasswordPolicyOptions.SectionName))
+            .Validate(options => options.Validate() is null, "PasswordPolicy configuration is invalid. See PasswordPolicyOptions.Validate.")
+            .ValidateOnStart();
         builder.Services
             .AddOptions<IdentityOptions>()
-            .Configure<IOptions<AccountRecoveryOptions>>((identity, recovery) =>
-                identity.SignIn.RequireConfirmedAccount = recovery.Value.RequireConfirmedEmail);
+            .Configure<IOptions<PasswordPolicyOptions>>((identity, policy) =>
+            {
+                identity.Password.RequireDigit = false;
+                identity.Password.RequireLowercase = false;
+                identity.Password.RequireUppercase = false;
+                identity.Password.RequireNonAlphanumeric = false;
+                identity.Password.RequiredLength = policy.Value.MinLength;
+                identity.Password.RequiredUniqueChars = 1;
+            });
+        builder.Services.RemoveAll<IPasswordValidator<ApplicationUser>>();
+        builder.Services.AddScoped<IPasswordValidator<ApplicationUser>, PasswordPolicyValidator>();
+
+        // RemoveAllLoggers: the framework's handler logs the request URI, which holds the SHA-1 prefix.
+        builder.Services
+            .AddHttpClient<IPwnedPasswordsClient, PwnedPasswordsClient>(
+                (sp, http) =>
+                {
+                    var policy = sp.GetRequiredService<IOptions<PasswordPolicyOptions>>().Value;
+                    http.BaseAddress = policy.BreachCheckBaseUrl;
+                    http.Timeout = policy.BreachCheckTimeout + TimeSpan.FromSeconds(1);
+                })
+            .RemoveAllLoggers();
+        builder.Services.AddScoped<SignUpCompletion>();
 
         builder.Services.AddSingleton<AccountRecoveryRateLimiter>();
-        builder.Services.AddSingleton<ConfirmationLinkBuilder>();
-        builder.Services.AddSingleton<PasswordResetLinkBuilder>();
         builder.Services.AddSingleton<IdentityEmailComposer>();
+        builder.Services.AddScoped<EmailCodeService>();
+        builder.Services.AddHostedService<EmailCodePurgeService>();
+        builder.Services
+            .AddOptions<SignUpOptions>()
+            .Bind(builder.Configuration.GetSection(SignUpOptions.SectionName))
+            .Validate(options => options.Validate() is null, "SignUp configuration is invalid. See SignUpOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services
+            .AddOptions<EmailDeliverabilityOptions>()
+            .Bind(builder.Configuration.GetSection(EmailDeliverabilityOptions.SectionName))
+            .Validate(options => options.Validate() is null, "EmailDeliverability configuration is invalid. See EmailDeliverabilityOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IMailDomainResolver, DnsMailDomainResolver>();
+        builder.Services.AddScoped<EmailSuppressionService>();
+        builder.Services.AddScoped<SignUpService>();
+        builder.Services.AddScoped<IdentifyService>();
+        builder.Services.AddScoped<PasswordResetService>();
+        builder.Services.AddScoped<EmailChangeService>();
+        builder.Services.AddScoped<SecureAccountService>();
+        builder.Services.AddScoped<SecurityNoticeService>();
+        builder.Services.AddScoped<PasswordChangeService>();
+        builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam
         // (IOutboundEmailSender) and as the hosted service that drains it. Enqueuing never blocks
@@ -169,7 +203,8 @@ internal static class Program
                 sp.GetRequiredService<PostmarkClient>,
                 sp.GetRequiredService<IOptions<PostmarkOptions>>(),
                 sp.GetRequiredService<ILogger<PostmarkDeliveryQueue>>(),
-                sp.GetRequiredService<TimeProvider>()));
+                sp.GetRequiredService<TimeProvider>(),
+                onRecipientInactive: (address, ct) => RecordInactiveRecipientAsync(sp, address, ct)));
         builder.Services.AddSingleton<IOutboundEmailSender>(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
         builder.Services.AddHostedService(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
 
@@ -203,7 +238,12 @@ internal static class Program
 
         var app = builder.Build();
 
-        WarnIfConfirmationIsNotEnforced(app);
+        if (!app.Services.GetRequiredService<IOptions<EmailCodeOptions>>().Value.IsConfigured)
+        {
+#pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
+            app.Logger.LogWarning(EmailCodesNotConfiguredEvent, "Email codes are not configured: no usable EMAIL_CODE_HMAC_KEY. Every call is refused.");
+#pragma warning restore CA1848
+        }
 
         // Seed platform roles after the app starts listening so the readiness probe
         // is not blocked by a slow DB connection on startup.
@@ -229,22 +269,28 @@ internal static class Program
         // Readiness probe — same response; kept separate so K8s can distinguish liveness from readiness
         app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
 
-        // Identity: built-in ASP.NET Identity endpoints — register, login, refresh, confirmEmail,
-        // resendConfirmationEmail, forgotPassword, resetPassword, manage/*. These are the whole
-        // account-recovery surface; this service adds no endpoints of its own to it. Behaviour is
-        // added as filters over the group.
-        //
-        // Nothing here may remove or rename an Identity endpoint. /confirmEmail in particular is
-        // load-bearing well beyond itself: MapIdentityApi captures its endpoint name
-        // ("MapIdentityApi-/account/confirmEmail", attached as EndpointNameMetadata) and both
-        // /register and /resendConfirmationEmail build their confirmation link from it with
-        // LinkGenerator.GetUriByName. Take it out of the endpoint data source and /register throws
-        // NotSupportedException *after* CreateAsync has already committed the row — a 500 against an
-        // account that exists and will never receive a link. IdentityEndpointsArePresent pins it.
-        var identityGroup = app.MapGroup("/account");
-        identityGroup.MapIdentityApi<ApplicationUser>();
-        identityGroup.AddEndpointFilter<AccountRecoveryThrottleFilter>();
-        identityGroup.AddEndpointFilter<IdentityResponseShapingFilter>();
+        // Identity: login, refresh, manage/*. The link flows (register, confirm, resend, forgot, reset) are
+        // retired: only a verified code creates an account or resets a password. See Routes/IdentityEndpoints.cs.
+        app.MapRetainedIdentityApi();
+
+        // Sign-up before an account exists: POST /account/signup/{start,verify,resend,change-email}.
+        // Creates no ApplicationUser. See Routes/SignUp.cs.
+        app.MapSignUpRoutes();
+
+        // POST /account/signup/complete: creates the account and signs it in. See Routes/SignUpComplete.cs.
+        app.MapSignUpCompleteRoutes();
+
+        // Password reset by code: POST /account/password/reset/{start,verify,complete}. See Routes/PasswordReset.cs.
+        app.MapPasswordResetRoutes();
+
+        // Email change: POST /account/email/change/{start,verify}. See Routes/EmailChange.cs.
+        app.MapEmailChangeRoutes();
+
+        // "This wasn't me" link: POST /account/secure. See Routes/SecureAccount.cs.
+        app.MapSecureAccountRoutes();
+
+        // Email-first routing: POST /account/identify. See Routes/Identify.cs.
+        app.MapIdentifyRoutes();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();
@@ -261,19 +307,24 @@ internal static class Program
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
 
+        // Postmark bounce, spam complaint and subscription-change webhook (#664).
+        app.MapPostmarkWebhookRoutes();
+
         await app.RunAsync().ConfigureAwait(false);
     }
 
-    private static void WarnIfConfirmationIsNotEnforced(WebApplication app)
+    // The delivery queue is a singleton, so the suppression write opens its own scope.
+    private static async Task RecordInactiveRecipientAsync(IServiceProvider services, string address, CancellationToken cancellationToken)
     {
-        if (app.Services.GetRequiredService<IOptions<AccountRecoveryOptions>>().Value.RequireConfirmedEmail)
+        if (!SignUpEmail.TryNormalize(address, out var key, out _))
         {
             return;
         }
 
-#pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
-        app.Logger.LogWarning(ConfirmationNotEnforcedEvent, ConfirmationNotEnforcedMessage);
-#pragma warning restore CA1848
+        using var scope = services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<EmailSuppressionService>()
+            .SuppressAsync(key, EmailSuppression.InactiveRecipient, EmailSuppression.SendSource, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task SeedRolesAsync(IServiceProvider services)

@@ -20,7 +20,7 @@ namespace AccountService.Tests.Integration
     public class AccountRevocationTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task DeleteProfile_RevokesActiveSession_SubsequentRequestReturnsUnauthorized()
@@ -33,7 +33,7 @@ namespace AccountService.Tests.Integration
                 AllowAutoRedirect = false,
             });
 
-            await client.PostAsJsonAsync("/account/register", new { email, password = Password });
+            await AuthHelper.SeedUserAsync(factory, email, Password);
             var loginResponse = await client.PostAsJsonAsync(
                 "/account/login?useCookies=true",
                 new { email, password = Password });

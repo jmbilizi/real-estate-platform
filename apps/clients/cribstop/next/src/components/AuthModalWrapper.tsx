@@ -5,12 +5,16 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AuthForm from './AuthForm';
 import Modal from './Modal';
 
-type Mode = 'login' | 'signup';
-
-export default function AuthModalWrapper({ initialMode }: { initialMode: Mode }) {
+export default function AuthModalWrapper() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  // `?modal=login&mode=forgot` opens the sign-in modal on the reset screen (#662).
+  const initialMode =
+    searchParams.get('modal') === 'login' && searchParams.get('mode') === 'forgot'
+      ? 'forgot'
+      : 'login';
 
   // Modal's open state — set to false to play exit animation, then route away
   const [open, setOpen] = useState(true);
@@ -29,19 +33,15 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
   const handleClose = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('modal');
+    params.delete('mode');
     navigate(buildUrl(params));
   };
 
   const handleSuccess = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('modal');
+    params.delete('mode');
     navigate(buildUrl(params));
-  };
-
-  const handleSwitchMode = (mode: 'login' | 'signup') => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('modal', mode);
-    router.replace(buildUrl(params), { scroll: false });
   };
 
   return (
@@ -55,12 +55,7 @@ export default function AuthModalWrapper({ initialMode }: { initialMode: Mode })
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">
-        <AuthForm
-          variant="modal"
-          initialMode={initialMode}
-          onSuccess={handleSuccess}
-          onSwitchMode={handleSwitchMode}
-        />
+        <AuthForm variant="modal" initialMode={initialMode} onSuccess={handleSuccess} />
       </div>
     </Modal>
   );

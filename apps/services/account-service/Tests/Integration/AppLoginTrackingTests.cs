@@ -23,7 +23,7 @@ namespace AccountService.Tests.Integration
     public class AppLoginTrackingTests(AccountServiceFactory factory)
         : IClassFixture<AccountServiceFactory>
     {
-        private const string Password = "Test1234!@#";
+        private const string Password = "Test1234!@#Abcd";
 
         [Fact]
         public async Task Login_WithAllowedAppIdHeader_CreatesUserAppRecord()
@@ -143,15 +143,6 @@ namespace AccountService.Tests.Integration
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────
-        private async Task RegisterAsync(string email)
-        {
-            var client = factory.CreateClient();
-            var response = await client.PostAsJsonAsync("/account/register", new
-            {
-                email,
-                password = Password,
-            });
-            response.EnsureSuccessStatusCode();
-        }
+        private Task RegisterAsync(string email) => AuthHelper.SeedUserAsync(factory, email, Password);
     }
 }

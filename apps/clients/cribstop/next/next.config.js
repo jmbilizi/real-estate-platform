@@ -22,6 +22,11 @@ const nextConfig = {
   async headers() {
     const frameSrc = ["'self'", ...frameHosts.map((h) => `https://${h}`)].join(' ');
     return [
+      // The token in the URL must not leave in a Referer header (#662).
+      {
+        source: '/secure-account',
+        headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
+      },
       {
         source: '/:path*',
         headers: [{ key: 'Content-Security-Policy', value: `frame-src ${frameSrc}` }],

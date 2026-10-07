@@ -16,13 +16,13 @@ namespace AccountService.Tests.Helpers
     public class PostmarkClientTests
     {
         private static readonly OutboundEmail Message = new(
-            EmailKind.PasswordReset,
+            EmailKind.Code,
             "Cribstop (Real Broker, LLC)",
             "no-reply@cribstop.com",
             "contact@cribstop.com",
             "person@example.com",
-            "Reset your Cribstop password",
-            "Open this link: https://cribstop.example/reset-password?email=person%40example.com&code=SECRET-CODE\n\nCribstop is brokered by Real Broker, LLC.");
+            "SECRET-CODE is your Cribstop code",
+            "Your Cribstop code:\n\nSECRET-CODE\n\nCribstop is brokered by Real Broker, LLC.");
 
         [Fact]
         public async Task SendAsync_OnAccept_ReturnsSuccess_AndThePostmarkMessageId()
