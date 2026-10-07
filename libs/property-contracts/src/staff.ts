@@ -73,6 +73,8 @@ export const staffLeadListingSchema = z.object({
   id: idSchema,
   title: z.string(),
   address: z.string(),
+  /** Two-letter upper-case state of the listing. Null when the property has none. */
+  state: z.string().nullable(),
   listPrice: z.number().nullable(),
   status: z.string().nullable(),
 });

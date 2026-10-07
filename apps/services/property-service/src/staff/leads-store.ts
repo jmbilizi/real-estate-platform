@@ -177,6 +177,7 @@ interface DetailRow {
   listing_id: string;
   listing_title: string;
   listing_address: string;
+  listing_state: string | null;
   listing_price: string | number | null;
   listing_status: string | null;
   possible_duplicate: boolean;
@@ -199,6 +200,7 @@ export async function readLeadDetail(
             i.verified_account, i.consent_to_contact, i.consent_text_version,
             i.consent_disclosure_text, i.consent_channels, i.consent_given_at, i.listing_id,
             l.title AS listing_title, p.address_raw AS listing_address,
+            upper(btrim(p.state)) AS listing_state,
             l.list_price AS listing_price, l.consumer_status AS listing_status,
             EXISTS (SELECT 1 FROM listing_inquiries o WHERE ${duplicateCondition('i')})
               AS possible_duplicate
@@ -286,6 +288,7 @@ export async function readLeadDetail(
       id: row.listing_id,
       title: row.listing_title,
       address: row.listing_address,
+      state: row.listing_state,
       listPrice: row.listing_price === null ? null : Number(row.listing_price),
       status: row.listing_status,
     },
