@@ -73,6 +73,19 @@ internal static class Program
                 {
                     options.ServerToken = token;
                 }
+
+                // Flat env vars too. The webhook stays closed until both are set (#664).
+                var webhookUser = builder.Configuration["POSTMARK_WEBHOOK_USER"];
+                if (!string.IsNullOrWhiteSpace(webhookUser))
+                {
+                    options.WebhookUser = webhookUser;
+                }
+
+                var webhookPassword = builder.Configuration["POSTMARK_WEBHOOK_PASSWORD"];
+                if (!string.IsNullOrWhiteSpace(webhookPassword))
+                {
+                    options.WebhookPassword = webhookPassword;
+                }
             })
             .Validate(options => options.Validate() is null, "Postmark configuration is invalid. See PostmarkOptions.Validate.")
             .ValidateOnStart();
@@ -175,9 +188,17 @@ internal static class Program
             .Bind(builder.Configuration.GetSection(SignUpOptions.SectionName))
             .Validate(options => options.Validate() is null, "SignUp configuration is invalid. See SignUpOptions.Validate.")
             .ValidateOnStart();
+        builder.Services
+            .AddOptions<EmailDeliverabilityOptions>()
+            .Bind(builder.Configuration.GetSection(EmailDeliverabilityOptions.SectionName))
+            .Validate(options => options.Validate() is null, "EmailDeliverability configuration is invalid. See EmailDeliverabilityOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services.AddSingleton<IMailDomainResolver, DnsMailDomainResolver>();
+        builder.Services.AddScoped<EmailSuppressionService>();
         builder.Services.AddScoped<SignUpService>();
         builder.Services.AddScoped<IdentifyService>();
         builder.Services.AddScoped<PasswordResetService>();
+        builder.Services.AddScoped<EmailChangeService>();
         builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam
@@ -195,7 +216,8 @@ internal static class Program
                 sp.GetRequiredService<PostmarkClient>,
                 sp.GetRequiredService<IOptions<PostmarkOptions>>(),
                 sp.GetRequiredService<ILogger<PostmarkDeliveryQueue>>(),
-                sp.GetRequiredService<TimeProvider>()));
+                sp.GetRequiredService<TimeProvider>(),
+                onRecipientInactive: (address, ct) => RecordInactiveRecipientAsync(sp, address, ct)));
         builder.Services.AddSingleton<IOutboundEmailSender>(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
         builder.Services.AddHostedService(sp => sp.GetRequiredService<PostmarkDeliveryQueue>());
 
@@ -275,6 +297,9 @@ internal static class Program
         // Password reset by code: POST /account/password/reset/{start,verify,complete}. See Routes/PasswordReset.cs.
         app.MapPasswordResetRoutes();
 
+        // Email change: POST /account/email/change/{start,verify}. See Routes/EmailChange.cs.
+        app.MapEmailChangeRoutes();
+
         // Email-first routing: POST /account/identify. See Routes/Identify.cs.
         app.MapIdentifyRoutes();
 
@@ -293,7 +318,24 @@ internal static class Program
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
 
+        // Postmark bounce, spam complaint and subscription-change webhook (#664).
+        app.MapPostmarkWebhookRoutes();
+
         await app.RunAsync().ConfigureAwait(false);
+    }
+
+    // The delivery queue is a singleton, so the suppression write opens its own scope.
+    private static async Task RecordInactiveRecipientAsync(IServiceProvider services, string address, CancellationToken cancellationToken)
+    {
+        if (!SignUpEmail.TryNormalize(address, out var key, out _))
+        {
+            return;
+        }
+
+        using var scope = services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<EmailSuppressionService>()
+            .SuppressAsync(key, EmailSuppression.InactiveRecipient, EmailSuppression.SendSource, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task SeedRolesAsync(IServiceProvider services)

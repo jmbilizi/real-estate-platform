@@ -31,9 +31,16 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
 
+    /// <summary>Gets the addresses Postmark will not deliver to.</summary>
+    public DbSet<EmailSuppression> EmailSuppressions => Set<EmailSuppression>();
+
     public DbSet<AccountSecurityEvent> AccountSecurityEvents => Set<AccountSecurityEvent>();
 
     public DbSet<PasswordResetProof> PasswordResetProofs => Set<PasswordResetProof>();
+
+    public DbSet<PendingEmailChange> PendingEmailChanges => Set<PendingEmailChange>();
+
+    public DbSet<EmailChangeRestore> EmailChangeRestores => Set<EmailChangeRestore>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -254,6 +261,16 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(p => p.Version).IsConcurrencyToken();
         });
 
+        // No FK to AspNetUsers: a sign-up has no account. One row per normalized address.
+        builder.Entity<EmailSuppression>(entity =>
+        {
+            entity.ToTable("EmailSuppressions");
+            entity.Property(s => s.Email).IsRequired();
+            entity.Property(s => s.Reason).IsRequired();
+            entity.Property(s => s.Source).IsRequired();
+            entity.HasIndex(s => s.Email).IsUnique();
+        });
+
         // Append-only. No FK to AspNetUsers, so the record outlives a deleted account.
         builder.Entity<AccountSecurityEvent>(entity =>
         {
@@ -274,6 +291,26 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.HasIndex(p => p.Email).IsUnique();
             entity.HasIndex(p => p.ExpiresAt);
             entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // No FK to AspNetUsers. One pending change per account.
+        builder.Entity<PendingEmailChange>(entity =>
+        {
+            entity.ToTable("PendingEmailChanges");
+            entity.Property(p => p.UserId).IsRequired();
+            entity.Property(p => p.NewEmail).IsRequired();
+            entity.HasIndex(p => p.UserId).IsUnique();
+            entity.HasIndex(p => p.ExpiresAt);
+            entity.Property(p => p.Version).IsConcurrencyToken();
+        });
+
+        // No FK to AspNetUsers, so the row outlives a deleted account until the purge.
+        builder.Entity<EmailChangeRestore>(entity =>
+        {
+            entity.ToTable("EmailChangeRestores");
+            entity.Property(r => r.UserId).IsRequired();
+            entity.Property(r => r.OldEmail).IsRequired();
+            entity.HasIndex(r => new { r.UserId, r.RestoreUntil });
         });
     }
 }

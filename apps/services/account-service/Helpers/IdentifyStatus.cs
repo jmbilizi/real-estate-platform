@@ -15,4 +15,7 @@ internal enum IdentifyStatus
 
     /// <summary>The code engine has no key.</summary>
     Unavailable,
+
+    /// <summary>The address is suppressed at Postmark, or its domain cannot receive mail (#664).</summary>
+    Undeliverable,
 }

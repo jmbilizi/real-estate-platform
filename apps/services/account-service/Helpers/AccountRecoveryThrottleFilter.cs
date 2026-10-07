@@ -88,6 +88,14 @@ internal sealed class AccountRecoveryThrottleFilter(
                 allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.PasswordResetScope);
                 break;
 
+            case EmailChangeStartRequest changeStart:
+                allowed = this.TrySignUpSend(changeStart.NewEmail, clientAddress, out retryAfter, AccountRecoveryRateLimiter.EmailChangeScope);
+                break;
+
+            case EmailChangeVerifyRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.EmailChangeScope);
+                break;
+
             case SignUpChangeEmailRequest change:
                 if (!SignUpEmail.TryNormalize(change.OldEmail, out var oldKey, out _)
                     || !SignUpEmail.TryNormalize(change.NewEmail, out var newKey, out _))
@@ -164,6 +172,8 @@ internal sealed class AccountRecoveryThrottleFilter(
                 or PasswordResetStartRequest
                 or PasswordResetVerifyRequest
                 or PasswordResetCompleteRequest
+                or EmailChangeStartRequest
+                or EmailChangeVerifyRequest
                 or LoginRequest)
             {
                 return context.Arguments[i];

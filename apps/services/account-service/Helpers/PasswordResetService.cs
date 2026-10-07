@@ -211,21 +211,6 @@ internal sealed class PasswordResetService(
         }
     }
 
-    private static string? HashAddress(string? clientAddress, string key)
-    {
-        if (string.IsNullOrWhiteSpace(clientAddress))
-        {
-            return null;
-        }
-
-        // A plain hash of an IPv4 address falls to a lookup of all 2^32 values. The keyed hash needs the
-        // key, which stays out of the database. The prefix keeps the digest apart from the code hashes.
-        var hash = HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes(key),
-            Encoding.UTF8.GetBytes("client-address:" + clientAddress.Trim()));
-        return Convert.ToHexString(hash);
-    }
-
     private static byte[] HashProof(string proof) => SHA256.HashData(Encoding.UTF8.GetBytes(proof));
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
@@ -415,7 +400,7 @@ internal sealed class PasswordResetService(
                     UserId = user.Id,
                     Kind = AccountSecurityEvent.PasswordReset,
                     OccurredAt = this.Now(),
-                    ClientAddressHash = HashAddress(clientAddress, codeOptions.Value.HmacKey),
+                    ClientAddressHash = AuditHash.Of(AuditHash.ClientAddress, clientAddress, codeOptions.Value.HmacKey),
                 });
                 await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

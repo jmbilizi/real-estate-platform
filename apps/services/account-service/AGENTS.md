@@ -228,3 +228,58 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - `AccountSecurityEvents` is append-only, with no FK to the account. `ClientAddressHash` is an HMAC
   of the client address under the code key, never the address. Tests:
   `Tests/Integration/PasswordResetEndpointTests.cs`.
+
+## Email change (#660)
+
+- `POST /account/email/change/{start,verify}`, `Routes/EmailChange.cs`,
+  `Helpers/EmailChangeService.cs`. Both need a cookie or bearer session. An API key gets `403`.
+- `start` takes `{ newEmail, currentPassword }` or `{ newEmail, oldEmailCode }`. With neither it
+  sends an `EmailChangeOld` code to the old address and answers `{ stepUp: "oldEmailCode" }`. A
+  wrong password counts toward the Identity lockout (`429` once locked). A wrong old code counts in
+  the code engine. Both answer `403 step_up_failed`.
+- After step-up, `start` stores one `PendingEmailChanges` row per account (30 minutes). It stores
+  the row for a taken address too, and sends the `EmailChangeNew` code only to a free address. A
+  taken address, a free address and the caller's own address get the same answer. `verify` counts
+  wrong tries for a taken address in the rate limiter (scope `emailchange`), as sign-up does.
+- `verify` takes `{ code }`. The swap re-checks the address inside the transaction, then sets email
+  and user name, keeps `EmailConfirmed`, rotates the stamp and writes the `AccountSecurityEvents`
+  row (`EmailChanged`, keyed hashes of the old and new address) and the `EmailChangeRestores` row.
+  The unique index on `NormalizedUserName` is the final guard. A lost race answers
+  `400 invalid_code` with no `attemptsLeft`.
+- The new stamp ends every other session. The route signs the caller in again, as the same kind of
+  session (cookie keeps its persistence, bearer gets a new token body).
+- `EmailChangeRestores` holds the old address for 7 days. #662 reads it and owns the restore. #661
+  owns the notice to the old address. This ticket sends none.
+- Purge: `PendingRegistrationPurgeService` also runs `EmailChangeService.PurgeAsync`.
+- Data keyed on email (checked for #660): waitlist interests key on `UserId` (FK, composite key).
+  API keys and onboarding intents key on `UserId`. Property-service leads (`listing_inquiries`) key
+  the account link on `account_id`. Their `email` column is a contact snapshot from the inquiry. It
+  stays as it was and does not change with the account. The staff duplicate check groups leads by
+  that snapshot, so one person's leads from before and after a change do not merge. Nothing orphans.
+  Account-service tables keyed on an address (`EmailCodes`, `EmailCodeThrottles`,
+  `PendingRegistrations`) hold short-lived state.
+- Known limits: counters are per process. Any signed-in caller can lock the `EmailChangeNew` purpose
+  of an address by five wrong tries, which bounds as in sign-up. The in-memory test provider has no
+  unique index, so the database guard has no test.
+- Tests: `Tests/Integration/EmailChangeEndpointTests.cs`.
+
+## Undeliverable email (#664)
+
+- `EmailSuppressions` holds one row per normalized address that Postmark will not deliver to
+  (`HardBounce`, `SpamComplaint`, `ManualSuppression`, `InactiveRecipient`).
+  `EmailSuppressionService` is the only writer. Every call is idempotent.
+- `POST /account/webhooks/postmark` (`Routes/PostmarkWebhook.cs`) takes the Bounce (`Inactive: true`
+  only), SpamComplaint and SubscriptionChange events. `SuppressSending: false` removes the row. It
+  needs HTTP Basic credentials: `POSTMARK_WEBHOOK_USER` and `POSTMARK_WEBHOOK_PASSWORD`. Without
+  both, every call gets `401`. An event on another message stream is ignored. An event the service
+  does not act on gets `200`, so Postmark does not retry it.
+- The path is not under `/internal` on purpose. The gateway forbids a route to `/internal`
+  (`InternalRoutesNotExposedTests`). Postmark reaches the endpoint through its own gateway route
+  (`account-service-routes.json`, 120 per minute). Basic auth is the gate.
+- The sign-up paths (`/signup/start`, `/resend`, `/change-email`, `/identify`) answer `422`
+  `{ "error": "undeliverable" }` for a suppressed address or a domain with no MX, A or AAAA record.
+  Password reset stays neutral. A Postmark `406` on send writes an `InactiveRecipient` row after the
+  response, so the next step shows it.
+- `DnsMailDomainResolver` (DnsClient) checks the domain. A timeout or DNS error fails open. It does
+  not block disposable domains. Tests use `FakeMailDomainResolver` and never query DNS.
+- Nothing logs the address or the body.

@@ -36,10 +36,16 @@ namespace AccountService.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("NewEmailHash")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("OccurredAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("OldEmailHash")
+                        .HasColumnType("text");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -320,6 +326,36 @@ namespace AccountService.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AccountService.Models.EmailChangeRestore", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OldEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RestoreUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "RestoreUntil");
+
+                    b.ToTable("EmailChangeRestores", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.EmailCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -391,6 +427,35 @@ namespace AccountService.Migrations
                     b.ToTable("EmailCodeThrottles", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.EmailSuppression", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.ToTable("EmailSuppressions", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.Locale", b =>
                 {
                     b.Property<int>("Id")
@@ -458,6 +523,40 @@ namespace AccountService.Migrations
                     b.HasIndex("ExpiresAt");
 
                     b.ToTable("PasswordResetProofs", (string)null);
+                });
+
+            modelBuilder.Entity("AccountService.Models.PendingEmailChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NewEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("PendingEmailChanges", (string)null);
                 });
 
             modelBuilder.Entity("AccountService.Models.PendingRegistration", b =>

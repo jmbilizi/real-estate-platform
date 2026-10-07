@@ -13,6 +13,9 @@ internal sealed class AccountSecurityEvent
     /// <summary>The <see cref="Kind"/> value for a password reset by emailed code.</summary>
     public const string PasswordReset = "PasswordReset";
 
+    /// <summary>The <see cref="Kind"/> value for an email change (#660).</summary>
+    public const string EmailChanged = "EmailChanged";
+
     /// <summary>Gets or sets the record id.</summary>
     public Guid Id { get; set; }
 
@@ -27,4 +30,10 @@ internal sealed class AccountSecurityEvent
 
     /// <summary>Gets or sets the keyed hash of the client address. Null when the address is unknown.</summary>
     public string? ClientAddressHash { get; set; }
+
+    /// <summary>Gets or sets the keyed hash of the address before an email change. Null for other kinds.</summary>
+    public string? OldEmailHash { get; set; }
+
+    /// <summary>Gets or sets the keyed hash of the address after an email change. Null for other kinds.</summary>
+    public string? NewEmailHash { get; set; }
 }
