@@ -38,6 +38,7 @@ namespace AccountService.Helpers;
 /// <param name="codeOptions">The engine options.</param>
 /// <param name="limiter">The rate limiter.</param>
 /// <param name="users">The user manager.</param>
+/// <param name="notices">The security notice sender.</param>
 /// <param name="timeProvider">The clock.</param>
 internal sealed class PasswordResetService(
     AccountDbContext db,
@@ -45,6 +46,7 @@ internal sealed class PasswordResetService(
     IOptions<EmailCodeOptions> codeOptions,
     AccountRecoveryRateLimiter limiter,
     AppUserManager users,
+    SecurityNoticeService notices,
     TimeProvider timeProvider)
 {
     /// <summary>How long a reset proof works.</summary>
@@ -177,6 +179,7 @@ internal sealed class PasswordResetService(
         else if (result.Status == PasswordResetCompleteStatus.Done)
         {
             await this.VoidOpenCodesAsync(entered).ConfigureAwait(false);
+            await notices.NotifyPasswordChangedAsync(userId, entered, AccountSecurityEvent.PasswordReset).ConfigureAwait(false);
         }
 
         return result;

@@ -253,7 +253,10 @@ the same stamp check, so both agree.
 **Login, refresh, forgot and reset are Identity's own endpoints.** #657 retired `register`,
 `confirmEmail` and `resendConfirmationEmail`: `Routes/IdentityEndpoints.cs` maps Identity into a
 detached route builder and hides those three before the app sees them. #665 retires the link-based
-reset pair. `POST /manage/info` with a new email answers `400`.
+reset pair. `POST /manage/info` with a new email answers `400`. `POST /manage/info` with a new
+password needs `oldPassword`, applies the password policy and the breached-password check, ends
+every other session, writes a `PasswordChanged` security event and mails a notice. A wrong
+`oldPassword` counts toward the sign-in lock.
 
 ```jsonc
 // POST /account/forgotPassword           -> 200 (always), or 429 with Retry-After

@@ -16,6 +16,8 @@ internal sealed class AccountSecurityEvent
     /// <summary>The <see cref="Kind"/> value for an email change (#660).</summary>
     public const string EmailChanged = "EmailChanged";
 
+    public const string PasswordChanged = "PasswordChanged";
+
     /// <summary>Gets or sets the record id.</summary>
     public Guid Id { get; set; }
 

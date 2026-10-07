@@ -40,6 +40,9 @@ internal sealed class AccountRecoveryOptions
     /// </summary>
     public string PasswordResetPath { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets the web path of the "This wasn't me" page that #662 builds.</summary>
+    public string SecureAccountPath { get; set; } = "/secure-account";
+
     /// <summary>
     /// Gets or sets how long an issued password-reset token stays valid. Enforced by the dedicated
     /// <c>PasswordResetTokenProvider</c>, so the configured value is the one actually enforced when
@@ -148,6 +151,11 @@ internal sealed class AccountRecoveryOptions
         if (!this.PasswordResetPath.StartsWith('/'))
         {
             return $"{SectionName}:{nameof(this.PasswordResetPath)} must start with '/'.";
+        }
+
+        if (!this.SecureAccountPath.StartsWith('/'))
+        {
+            return $"{SectionName}:{nameof(this.SecureAccountPath)} must start with '/'.";
         }
 
         if (this.TokenLifetime <= TimeSpan.Zero)

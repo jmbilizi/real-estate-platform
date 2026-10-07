@@ -38,6 +38,7 @@ namespace AccountService.Helpers;
 /// <param name="codeOptions">The engine options.</param>
 /// <param name="limiter">The rate limiter.</param>
 /// <param name="users">The user manager.</param>
+/// <param name="notices">The security notice sender.</param>
 /// <param name="timeProvider">The clock.</param>
 /// <param name="logger">The logger.</param>
 internal sealed partial class EmailChangeService(
@@ -46,6 +47,7 @@ internal sealed partial class EmailChangeService(
     IOptions<EmailCodeOptions> codeOptions,
     AccountRecoveryRateLimiter limiter,
     AppUserManager users,
+    SecurityNoticeService notices,
     TimeProvider timeProvider,
     ILogger<EmailChangeService> logger)
 {
@@ -436,6 +438,7 @@ internal sealed partial class EmailChangeService(
         }
 
         await this.VoidLeftoverCodesAsync(oldEmail, entered).ConfigureAwait(false);
+        await notices.NotifyEmailChangedAsync(user.Id, oldEmail, entered).ConfigureAwait(false);
         return new EmailChangeResult(EmailChangeStatus.Changed, User: user);
     }
 

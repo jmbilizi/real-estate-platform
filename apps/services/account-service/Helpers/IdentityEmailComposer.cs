@@ -90,6 +90,45 @@ internal sealed class IdentityEmailComposer(
         return this.Compose(EmailKind.Code, to, $"{code} is your Cribstop code", body);
     }
 
+    /// <summary>Composes the notice sent to the old address after an email change.</summary>
+    /// <param name="to">The old address.</param>
+    /// <param name="maskedNewEmail">The new address with the middle masked.</param>
+    /// <param name="when">When the change happened, in UTC.</param>
+    /// <param name="secureLink">The "This wasn't me" link.</param>
+    /// <param name="linkLifetime">How long the link works.</param>
+    /// <returns>The message.</returns>
+    internal OutboundEmail EmailChangedNotice(string to, string maskedNewEmail, DateTime when, Uri secureLink, TimeSpan linkLifetime)
+    {
+        var body =
+            $"The email address on your Cribstop account changed to {maskedNewEmail}.\n\n" +
+            $"When: {FormatTime(when)}.\n\n" +
+            "If you made this change, you do not need to do anything.\n\n" +
+            this.NotMeSection(secureLink, linkLifetime);
+        return this.Compose(EmailKind.EmailChangedNotice, to, "Your Cribstop email address changed", body);
+    }
+
+    /// <summary>Composes the notice sent after a password change or reset.</summary>
+    /// <param name="to">The account address.</param>
+    /// <param name="reset"><see langword="true"/> for a reset, <see langword="false"/> for a change.</param>
+    /// <param name="when">When the change happened, in UTC.</param>
+    /// <param name="secureLink">The "This wasn't me" link.</param>
+    /// <param name="linkLifetime">How long the link works.</param>
+    /// <returns>The message.</returns>
+    internal OutboundEmail PasswordChangedNotice(string to, bool reset, DateTime when, Uri secureLink, TimeSpan linkLifetime)
+    {
+        var what = reset ? "was reset" : "changed";
+        var body =
+            $"The password on your Cribstop account {what}.\n\n" +
+            $"When: {FormatTime(when)}.\n\n" +
+            "If you made this change, you do not need to do anything.\n\n" +
+            this.NotMeSection(secureLink, linkLifetime);
+        return this.Compose(EmailKind.PasswordChangedNotice, to, $"Your Cribstop password {what}", body);
+    }
+
+    /// <summary>Formats a time for the notices, e.g. "October 7, 2026 at 14:05 UTC".</summary>
+    private static string FormatTime(DateTime when) =>
+        when.ToUniversalTime().ToString("MMMM d, yyyy 'at' HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>Formats a token lifetime for the reader, e.g. "24 hours" or "1 hour".</summary>
     private static string FormatLifetime(TimeSpan lifetime)
     {
@@ -117,6 +156,11 @@ internal sealed class IdentityEmailComposer(
             $"This link expires in {expiry}.\n\n{IgnoreIfNotReset}";
         return this.Compose(EmailKind.PasswordReset, to, ResetSubject, body);
     }
+
+    private string NotMeSection(Uri secureLink, TimeSpan linkLifetime) =>
+        $"If this was not you, open this link to secure your account:\n\n{secureLink}\n\n" +
+        $"The link works once and expires in {FormatLifetime(linkLifetime)}. " +
+        $"If the link does not work, reply to this message at {email.Value.ReplyToAddress}.";
 
     private OutboundEmail Compose(EmailKind kind, string to, string subject, string body)
     {

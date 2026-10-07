@@ -199,6 +199,8 @@ internal static class Program
         builder.Services.AddScoped<IdentifyService>();
         builder.Services.AddScoped<PasswordResetService>();
         builder.Services.AddScoped<EmailChangeService>();
+        builder.Services.AddScoped<SecurityNoticeService>();
+        builder.Services.AddScoped<PasswordChangeService>();
         builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
         // The Postmark transport: one background queue, resolved both as the delivery seam

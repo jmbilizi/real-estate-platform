@@ -34,6 +34,13 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   them, so the kept handlers stay the framework's own. The alternative was hand-mapping the kept
   endpoints, which copies Identity's cookie and bearer handlers. `POST /manage/info` with a new
   email answers `400`: Identity would mail a link built from the retired `/confirmEmail` route.
+- **Security notices (#661).** After a reset, a password change or an email change,
+  `Helpers/SecurityNoticeService.cs` mails the address the account had BEFORE the change. It skips a
+  suppressed address, never blocks the action, and logs the kind only. Each notice carries a
+  single-use `SecureAccountTokens` token (hash stored, 7 day life) for the "This wasn't me" link.
+  #662 builds the page and consumes the token. `POST /manage/info` with a new password runs
+  `PasswordChangeService` through `PasswordChangeFilter`, not the framework branch: the current
+  password is required and counts toward the lock, and the new stamp ends every other session.
 - **What this service adds on top of Identity's handlers, and where.** Identity ships these
   endpoints with **no rate limiting and no timing equalisation** at all. Both are reattached by
   `Helpers/AccountRecoveryThrottleFilter.cs`, one endpoint filter over the whole group, which

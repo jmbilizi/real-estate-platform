@@ -3,11 +3,9 @@
 // </copyright>
 
 using System.Globalization;
-using System.Security.Claims;
 using AccountService.Dtos;
 using AccountService.Helpers;
 using AccountService.Models;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 
 namespace AccountService.Routes;
@@ -37,7 +35,7 @@ internal static class EmailChange
         //   -> { resendAfterSeconds, expiresInSeconds }, or { stepUp: "oldEmailCode", ... } when sent neither
         group.MapPost("/start", async (EmailChangeStartRequest request, EmailChangeService service, HttpContext http) =>
         {
-            var session = await SessionAsync(http).ConfigureAwait(false);
+            var session = await CallerSession.ReadAsync(http).ConfigureAwait(false);
             if (session is null)
             {
                 return SessionRequired();
@@ -56,7 +54,7 @@ internal static class EmailChange
             SignInManager<ApplicationUser> signInManager,
             HttpContext http) =>
         {
-            var session = await SessionAsync(http).ConfigureAwait(false);
+            var session = await CallerSession.ReadAsync(http).ConfigureAwait(false);
             if (session is null)
             {
                 return SessionRequired();
@@ -124,31 +122,4 @@ internal static class EmailChange
                 return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         }
     }
-
-    /// <summary>
-    /// Reads how the caller signed in. Returns null for an API key. The default policy has already
-    /// run each scheme, and a handler keeps its result for the request, so these calls read that
-    /// result and do not validate again after the swap rotates the stamp.
-    /// </summary>
-    private static async Task<SessionInfo?> SessionAsync(HttpContext http)
-    {
-        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(userId))
-        {
-            return null;
-        }
-
-        var bearer = await http.AuthenticateAsync(IdentityConstants.BearerScheme).ConfigureAwait(false);
-        if (bearer.Succeeded)
-        {
-            return new SessionInfo(userId, true, false);
-        }
-
-        var cookie = await http.AuthenticateAsync(IdentityConstants.ApplicationScheme).ConfigureAwait(false);
-        return cookie.Succeeded
-            ? new SessionInfo(userId, false, cookie.Properties?.IsPersistent == true)
-            : null;
-    }
-
-    private sealed record SessionInfo(string UserId, bool Bearer, bool Persistent);
 }

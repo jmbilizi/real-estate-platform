@@ -4,6 +4,7 @@
 
 using AccountService.Helpers;
 using AccountService.Models;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.Extensions.Primitives;
 
@@ -45,9 +46,71 @@ internal static class IdentityEndpoints
         group.AddEndpointFilter<AccountRecoveryThrottleFilter>();
         group.AddEndpointFilter<IdentityResponseShapingFilter>();
         group.AddEndpointFilter<EmailChangeRetiredFilter>();
+        group.AddEndpointFilter<PasswordChangeFilter>();
 
         ((IEndpointRouteBuilder)app).DataSources.Add(
             new RetainedEndpointDataSource(detached.DataSources));
+    }
+
+    /// <summary>
+    /// Takes over <c>POST /manage/info</c> with a new password (#661). The framework branch does not
+    /// count a wrong current password toward the lockout and writes no security event. This filter
+    /// runs <see cref="PasswordChangeService"/> and signs the caller in again, so the new security
+    /// stamp ends every other session and keeps this one. The endpoint stays for the other fields.
+    /// </summary>
+    private sealed class PasswordChangeFilter : IEndpointFilter
+    {
+        public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+            ArgumentNullException.ThrowIfNull(next);
+
+            var request = context.Arguments.OfType<InfoRequest>().FirstOrDefault();
+            if (request is not { NewPassword: { Length: > 0 } })
+            {
+                return await next(context).ConfigureAwait(false);
+            }
+
+            var http = context.HttpContext;
+            var session = await CallerSession.ReadAsync(http).ConfigureAwait(false);
+            if (session is null)
+            {
+                return Results.Json(new { error = EmailChange.SessionRequiredError }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            var result = await http.RequestServices.GetRequiredService<PasswordChangeService>()
+                .ChangeAsync(
+                    session.UserId,
+                    request.OldPassword,
+                    request.NewPassword,
+                    AccountRecoveryThrottleFilter.ClientAddress(http),
+                    http.RequestAborted)
+                .ConfigureAwait(false);
+
+            switch (result.Status)
+            {
+                case PasswordChangeStatus.Changed:
+                    // The new stamp ended this session too. SignInAsync builds the new one from the changed account.
+                    var signIn = http.RequestServices.GetRequiredService<SignInManager<ApplicationUser>>();
+                    signIn.AuthenticationScheme = session.Bearer ? IdentityConstants.BearerScheme : IdentityConstants.ApplicationScheme;
+                    await signIn.SignInAsync(result.User!, session.Persistent).ConfigureAwait(false);
+                    return Results.Empty;
+                case PasswordChangeStatus.CurrentRequired:
+                    return Problem("OldPasswordRequired", "The current password is required.");
+                case PasswordChangeStatus.CurrentWrong:
+                    return Problem("PasswordMismatch", "Incorrect password.");
+                case PasswordChangeStatus.PasswordRejected:
+                    return Results.ValidationProblem(result.Errors!.ToDictionary(e => e.Key, e => new[] { e.Value }));
+                case PasswordChangeStatus.Limited:
+                    http.Response.Headers.RetryAfter = result.RetryAfterSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    return Results.Json(new { error = "limited" }, statusCode: StatusCodes.Status429TooManyRequests);
+                default:
+                    return Results.Unauthorized();
+            }
+        }
+
+        private static IResult Problem(string code, string message) =>
+            Results.ValidationProblem(new Dictionary<string, string[]> { [code] = new[] { message } });
     }
 
     private sealed class DetachedEndpointRouteBuilder(WebApplication app) : IEndpointRouteBuilder

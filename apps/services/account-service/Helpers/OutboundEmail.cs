@@ -15,6 +15,12 @@ internal enum EmailKind
 
     /// <summary>A one-time sign-in or verification code.</summary>
     Code,
+
+    /// <summary>The notice sent to the old address after an email change (#661).</summary>
+    EmailChangedNotice,
+
+    /// <summary>The notice sent after a password change or reset (#661).</summary>
+    PasswordChangedNotice,
 }
 
 /// <summary>A composed transactional message, ready for a transport.</summary>

@@ -42,6 +42,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<EmailChangeRestore> EmailChangeRestores => Set<EmailChangeRestore>();
 
+    public DbSet<SecureAccountToken> SecureAccountTokens => Set<SecureAccountToken>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -311,6 +313,18 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(r => r.UserId).IsRequired();
             entity.Property(r => r.OldEmail).IsRequired();
             entity.HasIndex(r => new { r.UserId, r.RestoreUntil });
+        });
+
+        // No FK to AspNetUsers. Only the token hash is stored.
+        builder.Entity<SecureAccountToken>(entity =>
+        {
+            entity.ToTable("SecureAccountTokens");
+            entity.Property(t => t.UserId).IsRequired();
+            entity.Property(t => t.Kind).IsRequired();
+            entity.Property(t => t.TokenHash).IsRequired();
+            entity.HasIndex(t => t.TokenHash).IsUnique();
+            entity.HasIndex(t => t.ExpiresAt);
+            entity.HasIndex(t => t.UserId);
         });
     }
 }
