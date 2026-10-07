@@ -4,8 +4,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   CONSENT_TEXTS,
-  CURRENT_CONSENT_TEXT_VERSION,
   type ConsentChannel,
+  CURRENT_CONSENT_TEXT_VERSION,
   type InquiryKind,
 } from '@cribstop/property-contracts';
 import { BRAND } from '@/lib/brand';
