@@ -14,19 +14,15 @@ describe('listingInquiryRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a request with no consentTextVersion (#631)', () => {
+  it('accepts consent with no consentTextVersion, for older clients (#631)', () => {
     const { consentTextVersion: _omitted, ...withoutVersion } = BASE;
-    expect(listingInquiryRequestSchema.safeParse(withoutVersion).success).toBe(false);
-    expect(
-      listingInquiryRequestSchema.safeParse({ ...withoutVersion, consentToContact: true }).success,
-    ).toBe(false);
+    expect(listingInquiryRequestSchema.safeParse(withoutVersion).success).toBe(true);
   });
 
   it('never infers consent true from any other field', () => {
-    const { consentToContact: _omitted, ...withoutConsent } = BASE;
-    expect(
-      listingInquiryRequestSchema.safeParse({ ...withoutConsent, phone: '555-0100' }).success,
-    ).toBe(false);
+    const { consentToContact: _c, consentTextVersion: _v, ...bare } = BASE;
+    const result = listingInquiryRequestSchema.parse({ ...bare, phone: '555-0100' });
+    expect(result.consentToContact).toBe(false);
   });
 
   describe('Fair Housing guardrail — strict parse (#34)', () => {

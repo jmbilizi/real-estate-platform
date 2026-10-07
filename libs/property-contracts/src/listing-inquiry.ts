@@ -91,10 +91,13 @@ export const listingInquiryRequestSchema = z
         'Required (non-empty) when `kind` is `message`. Optional for `tour_request`. Max ' +
           `${MESSAGE_MAX_LENGTH} characters.`,
       ),
-    consentTextVersion: consentTextVersionSchema.describe(
-      'Required (#631). The consent text version the consumer saw. The server stores the text ' +
-        'for that version, never a client string. Needs `consentToContact` true.',
-    ),
+    consentTextVersion: consentTextVersionSchema
+      .optional()
+      .describe(
+        'Required for new clients (#631). The consent text version the consumer saw. An older ' +
+          'client may omit it, and the server then records `v1`. The server stores the text ' +
+          'for the version, never a client string. Needs `consentToContact` true.',
+      ),
     consentChannels: z
       .array(consentChannelSchema)
       .min(1)

@@ -725,7 +725,7 @@ describe('POST /listings/:id/inquiries (#131)', () => {
     expect(insert).toBeDefined();
   });
 
-  it('rejects a request with no consentTextVersion (#631)', async () => {
+  it('records v1 when an older client sends consent with no consentTextVersion (#631)', async () => {
     const pool = createInquiryPool();
     const app = createApp({ pool, introspection: ALWAYS_SIGNED_OUT, rateLimiter: ALWAYS_ALLOW });
     const { consentTextVersion: _omitted, ...withoutVersion } = VALID_BODY;
@@ -734,7 +734,12 @@ describe('POST /listings/:id/inquiries (#131)', () => {
       .post(`/listings/${KNOWN_ID}/inquiries`)
       .send(withoutVersion);
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(201);
+    const insertAt = pool.statements.findIndex((sql) =>
+      sql.includes('INSERT INTO listing_inquiries'),
+    );
+    expect(pool.params[insertAt]).toContain('v1');
+    expect(pool.params[insertAt]).toContainEqual(['email']);
   });
 
   it('stores the account email, not the body email, for a confirmed account (#631)', async () => {

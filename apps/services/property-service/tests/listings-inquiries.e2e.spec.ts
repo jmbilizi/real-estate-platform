@@ -189,15 +189,15 @@ describe('lead model (#627)', () => {
     expect(response.status).toBe(400);
   });
 
-  it('rejects a request with no consentTextVersion (#631)', async () => {
-    const { consentTextVersion: _omitted, ...withoutVersion } = VALID_BODY;
-    const response = await axios.post(
-      `/listings/${fixtures.sampleListingId}/inquiries`,
-      withoutVersion,
-      { validateStatus: () => true },
-    );
+  it('records v1 and the default channels when consentTextVersion is absent (#631)', async () => {
+    // JSON drops `undefined`, so the body carries no version.
+    const id = await create({ consentTextVersion: undefined });
 
-    expect(response.status).toBe(400);
+    expect(await row(id)).toMatchObject({
+      consent_text_version: 'v1',
+      consent_disclosure_text: CONSENT_TEXTS.v1,
+      consent_channels: ['email'],
+    });
   });
 
   it('stores the consent evidence: server text, version, channels and time', async () => {
@@ -228,7 +228,7 @@ describe('lead model (#627)', () => {
   });
 
   it('stores no consent evidence without consent', async () => {
-    const id = await create({});
+    const id = await create({ consentToContact: false, consentTextVersion: undefined });
 
     expect(await row(id)).toMatchObject({
       consent_to_contact: false,
