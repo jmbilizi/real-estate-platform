@@ -20,6 +20,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                   "unauthenticated",
                   "unavailable",
                   "forbidden",
+                  "conflict",
                 ],
                 "type": "string",
               },
@@ -1777,6 +1778,458 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "StaffLeadDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "consent": {
+            "additionalProperties": false,
+            "properties": {
+              "channels": {
+                "items": {
+                  "enum": [
+                    "email",
+                    "phone_call",
+                    "phone_text",
+                  ],
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "given": {
+                "type": "boolean",
+              },
+              "givenAt": {
+                "format": "date-time",
+                "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string",
+              },
+              "text": {
+                "nullable": true,
+                "type": "string",
+              },
+              "textVersion": {
+                "nullable": true,
+                "type": "string",
+              },
+            },
+            "required": [
+              "given",
+              "textVersion",
+              "text",
+              "channels",
+              "givenAt",
+            ],
+            "type": "object",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "duplicateLeadIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "email": {
+            "type": "string",
+          },
+          "history": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "actorAccountId": {
+                  "format": "uuid",
+                  "nullable": true,
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "actorRole": {
+                  "type": "string",
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string",
+                },
+                "fromStatus": {
+                  "enum": [
+                    "new",
+                    "verified",
+                    "assigned",
+                    "accepted",
+                    "contacted",
+                    "touring",
+                    "under_contract",
+                    "closed",
+                    "lost",
+                    "spam",
+                    "rejected",
+                  ],
+                  "nullable": true,
+                  "type": "string",
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "note": {
+                  "nullable": true,
+                  "type": "string",
+                },
+                "toStatus": {
+                  "enum": [
+                    "new",
+                    "verified",
+                    "assigned",
+                    "accepted",
+                    "contacted",
+                    "touring",
+                    "under_contract",
+                    "closed",
+                    "lost",
+                    "spam",
+                    "rejected",
+                  ],
+                  "type": "string",
+                },
+              },
+              "required": [
+                "id",
+                "fromStatus",
+                "toStatus",
+                "actorAccountId",
+                "actorRole",
+                "note",
+                "createdAt",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "kind": {
+            "enum": [
+              "message",
+              "tour_request",
+            ],
+            "type": "string",
+          },
+          "listing": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "type": "string",
+              },
+              "id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listPrice": {
+                "nullable": true,
+                "type": "number",
+              },
+              "status": {
+                "nullable": true,
+                "type": "string",
+              },
+              "title": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+              "title",
+              "address",
+              "listPrice",
+              "status",
+            ],
+            "type": "object",
+          },
+          "message": {
+            "nullable": true,
+            "type": "string",
+          },
+          "name": {
+            "type": "string",
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/StaffLeadNote",
+            },
+            "type": "array",
+          },
+          "phone": {
+            "nullable": true,
+            "type": "string",
+          },
+          "possibleDuplicate": {
+            "type": "boolean",
+          },
+          "status": {
+            "enum": [
+              "new",
+              "verified",
+              "assigned",
+              "accepted",
+              "contacted",
+              "touring",
+              "under_contract",
+              "closed",
+              "lost",
+              "spam",
+              "rejected",
+            ],
+            "type": "string",
+          },
+          "verifiedAccount": {
+            "type": "boolean",
+          },
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "kind",
+          "status",
+          "name",
+          "email",
+          "phone",
+          "message",
+          "verifiedAccount",
+          "consent",
+          "listing",
+          "possibleDuplicate",
+          "duplicateLeadIds",
+          "history",
+          "notes",
+        ],
+        "type": "object",
+      },
+      "StaffLeadNote": {
+        "additionalProperties": false,
+        "properties": {
+          "authorAccountId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "authorRole": {
+            "type": "string",
+          },
+          "body": {
+            "type": "string",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "authorAccountId",
+          "authorRole",
+          "body",
+          "createdAt",
+        ],
+        "type": "object",
+      },
+      "StaffLeadNoteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "body",
+        ],
+        "type": "object",
+      },
+      "StaffLeadTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string",
+          },
+          "to": {
+            "enum": [
+              "new",
+              "verified",
+              "assigned",
+              "accepted",
+              "contacted",
+              "touring",
+              "under_contract",
+              "closed",
+              "lost",
+              "spam",
+              "rejected",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "to",
+        ],
+        "type": "object",
+      },
+      "StaffLeadTransitionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "enum": [
+              "new",
+              "verified",
+              "assigned",
+              "accepted",
+              "contacted",
+              "touring",
+              "under_contract",
+              "closed",
+              "lost",
+              "spam",
+              "rejected",
+            ],
+            "type": "string",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "to": {
+            "enum": [
+              "new",
+              "verified",
+              "assigned",
+              "accepted",
+              "contacted",
+              "touring",
+              "under_contract",
+              "closed",
+              "lost",
+              "spam",
+              "rejected",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "from",
+          "to",
+        ],
+        "type": "object",
+      },
+      "StaffLeadsEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "nextCursor": {
+            "nullable": true,
+            "type": "string",
+          },
+          "results": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "type": "string",
+                },
+                "emailMasked": {
+                  "type": "string",
+                },
+                "id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "kind": {
+                  "enum": [
+                    "message",
+                    "tour_request",
+                  ],
+                  "type": "string",
+                },
+                "listingId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+                "phoneMasked": {
+                  "nullable": true,
+                  "type": "string",
+                },
+                "possibleDuplicate": {
+                  "type": "boolean",
+                },
+                "status": {
+                  "enum": [
+                    "new",
+                    "verified",
+                    "assigned",
+                    "accepted",
+                    "contacted",
+                    "touring",
+                    "under_contract",
+                    "closed",
+                    "lost",
+                    "spam",
+                    "rejected",
+                  ],
+                  "type": "string",
+                },
+                "verifiedAccount": {
+                  "type": "boolean",
+                },
+              },
+              "required": [
+                "id",
+                "createdAt",
+                "kind",
+                "status",
+                "name",
+                "emailMasked",
+                "phoneMasked",
+                "verifiedAccount",
+                "listingId",
+                "possibleDuplicate",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "results",
+          "nextCursor",
+        ],
+        "type": "object",
+      },
       "StaffMe": {
         "additionalProperties": false,
         "properties": {
@@ -3531,6 +3984,455 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Remove a saved home by its home id",
+      },
+    },
+    "/staff/leads": {
+      "get": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page size capped at 50. Email and phone are masked. A row has \`possibleDuplicate\` when another open request on the same listing came within seven days from the same email or phone. The server never merges leads. The response is \`private, no-store\`.",
+        "operationId": "listStaffLeads",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "new",
+                "verified",
+                "assigned",
+                "accepted",
+                "contacted",
+                "touring",
+                "under_contract",
+                "closed",
+                "lost",
+                "spam",
+                "rejected",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "message",
+                "tour_request",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "createdFrom",
+            "required": false,
+            "schema": {
+              "description": "Inclusive lower bound on the creation time. ISO 8601 with a zone.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "createdTo",
+            "required": false,
+            "schema": {
+              "description": "Exclusive upper bound on the creation time. ISO 8601 with a zone.",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "listingId",
+            "required": false,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 50. Default 25.",
+              "pattern": "^([1-9]|[1-4][0-9]|50)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "description": "The \`nextCursor\` of the previous page. Opaque.",
+              "maxLength": 200,
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffLeadsEnvelope",
+                },
+              },
+            },
+            "description": "A page of leads.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Buyer requests, for staff",
+      },
+    },
+    "/staff/leads/{id}": {
+      "get": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. Every successful read writes an access-audit row. The response is \`private, no-store\`.",
+        "operationId": "getStaffLead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffLeadDetail",
+                },
+              },
+            },
+            "description": "The lead.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No lead has this id (\`not_found\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "One buyer request, with full contact details",
+      },
+    },
+    "/staff/leads/{id}/notes": {
+      "post": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. Notes are append-only and carry the author and the time.",
+        "operationId": "addStaffLeadNote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffLeadNoteRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffLeadNote",
+                },
+              },
+            },
+            "description": "The note was added.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No lead has this id (\`not_found\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Add an internal note to a lead",
+      },
+    },
+    "/staff/leads/{id}/transition": {
+      "post": {
+        "description": "Requires the Admin, SuperAdmin or Moderator role. A Moderator may set \`verified\`, \`spam\` and \`rejected\`. Admin and SuperAdmin may also set \`new\` to restore a spam lead. A note is required for \`spam\` and \`rejected\`. A change the transitions table does not allow returns 409.",
+        "operationId": "transitionStaffLead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffLeadTransitionRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffLeadTransitionResponse",
+                },
+              },
+            },
+            "description": "The lead moved.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Invalid or unknown parameter or body field (\`invalid_request\`).",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "A valid credential with none of the allowed roles (\`forbidden\`).",
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No lead has this id (\`not_found\`).",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The transitions table does not allow this change (\`conflict\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Move a lead to a new status",
       },
     },
     "/staff/me": {

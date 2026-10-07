@@ -9,7 +9,16 @@ import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } f
 import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
-import { staffMeSchema } from './staff';
+import {
+  staffLeadDetailSchema,
+  staffLeadNoteRequestSchema,
+  staffLeadNoteSchema,
+  staffLeadsEnvelopeSchema,
+  staffLeadsRequestSchema,
+  staffLeadTransitionRequestSchema,
+  staffLeadTransitionResponseSchema,
+  staffMeSchema,
+} from './staff';
 import {
   MAX_RESULT_OFFSET,
   maxReachablePage,
@@ -84,6 +93,12 @@ function componentSchemas() {
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
   registry.add(staffMeSchema, { id: 'StaffMe' });
+  registry.add(staffLeadsEnvelopeSchema, { id: 'StaffLeadsEnvelope' });
+  registry.add(staffLeadDetailSchema, { id: 'StaffLeadDetail' });
+  registry.add(staffLeadTransitionRequestSchema, { id: 'StaffLeadTransitionRequest' });
+  registry.add(staffLeadTransitionResponseSchema, { id: 'StaffLeadTransitionResponse' });
+  registry.add(staffLeadNoteRequestSchema, { id: 'StaffLeadNoteRequest' });
+  registry.add(staffLeadNoteSchema, { id: 'StaffLeadNote' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
 
   const { schemas } = z.toJSONSchema(registry, {
@@ -129,6 +144,28 @@ const unauthenticatedResponse = {
   content: {
     'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
   },
+};
+
+const forbiddenResponse = {
+  description: 'A valid credential with none of the allowed roles (`forbidden`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffBadRequestResponse = {
+  description: 'Invalid or unknown parameter or body field (`invalid_request`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffNotFoundResponse = {
+  description: 'No lead has this id (`not_found`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffLeadIdParameter = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: schema(idSchema, 'input'),
 };
 
 /**
@@ -649,6 +686,126 @@ export function toOpenApiDocument() {
               },
             },
             '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads': {
+        get: {
+          operationId: 'listStaffLeads',
+          summary: 'Buyer requests, for staff',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page ' +
+            'size capped at 50. Email and phone are masked. A row has `possibleDuplicate` when ' +
+            'another open request on the same listing came within seven days from the same email ' +
+            'or phone. The server never merges leads. The response is `private, no-store`.',
+          parameters: searchParameters(staffLeadsRequestSchema),
+          responses: {
+            '200': {
+              description: 'A page of leads.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadsEnvelope' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}': {
+        get: {
+          operationId: 'getStaffLead',
+          summary: 'One buyer request, with full contact details',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Every successful read writes an ' +
+            'access-audit row. The response is `private, no-store`.',
+          parameters: [staffLeadIdParameter],
+          responses: {
+            '200': {
+              description: 'The lead.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadDetail' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/transition': {
+        post: {
+          operationId: 'transitionStaffLead',
+          summary: 'Move a lead to a new status',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. A Moderator may set `verified`, ' +
+            '`spam` and `rejected`. Admin and SuperAdmin may also set `new` to restore a spam ' +
+            'lead. A note is required for `spam` and `rejected`. A change the transitions table ' +
+            'does not allow returns 409.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StaffLeadTransitionRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead moved.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': {
+              description: 'The transitions table does not allow this change (`conflict`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/notes': {
+        post: {
+          operationId: 'addStaffLeadNote',
+          summary: 'Add an internal note to a lead',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Notes are append-only and carry ' +
+            'the author and the time.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/StaffLeadNoteRequest' } },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The note was added.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadNote' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
             '503': unavailableResponse,
             '500': serverErrorResponse,
           },

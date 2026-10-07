@@ -729,3 +729,18 @@ the Property API document. Never publish a second document.
   down) or 403 (no allowed role). Read the caller with `staffCallerOf(res)`.
 - `GET /staff/me` returns `{ roles }` for any valid credential. It needs no role.
 - Introspection runs once per request. Nothing caches it.
+
+## Staff lead desk (#632)
+
+- `src/staff/leads-routes.ts` serves `/staff/leads` (list), `/staff/leads/:id` (detail),
+  `/staff/leads/:id/transition` and `/staff/leads/:id/notes`. Allowed: `Admin`, `SuperAdmin`,
+  `Moderator`. `Agent` and buyers get 403.
+- The list masks email and phone. Only the detail returns full values, and every detail read writes
+  a `lead_access_audit` row before the service reads the rest. A failed audit insert returns 500.
+- A Moderator sets `verified`, `spam` and `rejected`. Admin also sets `new` (undo spam). Every
+  change runs through `changeLeadStatus`. A note is required for `spam` and `rejected`.
+- `possibleDuplicate`: another open lead, same listing, within 7 days, same normalized email or last
+  ten phone digits. It is a hint. Nothing merges or drops a lead. Migration 048 indexes match the
+  expressions in `leads-store.ts`. Change both together.
+- `lead_notes` and `lead_access_audit` are append-only by trigger.
+- The e2e stub carries roles in the bearer token: `bearerFor(accountId, ['Admin'])`.

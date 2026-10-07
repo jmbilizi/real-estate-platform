@@ -111,6 +111,8 @@ const USER_FACING_MESSAGE: Record<ListingsErrorCode, string> = {
   unavailable: 'Saved homes are briefly unavailable. Please try again.',
   /** The staff routes (#628). No consumer page calls them yet. */
   forbidden: 'This account cannot use that page.',
+  /** The staff lead desk (#632). The staff screens map this themselves. */
+  conflict: 'That change is not allowed right now. Refresh and try again.',
 };
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {

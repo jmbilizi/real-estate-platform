@@ -23,17 +23,29 @@ export function introspectionStubUrl(): string {
   return `http://localhost:${introspectionStubPort()}/internal/account/introspect`;
 }
 
-export function bearerFor(accountId: string): { Authorization: string } {
-  return { Authorization: `${PREFIX}${accountId}` };
+/** `roles` ride after a `|`, for the staff routes (#632). */
+export function bearerFor(
+  accountId: string,
+  roles: readonly string[] = [],
+): { Authorization: string } {
+  const suffix = roles.length > 0 ? `|${roles.join(',')}` : '';
+  return { Authorization: `${PREFIX}${accountId}${suffix}` };
 }
 
 export function startIntrospectionStub(): Promise<Server> {
   const server = createServer((req, res) => {
     const authorization = req.headers.authorization ?? '';
-    const accountId = authorization.startsWith(PREFIX) ? authorization.slice(PREFIX.length) : null;
+    const credential = authorization.startsWith(PREFIX) ? authorization.slice(PREFIX.length) : null;
+    const [accountId = null, roleList = ''] = credential?.split('|') ?? [];
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-store');
-    res.end(JSON.stringify({ isValid: accountId !== null, accountId }));
+    res.end(
+      JSON.stringify({
+        isValid: accountId !== null,
+        accountId,
+        roles: roleList === '' ? [] : roleList.split(','),
+      }),
+    );
   });
   return new Promise((resolve, reject) => {
     server.once('error', reject);
