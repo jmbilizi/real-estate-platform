@@ -10,6 +10,14 @@ import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neigh
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
 import {
+  agentLeadDeclineRequestSchema,
+  agentLeadDetailSchema,
+  agentLeadsEnvelopeSchema,
+  agentLeadsRequestSchema,
+  agentLeadStatusRequestSchema,
+  agentLeadTransitionResponseSchema,
+} from './agent-leads';
+import {
   agentProfileSchema,
   createAgentProfileRequestSchema,
   staffAgentsEnvelopeSchema,
@@ -114,6 +122,11 @@ function componentSchemas() {
   registry.add(staffLeadAssignRequestSchema, { id: 'StaffLeadAssignRequest' });
   registry.add(staffLeadAssignResponseSchema, { id: 'StaffLeadAssignResponse' });
   registry.add(staffLeadUnassignRequestSchema, { id: 'StaffLeadUnassignRequest' });
+  registry.add(agentLeadsEnvelopeSchema, { id: 'AgentLeadsEnvelope' });
+  registry.add(agentLeadDetailSchema, { id: 'AgentLeadDetail' });
+  registry.add(agentLeadDeclineRequestSchema, { id: 'AgentLeadDeclineRequest' });
+  registry.add(agentLeadStatusRequestSchema, { id: 'AgentLeadStatusRequest' });
+  registry.add(agentLeadTransitionResponseSchema, { id: 'AgentLeadTransitionResponse' });
   registry.add(errorBodySchema, { id: 'ErrorBody' });
 
   const { schemas } = z.toJSONSchema(registry, {
@@ -701,6 +714,155 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads': {
+        get: {
+          operationId: 'listAgentLeads',
+          summary: 'My leads, for an agent',
+          description:
+            'Requires the Agent role and an active agent profile. Only leads with an open ' +
+            'assignment to the caller profile. Newest assignment first, at most 200. Email and ' +
+            'phone are masked in every row. The response is `private, no-store`.',
+          parameters: searchParameters(agentLeadsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The leads assigned to the caller.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentLeadsEnvelope' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}': {
+        get: {
+          operationId: 'getAgentLead',
+          summary: 'One lead of the caller',
+          description:
+            'Requires the Agent role and an active agent profile. `contact` is null while the ' +
+            'status is `assigned`. Accept reveals it. Every read writes an access-audit row. A ' +
+            'lead that is not assigned to the caller answers 404, never 403.',
+          parameters: [staffLeadIdParameter],
+          responses: {
+            '200': {
+              description: 'The lead.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentLeadDetail' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}/accept': {
+        post: {
+          operationId: 'acceptAgentLead',
+          summary: 'Accept an assigned lead',
+          description:
+            'Requires the Agent role and an active agent profile. Moves `assigned` to ' +
+            '`accepted` and records the accept time. The request has no body.',
+          parameters: [staffLeadIdParameter],
+          responses: {
+            '200': {
+              description: 'The lead moved to `accepted`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AgentLeadTransitionResponse' },
+                },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse('The lead is not `assigned` (`conflict`).'),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}/decline': {
+        post: {
+          operationId: 'declineAgentLead',
+          summary: 'Decline an assigned lead',
+          description:
+            'Requires the Agent role and an active agent profile. The reason comes from a fixed ' +
+            'list. The assignment ends with `declined` and the lead returns to `verified` for ' +
+            'staff to match again. Allowed only while the status is `assigned`.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AgentLeadDeclineRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead returned to `verified`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AgentLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse('The lead is not `assigned` (`conflict`).'),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}/status': {
+        post: {
+          operationId: 'updateAgentLeadStatus',
+          summary: 'Move an accepted lead forward',
+          description:
+            'Requires the Agent role and an active agent profile. The transitions table decides ' +
+            'the order: `contacted`, `touring`, `under_contract`, `closed` or `lost`. The lead ' +
+            'must be accepted first. `closed` and `lost` end the assignment. Each change writes ' +
+            'a status event with the agent as actor.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AgentLeadStatusRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead moved to the new status.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AgentLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse(
+              'The lead is not accepted, or the transitions table does not allow the change (`conflict`).',
+            ),
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },

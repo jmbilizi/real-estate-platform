@@ -761,3 +761,21 @@ the Property API document. Never publish a second document.
   `verified` ends the open `lead_assignments` row. `uq_lead_assignments_one_open` allows one open
   row per lead. History rows are never deleted.
 - The e2e stub answers the role check from `setAccountRoles(accountId, roles)`.
+
+### Agent "My leads" (#636)
+
+- `src/agent/agent-leads-routes.ts` serves `GET /agent/leads`, `GET /agent/leads/:id` and
+  `POST /agent/leads/:id/{accept,decline,status}`. The guard is the `Agent` role plus an ACTIVE
+  `agent_profiles` row for the account. A missing profile answers 403.
+- Every query joins on the OPEN `lead_assignments` row of the caller profile. A lead of another
+  agent, an unassigned lead and a malformed id all answer 404, never 403. The ownership check runs
+  BEFORE the transition check, so a 409 never confirms that a lead exists.
+- Before accept (`assigned`) the detail has `contact: null`. The list always masks. Accept moves to
+  `accepted`, sets `lead_assignments.accepted_at` and reveals the contact.
+- Decline takes a reason from `AGENT_DECLINE_REASONS`, only while `assigned`. It stores
+  `decline_reason`, ends the assignment with `end_reason = 'declined'` and returns the lead to
+  `verified`. No lead status is new.
+- `status` takes `contacted`, `touring`, `under_contract`, `closed` or `lost`, only after accept.
+  `closed` and `lost` end the assignment, so the lead leaves the agent list.
+- Every change goes through `changeLeadStatus` with `actorRole = 'Agent'`. Every detail read writes
+  a `lead_access_audit` row with role `Agent`.

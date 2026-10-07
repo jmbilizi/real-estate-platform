@@ -12,3 +12,4 @@ export * from './address-slug';
 export * from './property-page';
 export * from './saved-homes';
 export * from './staff';
+export * from './agent-leads';
