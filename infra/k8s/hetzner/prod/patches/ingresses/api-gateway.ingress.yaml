@@ -26,3 +26,26 @@ spec:
                 name: api-gateway-svc
                 port:
                   number: 8080
+---
+# Same host and TLS secret as api-gateway. The certificate comes from the api-gateway Ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: account-postmark-webhook
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - API_GATEWAY_DOMAIN_PLACEHOLDER
+      secretName: api-gateway-tls
+  rules:
+    - host: API_GATEWAY_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - path: /account/webhooks/postmark
+            pathType: Exact
+            backend:
+              service:
+                name: api-gateway-svc
+                port:
+                  number: 8080

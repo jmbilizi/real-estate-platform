@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: account-postmark-webhook
+  labels:
+    app: api-gateway
+  annotations:
+    # No nginx basic auth here (#713). The account service checks the Postmark Basic
+    # auth itself. Nginx auth would read the same Authorization header and reject Postmark.
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /account/webhooks/postmark
+            pathType: Exact
+            backend:
+              service:
+                name: api-gateway-svc
+                port:
+                  number: 8080

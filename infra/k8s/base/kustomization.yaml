@@ -64,6 +64,7 @@ resources:
   # Ingress rules (external routing - uses Nginx controller above)
   - ingresses/jaeger.ingress.yaml
   - ingresses/api-gateway.ingress.yaml
+  - ingresses/account-postmark-webhook.ingress.yaml
   - ingresses/cribstop-web.ingress.yaml
 
   ## DaemonSets (node-level services like Logging, monitoring, networking on every node)
