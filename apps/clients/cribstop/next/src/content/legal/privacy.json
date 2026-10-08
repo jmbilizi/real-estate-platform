@@ -1,14 +1,92 @@
 {
   "title": "Privacy Policy",
-  "effectiveDate": null,
-  "isDraft": true,
+  "effectiveDate": "2026-10-08",
+  "isDraft": false,
   "sections": [
     {
-      "heading": "Draft placeholder",
+      "heading": "Who we are",
       "body": [
-        "This page is a draft placeholder, not the published Privacy Policy. It carries no approved legal copy.",
-        "Approved copy is pending legal and broker review. See issue #156."
+        "Cribstop.com is a home search website. Real Broker, LLC operates it as a real estate brokerage licensed in Maryland, the District of Columbia and Virginia.",
+        "In this policy, \"we\" and \"us\" mean Real Broker, LLC and Cribstop.com. This policy explains what personal information we collect, why we collect it and how you control it."
       ]
+    },
+    {
+      "heading": "Information we collect",
+      "body": [
+        "Account information: your email address, your name and your phone number if you give one.",
+        "Inquiry information: the message you send about a home, the home you ask about, and a record of your consent to be contacted, with the date and time you gave it.",
+        "Activity information: the homes you save and the areas or services you join a waitlist for.",
+        "Device and usage information: your IP address, browser type, device type, pages you view and the date and time of your visit."
+      ]
+    },
+    {
+      "heading": "How we use your information",
+      "body": [
+        "We use your information to run your account, show homes that match your search, send your inquiry to the right agent, send account emails and keep the site secure.",
+        "We also use it to meet legal duties, to prevent fraud and misuse, and to improve the site.",
+        "We contact you about a home only if you ask us to or if you consent."
+      ]
+    },
+    {
+      "heading": "Who receives your information",
+      "body": [
+        "The listing agent named on a listing receives your inquiry, your name, your contact details and your message.",
+        "Agents of Real Broker, LLC may receive your inquiry and help you when the listing agent is not available.",
+        "Service providers process data for us. These include our transactional email provider, our hosting providers and our map providers. They may use your data only to provide their service to us.",
+        "Listing data comes from Bright MLS. Bright MLS rules require us to show certain attribution and to follow display obligations. These rules do not give Bright MLS your account data.",
+        "We may share information when the law requires it, to enforce our Terms of Service, or in a sale or transfer of our business."
+      ]
+    },
+    {
+      "heading": "We do not sell your personal data",
+      "body": [
+        "We do not sell your personal information. We do not share it with third parties for their own advertising."
+      ]
+    },
+    {
+      "heading": "How long we keep information",
+      "body": [
+        "We keep consent records for 5 years.",
+        "We keep inquiry and lead information for 3 years after your last activity. Then we delete it or make it anonymous.",
+        "We keep account information while your account is open. We may keep some information longer when the law requires it."
+      ]
+    },
+    {
+      "heading": "Cookies and similar technology",
+      "body": [
+        "We use cookies and similar technology to keep you signed in, to remember your settings and to understand how people use the site.",
+        "You can block or delete cookies in your browser settings. Some features, such as sign in, may not work without them."
+      ]
+    },
+    {
+      "heading": "Your choices and rights",
+      "body": [
+        "You can ask to see, correct, export or delete the personal information we hold about you. You can also ask us to stop contacting you.",
+        "Send your request to contact@cribstop.com. We may ask you to confirm your identity before we act on a request.",
+        "You can update your account details in your account settings."
+      ]
+    },
+    {
+      "heading": "Children",
+      "body": [
+        "Cribstop.com is not for anyone under 18. We do not knowingly collect personal information from children. If you think a child gave us information, write to contact@cribstop.com and we will delete it."
+      ]
+    },
+    {
+      "heading": "Security",
+      "body": [
+        "We use reasonable technical and organizational measures to protect your information. No method of transmission or storage is fully secure, so we cannot promise absolute security."
+      ]
+    },
+    {
+      "heading": "Changes to this policy",
+      "body": [
+        "We may update this policy. When we do, we change the effective date at the top of this page. If a change is material, we give notice on the site or by email."
+      ]
+    },
+    {
+      "heading": "Contact us",
+      "body": ["Write to contact@cribstop.com with any question about this policy."]
     }
   ]
 }

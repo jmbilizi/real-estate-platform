@@ -1,0 +1,42 @@
+{
+  "title": "Fair Housing",
+  "effectiveDate": "2026-10-08",
+  "isDraft": false,
+  "sections": [
+    {
+      "heading": "Our commitment",
+      "body": [
+        "Real Broker, LLC is committed to the letter and spirit of the Fair Housing Act. We support equal housing opportunity for everyone.",
+        "We do not discriminate in the sale, rental, financing or advertising of housing. We do not steer anyone toward or away from a home or area because of a protected class."
+      ]
+    },
+    {
+      "heading": "Equal Housing Opportunity",
+      "body": [
+        "We pledge to give equal professional service to all people, without regard to race, color, religion, sex, disability, familial status or national origin."
+      ]
+    },
+    {
+      "heading": "Federal protected classes",
+      "body": [
+        "Federal law protects people from housing discrimination based on race, color, religion, sex (including sexual orientation and gender identity), national origin, familial status and disability."
+      ]
+    },
+    {
+      "heading": "Additional protections in Maryland, DC and Virginia",
+      "body": [
+        "Maryland law also protects marital status, sexual orientation, gender identity and source of income.",
+        "District of Columbia law also protects age, marital status, personal appearance, sexual orientation, gender identity or expression, family responsibilities, matriculation, political affiliation, source of income, status as a victim of an intrafamily offense, and place of residence or business.",
+        "Virginia law also protects elderliness, source of funds, sexual orientation, gender identity and military status.",
+        "The law in your area may give more protection. This list is a summary and not legal advice."
+      ]
+    },
+    {
+      "heading": "Report a concern",
+      "body": [
+        "If you think you faced housing discrimination on or through Cribstop.com, write to contact@cribstop.com.",
+        "You can also file a complaint with the U.S. Department of Housing and Urban Development (HUD) or with your state or local fair housing agency."
+      ]
+    }
+  ]
+}

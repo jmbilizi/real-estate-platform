@@ -95,7 +95,7 @@ describe('AuthForm', () => {
       expect(field).toHaveAttribute('spellcheck', 'false');
     });
 
-    it('links both legal pages and does not claim agreement while they are drafts', () => {
+    it('links both legal pages and states agreement', () => {
       render(<AuthForm />);
 
       expect(screen.getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
@@ -106,8 +106,8 @@ describe('AuthForm', () => {
         'href',
         '/privacy',
       );
-      expect(screen.queryByText(/you agree to/i)).not.toBeInTheDocument();
-      expect(screen.getByText(/draft, pending approval/i)).toBeInTheDocument();
+      expect(screen.getByText(/By continuing, you agree to our/i)).toBeInTheDocument();
+      expect(screen.queryByText(/draft|pending/i)).not.toBeInTheDocument();
     });
 
     it('focuses the email field on first render', () => {

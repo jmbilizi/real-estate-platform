@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { render, screen, waitFor } from '@testing-library/react';
 import Footer from './Footer';
 import { getListingsMeta } from '@/lib/api/listings';
@@ -168,5 +170,25 @@ describe('Footer', () => {
     // Chrome unrelated to the fetch — brand prominence — must still be there.
     expect(screen.getByText('Equal Housing Opportunity')).toBeInTheDocument();
     expect(screen.getByText(/Brokered by Real Broker LLC/)).toBeInTheDocument();
+  });
+
+  it('links the four legal pages, and each link has a route', async () => {
+    mockedGetListingsMeta.mockResolvedValue({ dataUpdatedAt: null, sources: [], listingCount: 0 });
+
+    render(<Footer />);
+
+    const links = {
+      'Terms of Service': '/terms',
+      'Privacy Policy': '/privacy',
+      'Fair Housing': '/fair-housing',
+      Accessibility: '/accessibility',
+    };
+    for (const [name, href] of Object.entries(links)) {
+      expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
+      expect(
+        fs.existsSync(path.join(__dirname, '..', 'app', '(pill-only)', href, 'page.tsx')),
+      ).toBe(true);
+    }
+    await waitFor(() => expect(mockedGetListingsMeta).toHaveBeenCalled());
   });
 });

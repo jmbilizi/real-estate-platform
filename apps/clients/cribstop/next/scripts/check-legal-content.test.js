@@ -20,19 +20,8 @@ function runGate(env) {
 
 describe('check-legal-content.js', () => {
   describe('prod deploy (DEPLOYMENT_ENV=prod)', () => {
-    it('fails while a legal content module is a draft placeholder (current state, pending #156)', () => {
-      expect(() => runGate({ DEPLOYMENT_ENV: 'prod' })).toThrow(/Command failed/);
-    });
-
-    it('reports both content modules by name when both are drafts', () => {
-      try {
-        runGate({ DEPLOYMENT_ENV: 'prod' });
-        throw new Error('expected the gate script to exit non-zero');
-      } catch (error) {
-        const output = error.stderr ?? '';
-        expect(output).toMatch(/privacy\.json/);
-        expect(output).toMatch(/terms\.json/);
-      }
+    it('passes with the published content modules', () => {
+      expect(runGate({ DEPLOYMENT_ENV: 'prod' })).toBe('');
     });
   });
 
