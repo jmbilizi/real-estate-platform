@@ -302,6 +302,14 @@ that empties `listings` while the checkpoint still reads complete still refills.
   listing absent from all of them becomes `Off Market`. It refuses when a status read falls more
   than 1 % short of Bright's own count, or when it would change more than 20 % of the local
   listings.
+- **Probe**, every `BRIGHT_SYNC_PROBE_INTERVAL_MS` (daily, #715): asks Bright about every live local
+  key in batches of 100 (`ListingKey in ('a','b',...)`, `$select=ListingKey,StandardStatus`). Bright
+  rejects a batched `or`. About 91,000 keys is 910 requests, a few minutes at the sync's request
+  rate. A key becomes `Off Market` when Bright returns it in a status that search does not show, or
+  when a complete batch answer and a read of that key alone both omit it. A failed, truncated or
+  malformed batch leaves its keys live and counts as errors. A run that finds more than
+  `BRIGHT_SYNC_PROBE_MAX_TAKEDOWN` (500) keys takes down nothing and logs the abort. Code:
+  `src/jobs/bright-sync/probe.ts`. It has no per-environment flag.
 - **Audit**, after a backfill and after each reconcile: Bright `$count` against the local count per
   status for the places in `DEFAULT_AUDIT_AREAS`. The rows go to the run's `counts`.
 
@@ -345,12 +353,12 @@ data.
 `requested_by`. `store.ts` is the only module that writes it or `bright_sync_state`.
 
 **Admin endpoint** (`src/admin/bright-sync-routes.ts`): `POST /admin/bright/sync` with
-`{ mode: incremental | backfill | reconcile | audit, statuses?, area? }` queues a run and returns
-`202 { runId }`. `GET /admin/bright/sync` and `GET /admin/bright/sync/:runId` show runs. It needs
-`Authorization: Bearer <BRIGHT_ADMIN_TOKEN>` (`bright-mls-secret`). An unset token or the committed
-placeholder refuses every request. `statuses` takes payload values (`ComingSoon`), never filter
-labels. **Assumption:** no user auth or roles exist yet, so no gateway route exposes it. Reach it by
-port-forward to 3002. Replace the token with role auth when account roles ship.
+`{ mode: incremental | backfill | reconcile | audit | probe, statuses?, area? }` queues a run and
+returns `202 { runId }`. `GET /admin/bright/sync` and `GET /admin/bright/sync/:runId` show runs. It
+needs `Authorization: Bearer <BRIGHT_ADMIN_TOKEN>` (`bright-mls-secret`). An unset token or the
+committed placeholder refuses every request. `statuses` takes payload values (`ComingSoon`), never
+filter labels. **Assumption:** no user auth or roles exist yet, so no gateway route exposes it.
+Reach it by port-forward to 3002. Replace the token with role auth when account roles ship.
 
 **The detail page still calls Bright** for one listing's gallery (`listings/gallery-loader.ts`),
 bounded by `BRIGHT_ON_DEMAND_GALLERY_WAIT_MS`. The property lookup's miss path (above) is the only
