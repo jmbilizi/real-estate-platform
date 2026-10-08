@@ -65,7 +65,7 @@ runs:
         kubectl version --client
         kubectl cluster-info
 
-    - name: Substitute secrets (Postgres, Redis, Ingress, Bright MLS, Postmark)
+    - name: Substitute secrets (Postgres, Redis, Ingress, Bright MLS, Postmark, account-service)
       shell: bash
       run: |
         # In-memory substitution pattern; overwrite templates in workspace
@@ -133,6 +133,34 @@ runs:
           mv /tmp/bright-mls-admin.secret.processed.yaml infra/k8s/base/secrets/bright-mls.secret.yaml
         else
           echo "ℹ️  BRIGHT_ADMIN_TOKEN is not set for this environment. The committed placeholder stays in the Secret and the admin sync endpoint refuses every request."
+        fi
+
+        # account-service secrets (#669). Each key is guarded alone: an unset variable must not write
+        # null into stringData. The committed placeholder means "not configured": email codes refuse
+        # and the Postmark webhook answers 401.
+        if [ -n "$ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY" ]; then
+          echo "🔐 account-service email code HMAC key present for this environment — substituting."
+          yq eval '.stringData.ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY = env(ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY)' infra/k8s/base/secrets/account-service.secret.yaml \
+          > /tmp/account-service.hmac.processed.yaml
+          mv /tmp/account-service.hmac.processed.yaml infra/k8s/base/secrets/account-service.secret.yaml
+        else
+          echo "::warning::ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY is not set for this environment. The placeholder stays and email codes refuse every call."
+        fi
+        if [ -n "$ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD" ]; then
+          echo "🔐 account-service Postmark webhook password present for this environment — substituting."
+          yq eval '.stringData.ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD = env(ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD)' infra/k8s/base/secrets/account-service.secret.yaml \
+          > /tmp/account-service.webhook-password.processed.yaml
+          mv /tmp/account-service.webhook-password.processed.yaml infra/k8s/base/secrets/account-service.secret.yaml
+        else
+          echo "::warning::ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD is not set for this environment. The placeholder stays and the Postmark webhook answers 401."
+        fi
+        if [ -n "$ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER" ]; then
+          echo "🔐 account-service Postmark webhook user present for this environment — substituting."
+          yq eval '.stringData.ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER = env(ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER)' infra/k8s/base/secrets/account-service.secret.yaml \
+          > /tmp/account-service.webhook-user.processed.yaml
+          mv /tmp/account-service.webhook-user.processed.yaml infra/k8s/base/secrets/account-service.secret.yaml
+        else
+          echo "::warning::ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER is not set for this environment. The placeholder stays and the Postmark webhook answers 401."
         fi
 
         # Postmark (#175). Guarded for the same reason as Bright MLS above: the token is absent

@@ -78,6 +78,21 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: ACCOUNT_SERVICE_DB_USER_PASSWORD
+            - name: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
+            - name: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD
+            - name: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER
           livenessProbe:
             httpGet:
               path: /account/health

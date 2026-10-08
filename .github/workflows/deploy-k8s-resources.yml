@@ -109,6 +109,10 @@ jobs:
           # dev and test hold a Postmark sandbox token, prod holds the only live one (#133). No
           # repository secret of this name exists, so GitHub has no fallback to resolve.
           POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
+          # account-service (#669). The webhook user is not secret, so it is a repository variable.
+          ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY: ${{ secrets.ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY }}
+          ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD }}
+          ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER: ${{ vars.ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER }}
           REDIS_ADMIN_PASSWORD: ${{ secrets.REDIS_ADMIN_PASSWORD }}
           REDIS_PUBSUB_PASSWORD: ${{ secrets.REDIS_PUBSUB_PASSWORD }}
           REDIS_CACHE_PASSWORD: ${{ secrets.REDIS_CACHE_PASSWORD }}
