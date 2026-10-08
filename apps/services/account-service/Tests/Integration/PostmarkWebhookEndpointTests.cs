@@ -87,6 +87,19 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task WhenUserAndPasswordAreTheCommittedPlaceholder_EveryCallReturns401()
+        {
+            var placeholder = PostmarkOptions.PlaceholderServerToken;
+            using var factory = new WebhookFactory(user: placeholder, password: placeholder);
+            using var client = factory.CreateClient();
+
+            var response = await Post(client, HardBounce(Address), placeholder, placeholder);
+
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            (await Rows(factory)).Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task HardBounce_SuppressesTheNormalizedAddress()
         {
             using var factory = new WebhookFactory();

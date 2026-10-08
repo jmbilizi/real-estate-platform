@@ -366,6 +366,8 @@ subjects:
 apiVersion: v1
 data:
   allow-snippet-annotations: "false"
+  compute-full-forwarded-for: "false"
+  use-forwarded-headers: "false"
 kind: ConfigMap
 metadata:
   labels:
@@ -728,6 +730,22 @@ metadata:
     managed-by: gitops
     provider: hetzner
   name: redis-config
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app: account-service
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: account-service-secret
+stringData:
+  ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY: StrongBase64Password
+  ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD: StrongBase64Password
+  ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER: StrongBase64Password
+type: Opaque
 ---
 apiVersion: v1
 kind: Secret
@@ -1172,6 +1190,26 @@ spec:
                 secretKeyRef:
                   key: ACCOUNT_SERVICE_DB_USER_PASSWORD
                   name: postgres-secret
+            - name: POSTMARK_SERVER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: POSTMARK_SERVER_TOKEN
+                  name: postmark-secret
+            - name: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
+                  name: account-service-secret
+            - name: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD
+                  name: account-service-secret
+            - name: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER
+                  name: account-service-secret
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/account-service:dev
           imagePullPolicy: Always
           livenessProbe:
@@ -1272,6 +1310,8 @@ spec:
               value: "true"
             - name: ASPNETCORE_URLS
               value: http://+:8080
+            - name: TRUSTED_PROXY_NETWORKS
+              value: 10.244.0.0/16
             - name: K8S_POD_NAME
               valueFrom:
                 fieldRef:
@@ -1616,6 +1656,17 @@ spec:
               value: "20"
             - name: INQUIRY_RATE_LIMIT_PER_LISTING_WINDOW_MS
               value: "3600000"
+            - name: POSTMARK_SERVER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: POSTMARK_SERVER_TOKEN
+                  name: postmark-secret
+            - name: INQUIRY_INTAKE_ADDRESS
+              valueFrom:
+                secretKeyRef:
+                  key: INQUIRY_INTAKE_ADDRESS
+                  name: postmark-secret
+                  optional: true
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/property-service:dev
           imagePullPolicy: Always
           livenessProbe:
