@@ -27,6 +27,7 @@ import {
   createHttpIntrospectionClient,
   type IntrospectionClient,
 } from './inquiries/account-introspection';
+import { type ContactsClient, createHttpContactsClient } from './inquiries/account-contacts';
 import { createRateLimiter, type RateLimiter } from './inquiries/rate-limit';
 
 /**
@@ -45,6 +46,10 @@ const OPEN_API_DOCUMENT = toOpenApiDocument();
 const DEFAULT_ACCOUNT_SERVICE_INTROSPECT_URL =
   'http://account-service-svc:8080/internal/account/introspect';
 const DEFAULT_ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS = 2000;
+/** account-service's internal contacts endpoint (#689, #691). A short timeout: a list page waits on it. */
+const DEFAULT_ACCOUNT_SERVICE_CONTACTS_URL =
+  'http://account-service-svc:8080/internal/account/contacts';
+const DEFAULT_ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS = 1500;
 
 /** `/health/ready`'s own timeout on `SELECT 1` (#388), independent of the pool's statement_timeout,
  *  so a hung connection acquisition (not just a slow query) still fails the probe promptly. */
@@ -95,6 +100,17 @@ function defaultIntrospectionClient(): IntrospectionClient {
   });
 }
 
+/** Builds the real contacts client (#691). */
+function defaultContactsClient(): ContactsClient {
+  return createHttpContactsClient({
+    url: process.env.ACCOUNT_SERVICE_CONTACTS_URL ?? DEFAULT_ACCOUNT_SERVICE_CONTACTS_URL,
+    timeoutMs: envInt(
+      'ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS',
+      DEFAULT_ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS,
+    ),
+  });
+}
+
 /** Builds the real Agent-role check (#634). It reaches the same account-service as introspection. */
 function defaultAgentRoleChecker(): AgentRoleChecker {
   const introspectUrl =
@@ -139,6 +155,8 @@ export interface CreateAppOptions {
   introspection?: IntrospectionClient;
   /** Injected so tests can exercise the agent directory without account-service (#634). */
   agentRoles?: AgentRoleChecker;
+  /** Injected so tests can exercise the lead dashboards without account-service (#691). */
+  contacts?: ContactsClient;
   /** Injected so tests can exercise rate limiting deterministically (#131). */
   rateLimiter?: RateLimiter;
   /**
@@ -165,6 +183,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
   const pool = options.pool ?? (getPool() as unknown as ReadPool);
   const introspection = options.introspection ?? defaultIntrospectionClient();
+  const contacts = options.contacts ?? defaultContactsClient();
   const rateLimiter = options.rateLimiter ?? defaultRateLimiter();
 
   // Only the inquiry endpoint takes a body; every other route in this service is a GET. A small
@@ -227,6 +246,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       pool: pool as unknown as Queryable & TransactionalPool,
       introspection,
       agingHours: agingHoursFromEnv(),
+      contacts,
     }),
   );
   app.use(
@@ -240,6 +260,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     createAgentLeadsRouter({
       pool: pool as unknown as Queryable & TransactionalPool,
       introspection,
+      contacts,
     }),
   );
   app.use(createBrightSyncAdminRouter(pool as unknown as SyncQueryable, options.adminToken));

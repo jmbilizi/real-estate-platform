@@ -13,6 +13,8 @@ import { complianceFixtureIds } from './support/fixture-ids';
 import {
   bearerFor,
   introspectionStubUrl,
+  setContact,
+  setContactsDown,
   startIntrospectionStub,
   stopIntrospectionStub,
 } from './support/introspection-stub';
@@ -49,6 +51,9 @@ interface LeadSeed {
   listingId?: string;
   kind?: 'message' | 'tour_request';
   status?: string;
+  /** The buyer account. A new one when omitted. */
+  account?: string;
+  /** The email the contacts stub reports for the account. */
   email?: string;
   phone?: string | null;
   createdAt?: string;
@@ -56,18 +61,23 @@ interface LeadSeed {
 
 /** A test-only insert, so a spec controls `created_at` and `status`. */
 async function seedLead(seed: LeadSeed = {}): Promise<string> {
+  const account = seed.account ?? randomUUID();
+  setContact(account, {
+    displayName: 'E2E Lead',
+    email: seed.email ?? `${account}@e2e.example.com`,
+  });
   const { rows } = await pool().query<{ id: string }>(
     `INSERT INTO listing_inquiries
-       (listing_id, kind, name, email, phone, message, status, created_at, account_id)
-     VALUES ($1, $2, 'E2E Lead', $3, $4, 'Hello (e2e)', $5, COALESCE($6::timestamptz, now()), gen_random_uuid())
+       (listing_id, kind, phone, message, status, created_at, account_id)
+     VALUES ($1, $2, $3, 'Hello (e2e)', $4, COALESCE($5::timestamptz, now()), $6)
      RETURNING id`,
     [
       seed.listingId ?? listingA,
       seed.kind ?? 'message',
-      seed.email ?? `${randomUUID()}@e2e.example.com`,
       seed.phone ?? null,
       seed.status ?? 'new',
       seed.createdAt ?? null,
+      account,
     ],
   );
   const id = rows[0]?.id;
@@ -155,6 +165,26 @@ describe('GET /staff/leads', () => {
     expect(wire).not.toContain('Hello (e2e)');
   });
 
+  it('still lists the lead, with the contact null, while the contacts lookup is down (#691)', async () => {
+    const id = await seedLead({ createdAt: at(2018, 1) });
+    setContactsDown(true);
+    try {
+      const res = await list(window(2018));
+      expect(res.status).toBe(200);
+      const row = staffLeadsEnvelopeSchema.parse(res.data).results.find((r) => r.id === id);
+      expect(row).toMatchObject({
+        id,
+        status: 'new',
+        name: null,
+        emailMasked: null,
+        verifiedAccount: null,
+      });
+      expect(JSON.stringify(res.data)).not.toMatch(/account-service|localhost/);
+    } finally {
+      setContactsDown(false);
+    }
+  });
+
   it('pages newest first with a bounded page size and no overlap', async () => {
     const ids: string[] = [];
     for (let day = 1; day <= 5; day += 1) {
@@ -225,10 +255,10 @@ describe('GET /staff/leads', () => {
         .parse((await list(window(year))).data)
         .results.find((r) => r.id === id)?.possibleDuplicate;
 
-    it('flags the same email on the same listing within seven days, and merges nothing', async () => {
-      const email = `Dup.${randomUUID()}@E2E.example.com`;
-      const first = await seedLead({ email, createdAt: at(2095, 1) });
-      const second = await seedLead({ email: email.toLowerCase(), createdAt: at(2095, 5) });
+    it('flags the same account on the same listing within seven days, and merges nothing', async () => {
+      const account = randomUUID();
+      const first = await seedLead({ account, createdAt: at(2095, 1) });
+      const second = await seedLead({ account, createdAt: at(2095, 5) });
       expect(await flagOf(2095, first)).toBe(true);
       expect(await flagOf(2095, second)).toBe(true);
       const all = staffLeadsEnvelopeSchema.parse((await list(window(2095))).data);
@@ -243,17 +273,17 @@ describe('GET /staff/leads', () => {
     });
 
     it('does not flag past the window, on another listing, or against a closed request', async () => {
-      const email = `${randomUUID()}@e2e.example.com`;
-      const early = await seedLead({ email, createdAt: at(2097, 1) });
-      const late = await seedLead({ email, createdAt: at(2097, 10) });
-      const elsewhere = await seedLead({ email, createdAt: at(2097, 11), listingId: listingB });
+      const account = randomUUID();
+      const early = await seedLead({ account, createdAt: at(2097, 1) });
+      const late = await seedLead({ account, createdAt: at(2097, 10) });
+      const elsewhere = await seedLead({ account, createdAt: at(2097, 11), listingId: listingB });
       expect(await flagOf(2097, early)).toBe(false);
       expect(await flagOf(2097, late)).toBe(false);
       expect(await flagOf(2097, elsewhere)).toBe(false);
 
-      const mail2 = `${randomUUID()}@e2e.example.com`;
-      const spam = await seedLead({ email: mail2, status: 'spam', createdAt: at(2098, 1) });
-      const live = await seedLead({ email: mail2, createdAt: at(2098, 2) });
+      const account2 = randomUUID();
+      const spam = await seedLead({ account: account2, status: 'spam', createdAt: at(2098, 1) });
+      const live = await seedLead({ account: account2, createdAt: at(2098, 2) });
       expect(await flagOf(2098, live)).toBe(false);
       expect(await flagOf(2098, spam)).toBe(true);
     });
@@ -275,11 +305,12 @@ describe('GET /staff/leads/:id', () => {
     expect(res.headers['cache-control']).toContain('no-store');
     const detail = staffLeadDetailSchema.parse(res.data);
     expect(detail).toMatchObject({
+      name: 'E2E Lead',
       email: 'full.detail@e2e.example.com',
       phone: '202-555-0199',
       message: 'Hello (e2e)',
       status: 'new',
-      verifiedAccount: false,
+      verifiedAccount: true,
       possibleDuplicate: false,
       listing: { id: listingA },
     });
@@ -296,10 +327,30 @@ describe('GET /staff/leads/:id', () => {
     ]);
   });
 
+  it('returns the lead with the contact null, and still audits, while the lookup is down (#691)', async () => {
+    const id = await seedLead({ createdAt: at(2017, 1) });
+    setContactsDown(true);
+    try {
+      const res = await axios.get(`/staff/leads/${id}`, asAdmin);
+      expect(res.status).toBe(200);
+      expect(staffLeadDetailSchema.parse(res.data)).toMatchObject({
+        id,
+        name: null,
+        email: null,
+        verifiedAccount: null,
+        message: 'Hello (e2e)',
+      });
+    } finally {
+      setContactsDown(false);
+    }
+    const audit = await pool().query('SELECT 1 FROM lead_access_audit WHERE lead_id = $1', [id]);
+    expect(audit.rows).toHaveLength(1);
+  });
+
   it('lists the ids of a duplicate on the detail', async () => {
-    const email = `${randomUUID()}@e2e.example.com`;
-    const first = await seedLead({ email, createdAt: at(2089, 1) });
-    const second = await seedLead({ email, createdAt: at(2089, 2) });
+    const account = randomUUID();
+    const first = await seedLead({ account, createdAt: at(2089, 1) });
+    const second = await seedLead({ account, createdAt: at(2089, 2) });
     const detail = staffLeadDetailSchema.parse(
       (await axios.get(`/staff/leads/${second}`, asAdmin)).data,
     );

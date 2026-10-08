@@ -127,6 +127,11 @@ spec:
               value: "http://account-service-svc:8080/internal/account/introspect"
             - name: ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS
               value: "2000"
+            # Buyer contact lookup for the staff and agent lead dashboards (#689, #691).
+            - name: ACCOUNT_SERVICE_CONTACTS_URL
+              value: "http://account-service-svc:8080/internal/account/contacts"
+            - name: ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS
+              value: "1500"
             # Listing-inquiry rate limits (#131), per IP and per listing. Configuration, not
             # constants, so tuning them needs no code change — see property-service/src/app.ts.
             - name: INQUIRY_RATE_LIMIT_PER_IP_MAX

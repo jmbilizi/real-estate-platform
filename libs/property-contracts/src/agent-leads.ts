@@ -49,7 +49,7 @@ export const agentLeadListItemSchema = z.object({
   status: leadStatusSchema,
   listing: staffLeadListingSchema,
   /** Masked: first character, then `***`, then the domain. */
-  emailMasked: z.string(),
+  emailMasked: z.string().nullable(),
   /** Masked: only the last four digits. Null when the buyer gave no phone. */
   phoneMasked: z.string().nullable(),
 });
@@ -59,8 +59,9 @@ export const agentLeadsEnvelopeSchema = z.object({ results: z.array(agentLeadLis
 export type AgentLeadsEnvelope = z.infer<typeof agentLeadsEnvelopeSchema>;
 
 export const agentLeadContactSchema = z.object({
-  name: z.string(),
-  email: z.string(),
+  /** Name and email come from the buyer's account (#691). Null when account-service cannot answer. */
+  name: z.string().nullable(),
+  email: z.string().nullable(),
   phone: z.string().nullable(),
   message: z.string().nullable(),
   consent: z.object({

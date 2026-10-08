@@ -658,10 +658,10 @@ behind roles (#632).
 - **An account is required (#690).** The route runs rate limiting, then `resolveRequester`, then the
   body and listing checks. No credential gives 401 with no listing data. An unconfirmed email gives
   403 (`forbidden`). An account-service outage gives 503, never 401. The body has no `name` or
-  `email`, and the route drops both if a client sends them. The contact email is the account email.
-  `listing_inquiries.account_id` is NOT NULL (migration 052 deleted the anonymous dev leads).
-  `verified_account` is always `true`. The `email` and `name` columns stay until #691. Both hold the
-  account email, because introspection returns no name.
+  `email`, and the route drops both if a client sends them. `listing_inquiries.account_id` is NOT
+  NULL (migration 052 deleted the anonymous dev leads). A lead stores no name, email or
+  `verified_account` (migration 053, #691). The buyer contact comes from account-service at read
+  time. See "Buyer contact lookup".
 
 - `write.ts` is the only module that writes `listing_inquiries`, mirroring `src/db/write.ts`'s rule
   for `listings`.
@@ -706,17 +706,17 @@ and the `delivery_*` columns of `listing_inquiries` are removed (migration 051).
   `lead.accepted` through `enqueueLeadNotifications`.
 - A buyer row needs recorded email consent (`consent_channels` holds `email`). An agent row exists
   only for `lead.assigned`.
-- A row holds ids only. `recipient_ref` is the account id, else the lead id (`recipient_ref_type`
-  says which), or the agent profile id. `payload` is `{ leadId }`. Never copy an email or a phone.
+- A row holds ids only. `recipient_account_id` is always an account id: the buyer's, or the account
+  of the agent profile (mapped at write time, #691). `payload` is `{ leadId }`. Never copy an email
+  or a phone.
 - Every row starts `held`. No code in this service updates a row. `outbox.spec.ts` fails if a source
   file updates the outbox, reads it, or calls a mail provider.
 - **A later sender** claims rows in one statement:
   `UPDATE notification_outbox SET state = 'queued' WHERE id IN (SELECT id FROM notification_outbox WHERE state = 'held' ORDER BY created_at LIMIT n FOR UPDATE SKIP LOCKED) RETURNING *`.
-  It resolves the address at send time (account-service for an account id, `listing_inquiries.email`
-  for a lead id) and re-checks consent. Then it sets `sent` or `failed`. A withdrawn consent sets
-  `cancelled`. A lead assigned twice writes two `lead.assigned` rows, so the sender must
-  de-duplicate. The sender is a new ticket. Broker sign-off (#630) and the CAN-SPAM duties come
-  first.
+  It resolves the address at send time (account-service contacts lookup, by account id) and
+  re-checks consent. Then it sets `sent` or `failed`. A withdrawn consent sets `cancelled`. A lead
+  assigned twice writes two `lead.assigned` rows, so the sender must de-duplicate. The sender is a
+  new ticket. Broker sign-off (#630) and the CAN-SPAM duties come first.
 
 The `postmark-secret` reference stays in the deployment. account-service uses Postmark for account
 emails.
@@ -748,18 +748,35 @@ the Property API document. Never publish a second document.
 - `GET /staff/me` returns `{ roles }` for any valid credential. It needs no role.
 - Introspection runs once per request. Nothing caches it.
 
+## Buyer contact lookup (#691)
+
+- A lead keeps `account_id` only. Staff list and detail, agent list and detail read `displayName`,
+  `email` and `emailConfirmed` from account-service `POST /internal/account/contacts` (#689).
+  `src/inquiries/account-contacts.ts` is the client. Env: `ACCOUNT_SERVICE_CONTACTS_URL` and
+  `ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS` (default 1500). Same in-cluster trust as introspection.
+- One lookup per list page. The client splits at 100 ids. Nothing is cached.
+- A failed lookup returns `null`. Lists still return every lead with `name`, `emailMasked` and
+  `verifiedAccount` null. A detail still returns the lead with `name`, `email` and `verifiedAccount`
+  null, and the audit row is still written. An id that account-service does not return reads the
+  same way. The UI shows "Unavailable, retry". No error names account-service.
+- Masking is unchanged: staff lists mask, staff detail is full, an agent sees the contact only after
+  accept.
+- The e2e stub (`tests/support/introspection-stub.ts`) also serves the contacts endpoint.
+  `e2e-serve-defaults.js` points `ACCOUNT_SERVICE_CONTACTS_URL` at it.
+
 ## Staff lead desk (#632)
 
 - `src/staff/leads-routes.ts` serves `/staff/leads` (list), `/staff/leads/:id` (detail),
   `/staff/leads/:id/transition` and `/staff/leads/:id/notes`. Allowed: `Admin`, `SuperAdmin`,
   `Moderator`. `Agent` and buyers get 403.
-- The list masks email and phone. Only the detail returns full values, and every detail read writes
-  a `lead_access_audit` row before the service reads the rest. A failed audit insert returns 500.
+- The list masks email and phone. Name and email come from the buyer account (see "Buyer contact
+  lookup"). Only the detail returns full values, and every detail read writes a `lead_access_audit`
+  row before the service reads the rest. A failed audit insert returns 500.
 - A Moderator sets `verified`, `spam` and `rejected`. Admin also sets `new` (undo spam). Every
   change runs through `changeLeadStatus`. A note is required for `spam` and `rejected`.
-- `possibleDuplicate`: another open lead, same listing, within 7 days, same normalized email or last
-  ten phone digits. It is a hint. Nothing merges or drops a lead. Migration 048 indexes match the
-  expressions in `leads-store.ts`. Change both together.
+- `possibleDuplicate`: another open lead, same listing, within 7 days, same buyer account or last
+  ten phone digits. It is a hint. Nothing merges or drops a lead. The indexes of migrations 048
+  (phone) and 053 (account) match the expressions in `leads-store.ts`. Change both together.
 - `lead_notes` and `lead_access_audit` are append-only by trigger.
 - The e2e stub carries roles in the bearer token: `bearerFor(accountId, ['Admin'])`.
 - `GET /staff/leads/metrics` (#639, `metrics-store.ts`) returns counts, the median and p90 of time

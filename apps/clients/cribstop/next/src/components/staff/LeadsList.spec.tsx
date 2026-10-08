@@ -44,6 +44,20 @@ it('shows a skeleton, then masked rows with badges', async () => {
   expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
 });
 
+it('shows the contact unavailable, and the lead id link and status, when the lookup failed (#691)', async () => {
+  fetchLeads.mockResolvedValue({
+    results: [item(1, { name: null, emailMasked: null, verifiedAccount: null })],
+    nextCursor: null,
+  });
+  render(<LeadsList />);
+  expect((await screen.findAllByText('Unavailable, retry')).length).toBeGreaterThan(0);
+  expect(screen.getByRole('link')).toHaveAttribute(
+    'href',
+    '/admin/leads/00000000-0000-4000-8000-000000000001',
+  );
+  expect(screen.getByRole('link')).toHaveTextContent('New');
+});
+
 it('pages with the cursor and appends', async () => {
   fetchLeads
     .mockResolvedValueOnce({ results: [item(1)], nextCursor: 'c1' })

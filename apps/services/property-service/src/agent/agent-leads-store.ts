@@ -6,6 +6,11 @@ import {
   type ConsentChannel,
   type LeadStatus,
 } from '@cribstop/property-contracts';
+import {
+  type AccountContact,
+  contactName,
+  type ContactsClient,
+} from '../inquiries/account-contacts';
 import type { Queryable } from '../inquiries/write';
 import { maskEmail, maskPhone } from '../staff/leads-store';
 
@@ -78,8 +83,7 @@ interface Row {
   accepted_at: Date | null;
   kind: AgentLeadListItem['kind'];
   status: LeadStatus;
-  name: string;
-  email: string;
+  account_id: string;
   phone: string | null;
   message: string | null;
   consent_to_contact: boolean;
@@ -95,7 +99,7 @@ interface Row {
 }
 
 const SELECT = `
-  SELECT i.id, i.created_at, a.assigned_at, a.accepted_at, i.kind, i.status, i.name, i.email,
+  SELECT i.id, i.created_at, a.assigned_at, a.accepted_at, i.kind, i.status, i.account_id,
          i.phone, i.message, i.consent_to_contact, i.consent_disclosure_text,
          i.consent_channels, i.consent_given_at, i.listing_id,
          l.title AS listing_title, p.address_raw AS listing_address, p.state AS listing_state,
@@ -105,7 +109,7 @@ const SELECT = `
     JOIN listings l ON l.id = i.listing_id
     JOIN properties p ON p.id = l.property_id`;
 
-const toListItem = (row: Row): AgentLeadListItem => ({
+const toListItem = (row: Row, contact: AccountContact | undefined): AgentLeadListItem => ({
   id: row.id,
   createdAt: row.created_at.toISOString(),
   assignedAt: row.assigned_at.toISOString(),
@@ -120,12 +124,14 @@ const toListItem = (row: Row): AgentLeadListItem => ({
     listPrice: row.listing_price === null ? null : Number(row.listing_price),
     status: row.listing_status,
   },
-  emailMasked: maskEmail(row.email),
+  emailMasked: contact?.email ? maskEmail(contact.email) : null,
   phoneMasked: maskPhone(row.phone),
 });
 
+/** One contact lookup per call. A failed lookup leaves `emailMasked` null. */
 export async function listAgentLeads(
   pool: Queryable,
+  contacts: ContactsClient,
   agentProfileId: string,
   status: LeadStatus | undefined,
 ): Promise<AgentLeadListItem[]> {
@@ -142,16 +148,19 @@ export async function listAgentLeads(
       LIMIT ${LIST_LIMIT}`,
     params,
   );
-  return rows.map(toListItem);
+  const found = await contacts.lookup(rows.map((row) => row.account_id));
+  return rows.map((row) => toListItem(row, found.get(row.account_id)));
 }
 
 /**
  * The lead of the caller, or `null` when the caller holds no open assignment on it. Writes the
  * access-audit row BEFORE it returns the row, and a failed insert rejects, so no detail read goes
- * unrecorded. Contact details leave only when the status is past `assigned`.
+ * unrecorded. Contact details leave only when the status is past `assigned`. The lookup runs beside
+ * the audit insert, and a failed lookup leaves `name` and `email` null.
  */
 export async function readAgentLeadDetail(
   pool: Queryable,
+  contacts: ContactsClient,
   agentProfileId: string,
   leadId: string,
   actor: { accountId: string },
@@ -164,18 +173,23 @@ export async function readAgentLeadDetail(
   const row = rows[0];
   if (row === undefined) return null;
 
-  await pool.query(
-    'INSERT INTO lead_access_audit (lead_id, actor_account_id, actor_role) VALUES ($1, $2, $3)',
-    [leadId, actor.accountId, 'Agent'],
-  );
+  // The lookup runs beside the audit insert. The response still waits for the insert.
+  const [, found] = await Promise.all([
+    pool.query(
+      'INSERT INTO lead_access_audit (lead_id, actor_account_id, actor_role) VALUES ($1, $2, $3)',
+      [leadId, actor.accountId, 'Agent'],
+    ),
+    contacts.lookup([row.account_id]),
+  ]);
 
   const revealed = row.status !== 'assigned';
+  const contact = found.get(row.account_id);
   return {
-    ...toListItem(row),
+    ...toListItem(row, contact),
     contact: revealed
       ? {
-          name: row.name,
-          email: row.email,
+          name: contact ? contactName(contact) : null,
+          email: contact?.email ?? null,
           phone: row.phone,
           message: row.message,
           consent: {

@@ -46,10 +46,10 @@ async function seedJourney(
   const status = steps.at(-1)?.to ?? 'new';
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO listing_inquiries
-       (listing_id, kind, name, email, message, status, created_at, account_id)
-     VALUES ($1, $2, 'E2E Lead', $3, 'Hello (e2e)', $4, $5::timestamptz, gen_random_uuid())
+       (listing_id, kind, message, status, created_at, account_id)
+     VALUES ($1, $2, 'Hello (e2e)', $3, $4::timestamptz, gen_random_uuid())
      RETURNING id`,
-    [listing, kind, `${randomUUID()}@e2e.example.com`, status, new Date(T0).toISOString()],
+    [listing, kind, status, new Date(T0).toISOString()],
   );
   const id = rows[0]?.id;
   if (id === undefined) throw new Error('seed failed');

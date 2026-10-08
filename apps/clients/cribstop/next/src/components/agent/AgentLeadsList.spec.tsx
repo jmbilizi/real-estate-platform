@@ -54,6 +54,13 @@ it('shows a skeleton, then new assignments before the rest', async () => {
   );
 });
 
+it('shows the contact unavailable when the lookup failed (#691)', async () => {
+  fetchAgentLeads.mockResolvedValue({ results: [item(1, { emailMasked: null })] });
+  render(<AgentLeadsList />);
+  expect(await screen.findByText(/Unavailable, retry/)).toBeInTheDocument();
+  expect(screen.getByText('Home 1')).toBeInTheDocument();
+});
+
 it('shows an empty state', async () => {
   fetchAgentLeads.mockResolvedValue({ results: [] });
   render(<AgentLeadsList />);

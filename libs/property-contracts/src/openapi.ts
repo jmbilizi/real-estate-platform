@@ -734,7 +734,8 @@ export function toOpenApiDocument() {
           description:
             'Requires the Agent role and an active agent profile. Only leads with an open ' +
             'assignment to the caller profile. Newest assignment first, at most 200. Email and ' +
-            'phone are masked in every row. The response is `private, no-store`.',
+            'phone are masked in every row. `emailMasked` is null when the account contact is ' +
+            'unavailable. The response is `private, no-store`.',
           parameters: searchParameters(agentLeadsRequestSchema),
           responses: {
             '200': {
@@ -757,7 +758,8 @@ export function toOpenApiDocument() {
           summary: 'One lead of the caller',
           description:
             'Requires the Agent role and an active agent profile. `contact` is null while the ' +
-            'status is `assigned`. Accept reveals it. Every read writes an access-audit row. A ' +
+            'status is `assigned`. Accept reveals it. `contact.name` and `contact.email` are null when ' +
+            'the account contact is unavailable. Every read writes an access-audit row. A ' +
             'lead that is not assigned to the caller answers 404, never 403.',
           parameters: [staffLeadIdParameter],
           responses: {
@@ -903,9 +905,11 @@ export function toOpenApiDocument() {
           summary: 'Buyer requests, for staff',
           description:
             'Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page ' +
-            'size capped at 50. Email and phone are masked. A row has `possibleDuplicate` when ' +
-            'another open request on the same listing came within seven days from the same email ' +
-            'or phone. The server never merges leads. The response is `private, no-store`.',
+            'size capped at 50. Email and phone are masked. Name and email come from the buyer ' +
+            'account. They are null when the account contact is unavailable. A row has ' +
+            '`possibleDuplicate` when ' +
+            'another open request on the same listing came within seven days from the same buyer ' +
+            'account or phone. The server never merges leads. The response is `private, no-store`.',
           parameters: searchParameters(staffLeadsRequestSchema),
           responses: {
             '200': {
@@ -954,7 +958,8 @@ export function toOpenApiDocument() {
           summary: 'One buyer request, with full contact details',
           description:
             'Requires the Admin, SuperAdmin or Moderator role. Every successful read writes an ' +
-            'access-audit row. The response is `private, no-store`.',
+            'access-audit row. `name`, `email` and `verifiedAccount` come from the buyer account. They ' +
+            'are null when the account contact is unavailable. The response is `private, no-store`.',
           parameters: [staffLeadIdParameter],
           responses: {
             '200': {

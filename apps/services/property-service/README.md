@@ -95,14 +95,16 @@ no PII and must not start to. `/listings/meta` is
 
 ## Configuration
 
-| Variable                                            | Purpose                                                                            |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                      | Postgres connection string for `property_db`. Required.                            |
-| `PORT`                                              | HTTP port. Defaults to `3002` per the PRD §2.1 service map.                        |
-| `ACCOUNT_SERVICE_INTROSPECT_URL`                    | account-service's #86 introspection endpoint. Defaults to the in-cluster DNS name. |
-| `ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS`             | Timeout before account-service counts as unavailable (503). Default `2000`.        |
-| `INQUIRY_RATE_LIMIT_PER_IP_MAX` / `_WINDOW_MS`      | Per-IP limit for `POST /listings/{id}/inquiries`. Default 5 / 1 hour.              |
-| `INQUIRY_RATE_LIMIT_PER_LISTING_MAX` / `_WINDOW_MS` | Per-listing limit for the same endpoint. Default 20 / 1 hour.                      |
+| Variable                                            | Purpose                                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                      | Postgres connection string for `property_db`. Required.                                   |
+| `PORT`                                              | HTTP port. Defaults to `3002` per the PRD §2.1 service map.                               |
+| `ACCOUNT_SERVICE_INTROSPECT_URL`                    | account-service's #86 introspection endpoint. Defaults to the in-cluster DNS name.        |
+| `ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS`             | Timeout before account-service counts as unavailable (503). Default `2000`.               |
+| `ACCOUNT_SERVICE_CONTACTS_URL`                      | account-service's #689 contacts endpoint. Defaults to the in-cluster DNS name.            |
+| `ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS`               | Timeout of the buyer contact lookup. Default `1500`. A timeout shows contact unavailable. |
+| `INQUIRY_RATE_LIMIT_PER_IP_MAX` / `_WINDOW_MS`      | Per-IP limit for `POST /listings/{id}/inquiries`. Default 5 / 1 hour.                     |
+| `INQUIRY_RATE_LIMIT_PER_LISTING_MAX` / `_WINDOW_MS` | Per-listing limit for the same endpoint. Default 20 / 1 hour.                             |
 
 For local work, run `pnpm run infra:local:property-db:url` while the local stack is up. It derives
 `DATABASE_URL` from the running cluster and writes it into the gitignored root `.env`. Do not

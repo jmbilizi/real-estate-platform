@@ -182,7 +182,6 @@ export function createInquiriesRouter(deps: InquiriesRouterDeps): Router {
       const createdId = await createListingInquiry(deps.pool, {
         listingId,
         kind: parsedBody.data.kind,
-        contactEmail: requester.accountEmail,
         phone: parsedBody.data.phone ?? null,
         message: parsedBody.data.message ?? null,
         accountId: requester.accountId,

@@ -11,7 +11,7 @@ import {
 } from '@cribstop/property-contracts';
 import Button from '@/components/Button';
 import { fetchLeads, type LeadFilters, StaffApiError } from '@/lib/api/staff-leads';
-import { formatAge, KIND_LABEL, STATUS_LABEL } from '@/lib/staff-leads';
+import { CONTACT_UNAVAILABLE, formatAge, KIND_LABEL, STATUS_LABEL } from '@/lib/staff-leads';
 import { DuplicateBadge, StatusBadge, VerifiedAccountBadge } from './LeadBadges';
 import { LEAD_ROW_GRID, LeadsListSkeleton } from './LeadSkeletons';
 
@@ -62,7 +62,9 @@ function LeadRow({ lead }: { lead: StaffLeadListItem }) {
         className={`block min-h-11 rounded-lg border border-surface-border bg-white p-4 hover:border-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink layout:rounded-none layout:border-0 layout:px-4 layout:hover:bg-surface-alt ${LEAD_ROW_GRID} layout:items-center`}
       >
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ink">{lead.name}</p>
+          <p className="truncate text-sm font-semibold text-ink">
+            {lead.name ?? CONTACT_UNAVAILABLE}
+          </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             <StatusBadge status={lead.status} />
             {lead.possibleDuplicate && <DuplicateBadge />}
@@ -70,7 +72,7 @@ function LeadRow({ lead }: { lead: StaffLeadListItem }) {
           </div>
         </div>
         <div className="mt-3 min-w-0 text-sm text-ink-body layout:mt-0">
-          <p className="truncate">{lead.emailMasked}</p>
+          <p className="truncate">{lead.emailMasked ?? CONTACT_UNAVAILABLE}</p>
           <p className="truncate text-ink-muted">{lead.phoneMasked ?? 'No phone'}</p>
         </div>
         <p className="mt-3 text-sm text-ink-body layout:mt-0">

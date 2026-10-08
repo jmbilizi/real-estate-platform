@@ -44,6 +44,19 @@ describe('enqueueLeadNotifications', () => {
     expect(calls).toHaveLength(2);
     expect(calls[1]?.params[2]).toBe('agent-1');
   });
+
+  it('writes an account id for every recipient and keeps no lead-id branch (#691)', async () => {
+    const [buyer, agent] = await run('lead.assigned', 'agent-1');
+    expect(buyer?.sql).toMatch(
+      /recipient_account_id[\s\S]*SELECT id, \$2, 'buyer', 'email', account_id/,
+    );
+    expect(agent?.sql).toMatch(
+      /SELECT \$1, \$2, 'agent', 'email', account_id[\s\S]*FROM agent_profiles/,
+    );
+    for (const call of [buyer, agent]) {
+      expect(call?.sql).not.toMatch(/recipient_ref|COALESCE\(account_id/);
+    }
+  });
 });
 
 function sourceFiles(dir: string): string[] {

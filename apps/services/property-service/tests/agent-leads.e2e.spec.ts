@@ -15,6 +15,8 @@ import {
   bearerFor,
   introspectionStubUrl,
   setAccountRoles,
+  setContact,
+  setContactsDown,
   startIntrospectionStub,
   stopIntrospectionStub,
 } from './support/introspection-stub';
@@ -68,12 +70,14 @@ async function createAgent(): Promise<TestAgent> {
 
 /** A `verified` lead, assigned to the agent through the staff route. */
 async function assignedLead(agent: TestAgent): Promise<{ id: string; email: string }> {
-  const email = `${randomUUID()}@e2e.example.com`;
+  const account = randomUUID();
+  const email = `${account}@e2e.example.com`;
+  setContact(account, { displayName: 'Jordan E2E', email });
   const { rows } = await pool().query<{ id: string }>(
-    `INSERT INTO listing_inquiries (listing_id, kind, name, email, phone, message, status, account_id)
-     VALUES ($1, 'message', 'Jordan E2E', $2, '202-555-0143', 'Hello (e2e)', 'verified', gen_random_uuid())
+    `INSERT INTO listing_inquiries (listing_id, kind, phone, message, status, account_id)
+     VALUES ($1, 'message', '202-555-0143', 'Hello (e2e)', 'verified', $2)
      RETURNING id`,
-    [listing, email],
+    [listing, account],
   );
   const id = rows[0]?.id;
   if (id === undefined) throw new Error('seed failed');
@@ -166,6 +170,26 @@ describe('isolation', () => {
 });
 
 describe('the agent flow', () => {
+  it('still shows the lead, with the contact null, while the contacts lookup is down (#691)', async () => {
+    const agent = await createAgent();
+    const lead = await assignedLead(agent);
+    await axios.post(`/agent/leads/${lead.id}/accept`, {}, agent.as);
+    setContactsDown(true);
+    try {
+      const list = agentLeadsEnvelopeSchema.parse((await axios.get('/agent/leads', agent.as)).data);
+      expect(list.results.find((r) => r.id === lead.id)).toMatchObject({
+        status: 'accepted',
+        emailMasked: null,
+      });
+      const detail = agentLeadDetailSchema.parse(
+        (await axios.get(`/agent/leads/${lead.id}`, agent.as)).data,
+      );
+      expect(detail.contact).toMatchObject({ name: null, email: null, phone: '202-555-0143' });
+    } finally {
+      setContactsDown(false);
+    }
+  });
+
   it('masks before accept, reveals after, audits each read, and logs each change', async () => {
     const agent = await createAgent();
     const lead = await assignedLead(agent);

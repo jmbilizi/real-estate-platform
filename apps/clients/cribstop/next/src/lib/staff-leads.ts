@@ -1,5 +1,8 @@
 import type { InquiryKind, LeadStatus } from '@cribstop/property-contracts';
 
+/** Shown where the buyer contact is missing because account-service did not answer (#691). */
+export const CONTACT_UNAVAILABLE = 'Unavailable, retry';
+
 /** The roles that may open the lead desk. The service enforces the same set. */
 export const LEAD_DESK_ROLES = ['Admin', 'SuperAdmin', 'Moderator'] as const;
 
