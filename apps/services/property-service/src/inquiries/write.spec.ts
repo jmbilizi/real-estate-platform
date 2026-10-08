@@ -43,6 +43,32 @@ describe('createListingInquiry', () => {
   it('stores the server text for the version, never a caller string', async () => {
     const { client, calls } = fakeClient();
 
+    await createListingInquiry(client, {
+      ...BASE_INPUT,
+      consentToContact: true,
+      consentTextVersion: 'v1',
+    });
+
+    expect(calls[0]?.params[P_TEXT]).toBe(CONSENT_TEXTS.v1);
+    expect(calls[0]?.params[P_VERSION]).toBe('v1');
+  });
+
+  it('stores the v2 text verbatim for a request that names v2', async () => {
+    const { client, calls } = fakeClient();
+
+    await createListingInquiry(client, {
+      ...BASE_INPUT,
+      consentToContact: true,
+      consentTextVersion: 'v2',
+    });
+
+    expect(calls[0]?.params[P_TEXT]).toBe(CONSENT_TEXTS.v2);
+    expect(calls[0]?.params[P_VERSION]).toBe('v2');
+  });
+
+  it('stores v1 for a request that names no version, as a client that showed v1', async () => {
+    const { client, calls } = fakeClient();
+
     await createListingInquiry(client, { ...BASE_INPUT, consentToContact: true });
 
     expect(calls[0]?.params[P_TEXT]).toBe(CONSENT_TEXTS.v1);

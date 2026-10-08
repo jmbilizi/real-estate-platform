@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BuyerAgentRequestDialog from './BuyerAgentRequestDialog';
 import { CONSENT_TEXTS } from '@cribstop/property-contracts';
@@ -30,7 +30,7 @@ jest.mock('@/components/AuthForm', () => ({
   ),
 }));
 const mockSubmit = submitInquiry as jest.Mock;
-const CONSENT = { consentTextVersion: 'v1', consentChannels: ['email'] };
+const CONSENT = { consentTextVersion: 'v2', consentChannels: ['email'] };
 const PAT = { name: 'Pat Lee', firstName: 'Pat', lastName: 'Lee', email: 'pat@example.com' };
 
 beforeEach(() => {
@@ -73,6 +73,20 @@ describe('BuyerAgentRequestDialog (#132, #688)', () => {
     expect(await screen.findByText('We have your request')).toBeInTheDocument();
     expect(screen.getByRole('status').textContent).not.toMatch(
       /confirmed|booked|scheduled|within|email you/i,
+    );
+  });
+
+  it('shows the no-charge line and the written-agreement notice on the confirmation', async () => {
+    mockUser = PAT;
+    mockSubmit.mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    open('tour_request');
+    await user.click(screen.getByRole('button', { name: 'Send Tour Request' }));
+    expect(await screen.findByTestId('no-charge-line')).toHaveTextContent(
+      'Cribstop does not charge you for this request.',
+    );
+    expect(screen.getByTestId('written-agreement-notice')).toHaveTextContent(
+      'Before you tour a home, your agent will ask you to sign a written agreement. It states what the agent does and how the agent is paid. Compensation is negotiable.',
     );
   });
 
@@ -232,9 +246,19 @@ describe('BuyerAgentRequestDialog (#132, #688)', () => {
     mockUser = PAT;
     open('message');
     const disclosure = screen.getByTestId('consent-disclosure');
-    expect(disclosure.textContent).toContain(CONSENT_TEXTS.v1);
+    expect(disclosure.textContent).toContain(CONSENT_TEXTS.v2);
     expect(disclosure.textContent).toContain('Real Broker, LLC');
     expect(disclosure.textContent).toContain('Send Message');
+    expect(disclosure.textContent).toContain('Reply STOP to stop texts.');
+    expect(within(disclosure).getByRole('link', { name: 'Terms of Service' })).toHaveAttribute(
+      'href',
+      '/terms',
+    );
+    expect(within(disclosure).getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      '/privacy',
+    );
+    expect(screen.queryByRole('checkbox')).toBeNull();
     expect(disclosure.nextElementSibling).toBe(
       screen.getByRole('button', { name: 'Send Message' }),
     );

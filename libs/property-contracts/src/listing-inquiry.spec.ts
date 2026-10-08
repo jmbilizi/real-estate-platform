@@ -1,4 +1,9 @@
-import { CONSENT_DISCLOSURE_TEXT, listingInquiryRequestSchema } from './listing-inquiry';
+import {
+  CONSENT_DISCLOSURE_TEXT,
+  CONSENT_TEXTS,
+  CURRENT_CONSENT_TEXT_VERSION,
+  listingInquiryRequestSchema,
+} from './listing-inquiry';
 
 const BASE = {
   kind: 'tour_request' as const,
@@ -127,6 +132,40 @@ describe('consent evidence fields', () => {
     expect(listingInquiryRequestSchema.safeParse({ ...BASE, verifiedAccount: true }).success).toBe(
       false,
     );
+  });
+});
+
+describe('consent text versions (#630)', () => {
+  it('keeps v1 readable and makes v2 current', () => {
+    expect(CONSENT_TEXTS.v1).toContain('Consent is not required to use Cribstop');
+    expect(CURRENT_CONSENT_TEXT_VERSION).toBe('v2');
+    expect(CONSENT_DISCLOSURE_TEXT).toBe(CONSENT_TEXTS.v2);
+  });
+
+  it('carries the TCPA elements in v2', () => {
+    expect(CONSENT_TEXTS.v2).toContain('not a condition of buying any property, goods or services');
+    expect(CONSENT_TEXTS.v2).toContain('Message frequency varies.');
+    expect(CONSENT_TEXTS.v2).toContain('Reply STOP to stop texts.');
+    expect(CONSENT_TEXTS.v2).toContain('Terms of Service and Privacy Policy');
+  });
+
+  it('rejects a client-supplied consent text', () => {
+    const result = listingInquiryRequestSchema.safeParse({
+      ...BASE,
+      consentDisclosureText: 'my own text',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts v1 and v2 and rejects any other version', () => {
+    for (const consentTextVersion of ['v1', 'v2']) {
+      expect(listingInquiryRequestSchema.safeParse({ ...BASE, consentTextVersion }).success).toBe(
+        true,
+      );
+    }
+    expect(
+      listingInquiryRequestSchema.safeParse({ ...BASE, consentTextVersion: 'v3' }).success,
+    ).toBe(false);
   });
 });
 

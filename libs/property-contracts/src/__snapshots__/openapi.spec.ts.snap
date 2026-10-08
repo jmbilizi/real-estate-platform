@@ -1422,6 +1422,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "description": "Required for new clients (#631). The consent text version the consumer saw. An older client may omit it, and the server then records \`v1\`. The server stores the text for the version, never a client string. Needs \`consentToContact\` true.",
             "enum": [
               "v1",
+              "v2",
             ],
             "type": "string",
           },
