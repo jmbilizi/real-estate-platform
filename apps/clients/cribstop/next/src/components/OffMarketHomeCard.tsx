@@ -50,7 +50,7 @@ export default function OffMarketHomeCard({
         <p className="truncate text-sm text-ink-body">
           {[property.propertyType, stats].filter(Boolean).join(' · ')}
         </p>
-        <p className="text-sm text-ink-muted">Not on the market right now. We keep it saved.</p>
+        <p className="text-sm text-ink-muted">It stays in your saved homes.</p>
       </div>
     </>
   );
