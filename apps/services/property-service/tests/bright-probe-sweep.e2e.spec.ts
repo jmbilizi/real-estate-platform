@@ -69,7 +69,10 @@ async function searchTotals(): Promise<{ total: number; ids: string[] }> {
   const found: string[] = [];
   let total = 0;
   for (let page = 1; ; page += 1) {
-    const response = await axios.get('/listings', { params: { page, pageSize: 100 } });
+    const response = await axios.get('/listings', {
+      // Scoped to the fixture city so the walk stays small on a database that holds real listings.
+      params: { city: 'Fixtureville', state: 'ZZ', page, pageSize: 100 },
+    });
     const envelope = listingsEnvelopeSchema.parse(response.data);
     total = envelope.total;
     found.push(...envelope.results.map((row) => row.id));
