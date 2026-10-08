@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { InquiryKind } from '@cribstop/property-contracts';
 import BuyerAgentRequestDialog from '@/components/listing/BuyerAgentRequestDialog';
 import PropertyGallery from '@/components/PropertyGallery';
@@ -14,7 +15,7 @@ import ListingFacts from '@/components/listing/ListingFacts';
 import ListingHeaderNav from '@/components/listing/ListingHeaderNav';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
-import { formatNumber, formatPrice } from '@/lib/format';
+import { formatCalendarDate, formatNumber, formatPrice } from '@/lib/format';
 import { BRAND } from '@/lib/brand';
 import {
   agentContactLines,
@@ -235,6 +236,15 @@ export default function ListingDetailContent({
   const priceDisplay = formatListingPrice(listing.price, listing.listingType);
   const closePriceText = formatClosePrice(listing.closePrice, listing.closeDate);
 
+  // #716. The MLS day count when the feed carries it. Otherwise the oldest list date of the home.
+  // Never a number we worked out ourselves.
+  const marketTimeTile =
+    listing.daysOnMarket !== null
+      ? [{ label: 'Days on Market', value: formatNumber(listing.daysOnMarket) }]
+      : listing.listedSince !== null
+        ? [{ label: 'Listed since', value: formatCalendarDate(listing.listedSince) }]
+        : [];
+
   // Non-parcel dwelling stat tiles — each part is omitted rather than rendered as a dash or a
   // zero when the API sends null, and the whole block is suppressed for a parcel (rule #4).
   const statTiles = listing.isParcel
@@ -247,6 +257,7 @@ export default function ListingDetailContent({
         ...(listing.sqft !== null ? [{ label: 'Sqft', value: formatNumber(listing.sqft) }] : []),
         { label: 'Type', value: listing.propertyType },
         ...(listing.yearBuilt !== null ? [{ label: 'Year Built', value: listing.yearBuilt }] : []),
+        ...marketTimeTile,
         ...(listing.lotSqft !== null
           ? [{ label: 'Lot Size', value: `${formatNumber(listing.lotSqft)} sf` }]
           : []),
@@ -407,6 +418,24 @@ export default function ListingDetailContent({
                 <h1 className="mt-2 text-base font-semibold tracking-tight text-ink">
                   {streetAddress ?? suppressedAddressHeading}
                 </h1>
+
+                {/* #716. Each other live MLS record of this home opens at its own URL. */}
+                {listing.alsoListedAs.length > 0 && (
+                  <p className="mt-2 text-sm text-ink-muted">
+                    Also listed as{' '}
+                    {listing.alsoListedAs.map((other, index) => (
+                      <span key={other.id}>
+                        {index > 0 && ', '}
+                        <Link
+                          href={`/listing/${other.id}`}
+                          className="font-medium text-brand underline"
+                        >
+                          {other.mlsNumber ? `MLS# ${other.mlsNumber}` : 'another MLS record'}
+                        </Link>
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
 
               {/* A parcel has no dwelling, so it shows lot size instead of the dwelling tiles. */}

@@ -62,6 +62,8 @@ const detail = {
     virtualTourUrl: null,
     listAgentPhone: null,
     listAgentEmail: null,
+    alsoListedAs: [],
+    listedSince: null,
     facts: {
       parking: null,
       heating: null,
@@ -94,7 +96,9 @@ describe('listingDetailSchema', () => {
     'listAgentPhone',
     'listAgentEmail',
     'facts',
-  ])('requires the %s key to be present (#564)', (key) => {
+    'alsoListedAs',
+    'listedSince',
+  ])('requires the %s key to be present (#564, #716)', (key) => {
     const { [key]: _omitted, ...rest } = detail.listing as Record<string, unknown>;
     expect(listingDetailSchema.safeParse({ ...detail, listing: rest }).success).toBe(false);
   });

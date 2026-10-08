@@ -1,4 +1,5 @@
 import { isDefaultStatusFilter, type SearchRequest } from '@cribstop/property-contracts';
+import { collapseCondition } from './collapse';
 import { visibleListingTypesFor } from './sold-gate';
 
 /**
@@ -338,6 +339,10 @@ export function buildSearchQuery(request: SearchRequest): {
   if (request.priceReduced === true) {
     conditions.push('v.price_reduced');
   }
+
+  // #716. One card per home. The count, the page and the map pins all read this `where`, so the
+  // total always equals the card count.
+  conditions.push(collapseCondition());
 
   return {
     where: conditions.length > 0 ? conditions.join('\n  AND ') : 'TRUE',

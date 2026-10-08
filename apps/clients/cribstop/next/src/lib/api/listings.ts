@@ -289,6 +289,10 @@ export interface ListingDetailView {
   hoaFee: number | null;
   hoaFeeFrequency: string | null;
   facts: ListingDetail['listing']['facts'];
+  /** #716. The other live MLS records of this home. Each opens at `/listing/<id>`. */
+  alsoListedAs: ListingDetail['listing']['alsoListedAs'];
+  /** #716. The oldest list date of the home. Shown as "Listed since" when `daysOnMarket` is null. */
+  listedSince: string | null;
 
   // --- NAR 7.58 attribution ------------------------------------------------------------------
   listingAgentName: string | null;
@@ -385,6 +389,8 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     hoaFee: listing.hoaFee,
     hoaFeeFrequency: listing.hoaFeeFrequency,
     facts: listing.facts,
+    alsoListedAs: listing.alsoListedAs,
+    listedSince: listing.listedSince,
 
     listingAgentName: listing.listingAgentName,
     listAgentPhone: listing.listAgentPhone,

@@ -819,3 +819,24 @@ the Property API document. Never publish a second document.
   `closed` and `lost` end the assignment, so the lead leaves the agent list.
 - Every change goes through `changeLeadStatus` with `actorRole = 'Agent'`. Every detail read writes
   a `lead_access_audit` row with role `Agent`.
+
+## One card per home (#716)
+
+Search, the result total, the page count and the map pins show one card per home. A home can have
+several live MLS records. `src/listings/collapse.ts` hides a record when a better record of the same
+home exists. It runs inside `buildSearchQuery`, on every query, with no flag and no stored state.
+
+- Same home: same property, unit, listing type and listing office. Beds, baths and area agree when
+  both records have them. Prices are within 2x. A hidden price keeps the records apart.
+- Never merged: lots and land, Multi-Family and Condo records with no unit, a home with live records
+  from more than one office. `property_is_parcel()` (migration 054) holds the street-line test,
+  because application SQL must never name `street_line`.
+- Winner: latest `listed_at`, then Active over Coming Soon over Pending, then latest
+  `source_modification_timestamp`, then the greater id. The collapse ranks all live records first
+  and the request filters apply to the winner. A home whose current record is Pending is absent from
+  a default search.
+- Only live statuses count. An off-market record never wins and never counts. A hidden record still
+  opens at `/listings/:id`. The detail response lists the other live records in `alsoListedAs`.
+- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first.
+- `listings.source_listing_id` holds the MLS number (`ListingId`). A value equal to the feed key is
+  an older row and reads as unknown until the sync writes the row again.

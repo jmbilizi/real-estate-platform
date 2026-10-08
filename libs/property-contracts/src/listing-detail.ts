@@ -65,6 +65,12 @@ const listingExtraFieldsSchema = z.object({
   listAgentPhone: z.string().nullable(),
   listAgentEmail: z.email().nullable(),
   facts: listingFactsSchema,
+  // #716. The other live MLS records of this home, oldest first. Each opens at its own URL. The
+  // `mlsNumber` is null when the sync has not stored it yet.
+  alsoListedAs: z.array(z.object({ id: idSchema, mlsNumber: z.string().nullable() })),
+  // #716. The oldest list date among this record and the other live records of the home. The
+  // client shows it as "Listed since" when `daysOnMarket` is null. Null when no record has a date.
+  listedSince: z.iso.datetime().nullable(),
 });
 
 const listingDetailFieldsSchema = listingCardSchema

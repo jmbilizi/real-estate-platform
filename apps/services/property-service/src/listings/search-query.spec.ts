@@ -1,8 +1,15 @@
 import { searchRequestSchema } from '@cribstop/property-contracts';
+import { collapseCondition } from './collapse';
 import { buildSearchQuery, SORT_ORDERS } from './search-query';
 
-const build = (query: Record<string, unknown> = {}): ReturnType<typeof buildSearchQuery> =>
-  buildSearchQuery(searchRequestSchema.parse(query));
+/**
+ * The filters only. The collapse (#716) is a fixed clause of its own, tested in collapse.spec.ts. It
+ * holds COALESCE for its ordering, which the filter assertions below must not see.
+ */
+const build = (query: Record<string, unknown> = {}): ReturnType<typeof buildSearchQuery> => {
+  const plan = buildSearchQuery(searchRequestSchema.parse(query));
+  return { ...plan, where: plan.where.replace(collapseCondition(), 'TRUE') };
+};
 
 describe('buildSearchQuery', () => {
   it('matches any of the requested property types', () => {

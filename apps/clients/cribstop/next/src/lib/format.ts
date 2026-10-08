@@ -45,6 +45,23 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
+/**
+ * #716. A date-only MLS value (`listedAt`, `listedSince`) is widened to midnight UTC. Its UTC date
+ * is the date the feed gave. `formatDate` reads it in the property time zone and shows the day before.
+ */
+export function formatCalendarDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString('en-US', {

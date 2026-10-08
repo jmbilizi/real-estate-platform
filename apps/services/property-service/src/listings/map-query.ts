@@ -5,6 +5,7 @@ import {
   PAGE_SIZE_DEFAULT,
   type SearchRequest,
 } from '@cribstop/property-contracts';
+import { DISABLE_JIT_SQL } from './collapse';
 import { resolvedSearchRequest } from './on-demand';
 import type { ReadPool } from './repository';
 import { buildSearchQuery } from './search-query';
@@ -55,6 +56,7 @@ export async function findMapPins(
   try {
     // One snapshot for both statements, the same reason as `searchListings`.
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query(DISABLE_JIT_SQL);
 
     const boundParams = params.length;
     const pinResult = await client.query<PinDbRow>(
