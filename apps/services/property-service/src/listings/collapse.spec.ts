@@ -71,10 +71,10 @@ describe('mergedRecordsLateral', () => {
   });
 });
 
-describe('migration 054', () => {
+describe('migration 055', () => {
   it('indexes the same statuses as LIVE_STATUSES', () => {
     const migration = readFileSync(
-      join(__dirname, '..', '..', 'migrations', '1785801600054_add-listing-collapse-support.js'),
+      join(__dirname, '..', '..', 'migrations', '1785801600055_add-listing-collapse-support.js'),
       'utf8',
     );
     const listed = /consumer_status IN \(([^)]*)\)/.exec(migration)?.[1] ?? '';

@@ -21,10 +21,10 @@
  * record of any set has no better sibling. Every home keeps at least one card.
  *
  * Only live records count: a sold, taken-down or suppressed record neither hides nor is hidden.
- * `idx_listings_live_property` (migration 054) serves the sibling probe.
+ * `idx_listings_live_property` (migration 055) serves the sibling probe.
  */
 
-/** Statuses of a record that is on the market. Migration 054 repeats this list in its index. */
+/** Statuses of a record that is on the market. Migration 055 repeats this list in its index. */
 export const LIVE_STATUSES = ['Active', 'Coming Soon', 'Pending'] as const;
 
 const LIVE_STATUS_SQL = `(${LIVE_STATUSES.map((status) => `'${status}'`).join(', ')})`;
@@ -94,7 +94,7 @@ function mergeableConditions(subject: SubjectColumns): string[] {
     // A hidden price cannot prove the two records agree, so the records stay apart.
     `${subject.price} > 0 AND o.price_display_allowed AND o.list_price > 0`,
     `o.list_price <= 2 * ${subject.price} AND ${subject.price} <= 2 * o.list_price`,
-    // Lots and land: `property_is_parcel` (migration 054) holds the street-line test.
+    // Lots and land: `property_is_parcel` (migration 055) holds the street-line test.
     'NOT COALESCE(property_is_parcel(o.property_id), true)',
     `(${subject.propertyType} NOT IN ('Multi-Family', 'Condo') OR ${subject.unitId} IS NOT NULL)`,
     `NOT EXISTS (

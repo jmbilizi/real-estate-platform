@@ -829,7 +829,7 @@ home exists. It runs inside `buildSearchQuery`, on every query, with no flag and
 - Same home: same property, unit, listing type and listing office. Beds, baths and area agree when
   both records have them. Prices are within 2x. A hidden price keeps the records apart.
 - Never merged: lots and land, Multi-Family and Condo records with no unit, a home with live records
-  from more than one office. `property_is_parcel()` (migration 054) holds the street-line test,
+  from more than one office. `property_is_parcel()` (migration 055) holds the street-line test,
   because application SQL must never name `street_line`.
 - Winner: latest `listed_at`, then Active over Coming Soon over Pending, then latest
   `source_modification_timestamp`, then the greater id. The collapse ranks all live records first
