@@ -110,6 +110,14 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
   shows the pill only for the open popup. Pins overlap freely. Homes at one true coordinate fan out
   only at zoom 17 or higher. Any click on a pin opens `MapPinCard`: the page row, or the card from
   `GET /listings/{id}/card`.
+- The basemap is OpenFreeMap vector tiles (`liberty` style) drawn by `maplibre-gl` inside the
+  Leaflet maps through `BasemapLayer.tsx` (#296). It needs no key and no account, and its terms
+  allow commercial use. The attribution text is required (OpenFreeMap, OpenMapTiles, OpenStreetMap
+  contributors): keep it in `lib/map-providers.ts`. `MAPTILER_API_KEY` is an optional override. When
+  set, `/api/map-config` returns MapTiler raster tiles. OpenFreeMap is a donation-funded public
+  service with no SLA. The exit path is a self-hosted PMTiles build. Never call
+  `tile.openstreetmap.org`: its policy forbids this use. The CSP sets only `frame-src`, so tile and
+  font hosts need no CSP entry.
 - `next/scripts/check-legal-content.js` blocks the **prod** deploy while `src/content/legal/*.json`
   carries `isDraft: true` (#219). It runs only from the prod job in
   `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod`. `DEPLOYMENT_ENV` is

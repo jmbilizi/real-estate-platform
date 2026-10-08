@@ -12,9 +12,11 @@
   "dependencies": {
     "@cribstop/gateway-contracts": "workspace:*",
     "@cribstop/property-contracts": "workspace:*",
+    "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "@reduxjs/toolkit": "^2.10.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
+    "maplibre-gl": "^6.13.0",
     "motion": "^12.42.2",
     "next": "^15.0.3",
     "react": "^19.0.0",

@@ -12,6 +12,8 @@ jest.mock('react-leaflet', () => ({
   TileLayer: () => null,
   useMap: () => ({ getContainer: () => document.createElement('div') }),
 }));
+// maplibre-gl ships ESM and needs WebGL, so jsdom cannot load it.
+jest.mock('@/components/BasemapLayer', () => ({ __esModule: true, default: () => null }));
 jest.mock('leaflet', () => ({ __esModule: true, default: { CircleMarker: class {} } }));
 
 import {
