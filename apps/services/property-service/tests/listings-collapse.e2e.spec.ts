@@ -4,6 +4,7 @@ import {
   listingDetailSchema,
   listingsEnvelopeSchema,
   mapResponseSchema,
+  neighborhoodsResponseSchema,
 } from '@cribstop/property-contracts';
 import { closePool, getPool } from '../src/db/pool';
 import {
@@ -351,6 +352,16 @@ describe('one card per home (#716)', () => {
     const body = mapResponseSchema.parse(response.data);
     expect(body.pins).toHaveLength(expected);
     expect(body.total).toBe(expected);
+  });
+
+  it('counts homes in the neighborhood count, equal to the search total', async () => {
+    const search = await fetchPage({ pageSize: 1 });
+    const response = await axios.get('/listings/neighborhoods', {
+      params: { city: COLLAPSE_CITY, state: COLLAPSE_STATE, status: ALL_LIVE, minCount: 1 },
+    });
+    const body = neighborhoodsResponseSchema.parse(response.data);
+
+    expect(body.results.reduce((sum, row) => sum + row.total, 0)).toBe(search.total);
   });
 
   describe('merged records', () => {

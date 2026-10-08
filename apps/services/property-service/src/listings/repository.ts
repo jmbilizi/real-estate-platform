@@ -24,7 +24,12 @@ import {
   LISTING_VISIBILITY_SQL,
   PROPERTY_RECORD_SELECT,
 } from './columns';
-import { DISABLE_JIT_SQL, mergedRecordsLateral } from './collapse';
+import {
+  collapseCondition,
+  DISABLE_JIT_SQL,
+  LISTINGS_SUBJECT,
+  mergedRecordsLateral,
+} from './collapse';
 import { resolvedSearchRequest } from './on-demand';
 import {
   buildSearchQuery,
@@ -414,6 +419,8 @@ export async function getNeighborhoods(
     filterSql = [
       LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'v.'),
       ...scopeConditions(matched, bind, LISTINGS_SCOPE_COLUMNS),
+      // #716. The same one-card-per-home rule as search, so the counts equal the cards.
+      collapseCondition(LISTINGS_SUBJECT),
     ].join('\n         AND ');
     geoSql = `v.address_display_allowed AND ${VALID_COORDINATE_SQL}`;
   } else {

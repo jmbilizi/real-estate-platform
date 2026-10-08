@@ -71,6 +71,23 @@ export const VIEW_SUBJECT: SubjectColumns = {
   address: 'v.address',
 };
 
+/** The subject is a `listings` row (alias `v`), for the neighborhoods path that skips the view. */
+export const LISTINGS_SUBJECT: SubjectColumns = {
+  id: 'v.id',
+  propertyId: 'v.property_id',
+  unitId: 'v.unit_id',
+  listingType: 'v.listing_type',
+  officeName: 'v.office_name',
+  beds: 'v.beds',
+  baths: 'v.baths_display',
+  sqft: 'v.living_sqft',
+  price: 'CASE WHEN v.price_display_allowed THEN v.list_price END',
+  status: 'v.consumer_status',
+  listedAt: 'v.listed_at',
+  propertyType: '(SELECT t.property_type FROM properties t WHERE t.id = v.property_id)',
+  address: 'CASE WHEN v.address_display_allowed THEN 1 END',
+};
+
 /** Rank of a status: a higher rank wins. Pending ranks lowest. */
 function statusRank(column: string): string {
   return `CASE ${column} WHEN 'Active' THEN 3 WHEN 'Coming Soon' THEN 2 ELSE 1 END`;
