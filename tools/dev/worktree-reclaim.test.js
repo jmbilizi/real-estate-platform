@@ -1207,7 +1207,7 @@ test('sweepOrphans removes unregistered residue and keeps live and recent folder
 
 test('sweepOrphans reports a failed delete and does not throw', () => {
   const results = sweepOrphans({
-    root: '/root',
+    root: pathNode.join(osNode.tmpdir(), 'wt-absent-root'),
     registered: [],
     apply: true,
     now,
