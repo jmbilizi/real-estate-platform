@@ -78,6 +78,11 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: ACCOUNT_SERVICE_DB_USER_PASSWORD
+            - name: POSTMARK_SERVER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: postmark-secret
+                  key: POSTMARK_SERVER_TOKEN
             - name: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
               valueFrom:
                 secretKeyRef:
