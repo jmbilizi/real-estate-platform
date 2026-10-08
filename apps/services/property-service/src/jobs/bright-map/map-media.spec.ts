@@ -130,6 +130,44 @@ describe('mapBrightMediaRecord', () => {
       expect(rejection({ ResourceName: null })).toBe('MAPPED');
     });
   });
+
+  describe('per-record seller suppression (#146)', () => {
+    it('skips a record whose MediaInternetDisplayYN is false', () => {
+      expect(rejection({ MediaInternetDisplayYN: false })).toBe('display_suppressed');
+    });
+
+    it('carries the listing key on a suppressed record, so the run can clear stored photos', () => {
+      const result = mapBrightMediaRecord(record({ MediaInternetDisplayYN: false }));
+      expect(result).toEqual({
+        kind: 'rejected',
+        reason: 'display_suppressed',
+        listingKey: '900100',
+      });
+    });
+
+    it.each([[true], [null], [undefined]])(
+      'stores a record with MediaInternetDisplayYN %p',
+      (v) => {
+        expect(rejection({ MediaInternetDisplayYN: v })).toBe('MAPPED');
+      },
+    );
+
+    it.each([['Y'], ['false'], [0], [1]])('skips and flags the non-boolean %p', (value) => {
+      expect(rejection({ MediaInternetDisplayYN: value })).toBe('display_flag_anomaly');
+    });
+
+    it('stores a listing with only the retained photo, whatever its primary flag or order', () => {
+      const kept = record({
+        MediaKey: 1,
+        MediaInternetDisplayYN: true,
+        PreferredPhotoYN: false,
+        MediaDisplayOrder: 9,
+      });
+      const hidden = record({ MediaKey: 2, MediaInternetDisplayYN: false, PreferredPhotoYN: true });
+      const results = [kept, hidden].map(mapBrightMediaRecord);
+      expect(results.map((r) => r.kind)).toEqual(['mapped', 'rejected']);
+    });
+  });
 });
 
 describe('buildListingGallery', () => {

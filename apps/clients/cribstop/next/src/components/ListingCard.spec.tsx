@@ -87,7 +87,9 @@ describe('ListingCard', () => {
     it('renders the withheld sentence for a null price — never blank, never $0, never an estimate', () => {
       render(<ListingCard listing={aListingCardRow({ price: null })} />);
 
-      expect(screen.getByText(/Price withheld at the seller/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Contact Listing Agent for Additional Information\./i),
+      ).toBeInTheDocument();
       expect(screen.queryByText(/\$0/)).not.toBeInTheDocument();
     });
 

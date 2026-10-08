@@ -28,7 +28,7 @@ describe('formatListingPrice', () => {
 
     expect(display.isWithheld).toBe(true);
     expect(display.text).toBe(PRICE_WITHHELD_COPY);
-    expect(display.text).toMatch(/withheld at the seller/i);
+    expect(display.text).toBe('Contact Listing Agent for Additional Information.');
     expect(display.text).not.toMatch(/\$/);
     expect(display.text).not.toBe('');
   });

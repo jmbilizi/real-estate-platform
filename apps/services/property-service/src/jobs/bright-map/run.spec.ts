@@ -278,6 +278,29 @@ describe('mapStagedBrightProperties', () => {
     expect(report.outOfRangeFieldCounts).toEqual({ LotSizeSquareFeet: 1 });
     expect(listings()).toHaveLength(2);
   });
+
+  it('counts each suppressed election flag and each non-boolean anomaly (#146)', async () => {
+    const { client } = createFakeDb({
+      stagedPayloads: [
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-1', InternetListingDisplayPricesYN: false },
+        {
+          ...ACTIVE_PAYLOAD,
+          ListingKey: 'BR-2',
+          InternetListingDisplayHistoricalPricesYN: false,
+          InternetListingDisplayDaysOnSiteYN: 'N',
+        },
+        { ...ACTIVE_PAYLOAD, ListingKey: 'BR-3' },
+      ],
+    });
+
+    const report = await mapStagedBrightProperties(client, {
+      feed: 'test',
+      soldDisplayDelayDays: null,
+    });
+
+    expect(report.suppressedByFlag).toEqual({ price: 1, priceHistory: 1, daysOnMarket: 1 });
+    expect(report.suppressionAnomalies).toEqual({ daysOnMarket: 1 });
+  });
 });
 
 describe('mapStagedBrightProperties — feed tier isolation (#314)', () => {
