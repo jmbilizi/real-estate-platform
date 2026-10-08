@@ -197,7 +197,7 @@ internal sealed partial class EmailCodeService(
         return codes + throttles;
     }
 
-    [LoggerMessage(1380, LogLevel.Warning, "Email codes are unavailable: no usable EMAIL_CODE_HMAC_KEY is configured. The call was refused.", EventName = "EmailCodesUnavailable")]
+    [LoggerMessage(1380, LogLevel.Warning, "Email codes are unavailable: no usable ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY is configured. The call was refused.", EventName = "EmailCodesUnavailable")]
     private static partial void LogUnavailable(ILogger logger);
 
     [LoggerMessage(1381, LogLevel.Information, "Email code lock engaged for purpose {Purpose}.", EventName = "EmailCodeLocked")]

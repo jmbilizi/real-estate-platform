@@ -174,15 +174,15 @@ session. The owner then sets a password by the reset flow.
 
 ### Code design
 
-| Property                            | Value                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------- |
-| Code                                | 6 digits, 10 minute life, single use                                      |
-| Storage                             | Keyed HMAC of the code (`EMAIL_CODE_HMAC_KEY`), never the code            |
-| Wrong tries                         | 5 wrong tries lock that email and purpose for 15 minutes                  |
-| New code                            | Does not reset the wrong-try count (`EmailCodeThrottles` row is separate) |
-| Resend                              | 60 second cooldown, 5 per hour, 10 per day per email and purpose          |
-| Proof (`signupProof`, `resetProof`) | 32 random bytes, stored as a SHA-256 hash, 15 minute life, single use     |
-| No engine key                       | Every call answers `503`                                                  |
+| Property                            | Value                                                                          |
+| ----------------------------------- | ------------------------------------------------------------------------------ |
+| Code                                | 6 digits, 10 minute life, single use                                           |
+| Storage                             | Keyed HMAC of the code (`ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY`), never the code |
+| Wrong tries                         | 5 wrong tries lock that email and purpose for 15 minutes                       |
+| New code                            | Does not reset the wrong-try count (`EmailCodeThrottles` row is separate)      |
+| Resend                              | 60 second cooldown, 5 per hour, 10 per day per email and purpose               |
+| Proof (`signupProof`, `resetProof`) | 32 random bytes, stored as a SHA-256 hash, 15 minute life, single use          |
+| No engine key                       | Every call answers `503`                                                       |
 
 Purposes: `SignUp`, `PasswordReset`, `EmailChangeNew`, `EmailChangeOld`. A refused password gives
 the proof back.

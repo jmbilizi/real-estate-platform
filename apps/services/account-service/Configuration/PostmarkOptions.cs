@@ -34,13 +34,13 @@ internal sealed class PostmarkOptions
 
     /// <summary>
     /// Gets or sets the user name Postmark sends as HTTP Basic credentials to the webhook. Supplied as
-    /// the flat <c>POSTMARK_WEBHOOK_USER</c> environment variable (#664).
+    /// the flat <c>ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER</c> environment variable (#664).
     /// </summary>
     public string WebhookUser { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the password Postmark sends as HTTP Basic credentials to the webhook. Supplied as
-    /// the flat <c>POSTMARK_WEBHOOK_PASSWORD</c> environment variable. An empty value or the committed
+    /// the flat <c>ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD</c> environment variable. An empty value or the committed
     /// placeholder disables the webhook: it answers 401 to every request.
     /// </summary>
     public string WebhookPassword { get; set; } = string.Empty;
