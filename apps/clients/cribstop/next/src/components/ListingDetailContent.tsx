@@ -29,6 +29,7 @@ import {
 } from '@/lib/listing-format';
 import { copyToClipboard } from '@/lib/clipboard';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
+import { shareOrigin } from '@/lib/site-origin';
 import { searchListings } from '@/lib/api/listings';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { useApp } from '@/lib/context';
@@ -115,7 +116,7 @@ export default function ListingDetailContent({
    * Open Graph tags, which are built from the same module.
    */
   async function handleShare() {
-    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    const url = listingShareUrl(listing.propertyPath, shareOrigin());
 
     if (typeof navigator.share === 'function') {
       try {

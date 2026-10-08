@@ -4,7 +4,8 @@
  * Only `SITE_ORIGIN` counts. A request's `Host` / `X-Forwarded-Host` is client-controlled and this
  * app's ingress rule is a catch-all, so trusting it would let a crafted header publish a real
  * listing's canonical URL on an attacker's domain — to the one audience that acts on it, a
- * crawler. `SITE_ORIGIN` is not wired per environment yet, so today this always returns null.
+ * crawler. The deploy action sets `SITE_ORIGIN` from `CRIBSTOP_DOMAIN`. A local deploy leaves it
+ * unset, so this returns null.
  *
  * Shared by every route that builds listing metadata (`listing/[id]`, the `[city]` property page)
  * so the rule has one implementation.
