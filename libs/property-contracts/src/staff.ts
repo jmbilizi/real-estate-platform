@@ -84,16 +84,20 @@ export const staffLeadListItemSchema = z.object({
   createdAt: z.iso.datetime(),
   kind: inquiryKindSchema,
   status: leadStatusSchema,
-  name: z.string(),
+  /**
+   * The buyer's account contact (#691), read from account-service at request time. `name`,
+   * `emailMasked` and `verifiedAccount` are all null when the lookup fails or the account is gone.
+   */
+  name: z.string().nullable(),
   /** Masked: first character, then `***`, then the domain. */
-  emailMasked: z.string(),
+  emailMasked: z.string().nullable(),
   /** Masked: only the last four digits. Null when the requester gave no phone. */
   phoneMasked: z.string().nullable(),
-  verifiedAccount: z.boolean(),
+  verifiedAccount: z.boolean().nullable(),
   listingId: idSchema,
   /**
    * True when another open request on the same listing came within seven days from the same
-   * normalized email or phone. A hint for staff. The server never merges or drops a lead.
+   * buyer account or normalized phone. A hint for staff. The server never merges or drops a lead.
    */
   possibleDuplicate: z.boolean(),
 });
@@ -147,11 +151,12 @@ export const staffLeadDetailSchema = z.object({
   createdAt: z.iso.datetime(),
   kind: inquiryKindSchema,
   status: leadStatusSchema,
-  name: z.string(),
-  email: z.string(),
+  /** Account contact (#691). Null when account-service cannot answer. The rest of the lead still shows. */
+  name: z.string().nullable(),
+  email: z.string().nullable(),
   phone: z.string().nullable(),
   message: z.string().nullable(),
-  verifiedAccount: z.boolean(),
+  verifiedAccount: z.boolean().nullable(),
   consent: z.object({
     given: z.boolean(),
     textVersion: z.string().nullable(),

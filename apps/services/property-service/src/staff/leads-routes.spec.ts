@@ -5,6 +5,7 @@ import {
   SIGN_IN_REQUIRED_BODY,
 } from '@cribstop/property-contracts';
 import { createApp } from '../app';
+import type { ContactsClient } from '../inquiries/account-contacts';
 import type { IntrospectionClient, IntrospectionOutcome } from '../inquiries/account-introspection';
 import type { ReadPool } from '../listings/repository';
 import { decodeCursor, encodeCursor, maskEmail, maskPhone } from './leads-store';
@@ -45,8 +46,26 @@ function fakePool(answer: (call: Call) => unknown[] = () => []) {
   return pool;
 }
 
-const appWith = (outcome: IntrospectionOutcome, pool = fakePool()) =>
-  createApp({ pool: pool as unknown as ReadPool, introspection: client(outcome) });
+const contactsUp = (calls: string[][] = []): ContactsClient => ({
+  lookup: (ids) => {
+    calls.push([...ids]);
+    return Promise.resolve(
+      new Map(
+        ids.map((id) => [
+          id,
+          { accountId: id, displayName: 'Jane', email: 'jane@example.com', emailConfirmed: true },
+        ]),
+      ),
+    );
+  },
+});
+const contactsDown: ContactsClient = { lookup: () => Promise.resolve(new Map()) };
+
+const appWith = (
+  outcome: IntrospectionOutcome,
+  pool = fakePool(),
+  contacts: ContactsClient = contactsUp(),
+) => createApp({ pool: pool as unknown as ReadPool, introspection: client(outcome), contacts });
 
 describe('masking', () => {
   it('keeps one character and the domain of an email', () => {
@@ -120,10 +139,8 @@ describe('GET /staff/leads', () => {
         created_at_cursor: '2026-10-06T10:00:00.000000Z',
         kind: 'message',
         status: 'new',
-        name: 'Jane',
-        email: 'jane@example.com',
+        account_id: ACCOUNT,
         phone: '202-555-0187',
-        verified_account: true,
         listing_id: LEAD,
         possible_duplicate: true,
       },
@@ -139,6 +156,42 @@ describe('GET /staff/leads', () => {
     expect(JSON.stringify(res.body)).not.toContain('555-0187');
     expect(res.body.nextCursor).toBeNull();
     expect(pool.calls[0]?.params.at(-1)).toBe(2);
+  });
+
+  const listRow = (id: string, account: string) => ({
+    id,
+    created_at: new Date('2026-10-06T10:00:00.000Z'),
+    created_at_cursor: '2026-10-06T10:00:00.000000Z',
+    kind: 'message',
+    status: 'new',
+    account_id: account,
+    phone: null,
+    listing_id: LEAD,
+    possible_duplicate: false,
+  });
+
+  it('asks for every contact of the page in one batch (#691)', async () => {
+    const batches: string[][] = [];
+    const pool = fakePool(() => [listRow(LEAD, ACCOUNT), listRow(ACCOUNT, ACCOUNT)]);
+    const res = await request(appWith(as(ROLE.Admin), pool, contactsUp(batches))).get(
+      '/staff/leads',
+    );
+    expect(res.status).toBe(200);
+    expect(batches).toEqual([[ACCOUNT, ACCOUNT]]);
+    expect(res.body.results[0]).toMatchObject({ name: 'Jane', verifiedAccount: true });
+  });
+
+  it('still lists every lead, with the contact null, when the lookup is down (#691)', async () => {
+    const pool = fakePool(() => [listRow(LEAD, ACCOUNT)]);
+    const res = await request(appWith(as(ROLE.Admin), pool, contactsDown)).get('/staff/leads');
+    expect(res.status).toBe(200);
+    expect(res.body.results[0]).toMatchObject({
+      id: LEAD,
+      status: 'new',
+      name: null,
+      emailMasked: null,
+      verifiedAccount: null,
+    });
   });
 
   it.each([
@@ -180,11 +233,9 @@ describe('GET /staff/leads/:id', () => {
               created_at: new Date('2026-10-06T10:00:00.000Z'),
               kind: 'message',
               status: 'new',
-              name: 'Jane',
-              email: 'jane@example.com',
+              account_id: ACCOUNT,
               phone: null,
               message: 'Hello',
-              verified_account: false,
               consent_to_contact: false,
               consent_text_version: null,
               consent_disclosure_text: null,
@@ -215,11 +266,48 @@ describe('GET /staff/leads/:id', () => {
     expect(pool.calls[audit]?.params).toEqual([LEAD, ACCOUNT, ROLE.SuperAdmin]);
   });
 
+  it('returns the lead with the contact null, and still audits, when the lookup is down (#691)', async () => {
+    const pool = fakePool((call) =>
+      call.sql.includes('FROM listing_inquiries i')
+        ? [
+            {
+              id: LEAD,
+              created_at: new Date('2026-10-06T10:00:00.000Z'),
+              kind: 'message',
+              status: 'new',
+              account_id: ACCOUNT,
+              phone: null,
+              message: 'Hello',
+              consent_to_contact: false,
+              consent_text_version: null,
+              consent_disclosure_text: null,
+              consent_channels: null,
+              consent_given_at: null,
+              listing_id: LEAD,
+              listing_title: 'A home',
+              listing_address: '1 Main St',
+              listing_state: 'MD',
+              listing_price: null,
+              listing_status: 'Active',
+              possible_duplicate: false,
+            },
+          ]
+        : [],
+    );
+    const res = await request(appWith(as(ROLE.Admin), pool, contactsDown)).get(
+      `/staff/leads/${LEAD}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: LEAD, name: null, email: null, verifiedAccount: null });
+    expect(pool.calls.some((c) => c.sql.includes('INSERT INTO lead_access_audit'))).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('account-service');
+  });
+
   it('sends no data when the audit insert fails', async () => {
     const pool = fakePool((call) => {
       if (call.sql.includes('INSERT INTO lead_access_audit')) throw new Error('audit down');
       return call.sql.includes('FROM listing_inquiries i')
-        ? [{ id: LEAD, email: 'jane@example.com', created_at: new Date() }]
+        ? [{ id: LEAD, account_id: ACCOUNT, created_at: new Date() }]
         : [];
     });
     const res = await request(appWith(as(ROLE.Admin), pool)).get(`/staff/leads/${LEAD}`);

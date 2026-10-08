@@ -1639,6 +1639,10 @@ spec:
               value: http://account-service-svc:8080/internal/account/introspect
             - name: ACCOUNT_SERVICE_INTROSPECT_TIMEOUT_MS
               value: "2000"
+            - name: ACCOUNT_SERVICE_CONTACTS_URL
+              value: http://account-service-svc:8080/internal/account/contacts
+            - name: ACCOUNT_SERVICE_CONTACTS_TIMEOUT_MS
+              value: "1500"
             - name: INQUIRY_RATE_LIMIT_PER_IP_MAX
               value: "5"
             - name: INQUIRY_RATE_LIMIT_PER_IP_WINDOW_MS

@@ -5,7 +5,8 @@ import type { Queryable } from './write';
  * Notification outbox writer (#638). Records what a later sender would send. No sender exists.
  * Every row starts `held` (the column default). No code here or elsewhere updates a row.
  *
- * Only the buyer and the matched agent are ever notified (ruling 2026-10-06). A row holds ids,
+ * Only the buyer and the matched agent are ever notified (ruling 2026-10-06). Every recipient is
+ * an account id: the buyer, or the account of the agent profile (#691). A row holds ids,
  * never an email or a phone number. A buyer row needs recorded email consent.
  */
 export type OutboxEvent = 'lead.received' | 'lead.verified' | 'lead.assigned' | 'lead.accepted';
@@ -39,10 +40,8 @@ export async function enqueueLeadNotifications(
   const payload = JSON.stringify({ leadId: input.leadId });
   await client.query(
     `INSERT INTO notification_outbox
-       (lead_id, event_type, recipient_kind, channel, recipient_ref, recipient_ref_type,
-        template_key, payload)
-     SELECT id, $2, 'buyer', 'email', COALESCE(account_id, id),
-            CASE WHEN account_id IS NULL THEN 'lead' ELSE 'account' END, $3, $4::jsonb
+       (lead_id, event_type, recipient_kind, channel, recipient_account_id, template_key, payload)
+     SELECT id, $2, 'buyer', 'email', account_id, $3, $4::jsonb
        FROM listing_inquiries
       WHERE id = $1 AND consent_to_contact AND 'email' = ANY(consent_channels)`,
     [input.leadId, input.event, OUTBOX_TEMPLATE_KEYS[input.event], payload],
@@ -50,9 +49,9 @@ export async function enqueueLeadNotifications(
   if (input.event === 'lead.assigned' && input.agentProfileId) {
     await client.query(
       `INSERT INTO notification_outbox
-         (lead_id, event_type, recipient_kind, channel, recipient_ref, recipient_ref_type,
-          template_key, payload)
-       VALUES ($1, $2, 'agent', 'email', $3, 'agent_profile', $4, $5::jsonb)`,
+         (lead_id, event_type, recipient_kind, channel, recipient_account_id, template_key, payload)
+       SELECT $1, $2, 'agent', 'email', account_id, $4, $5::jsonb
+         FROM agent_profiles WHERE id = $3`,
       [input.leadId, input.event, input.agentProfileId, AGENT_ASSIGNED_TEMPLATE_KEY, payload],
     );
   }

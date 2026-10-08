@@ -12,6 +12,7 @@ import {
   actionsFor,
   canAssign,
   canUnassign,
+  CONTACT_UNAVAILABLE,
   formatDateTime,
   KIND_LABEL,
   noteRequired,
@@ -256,7 +257,9 @@ export default function LeadDetail({ id }: { id: string }) {
       </Link>
 
       <header>
-        <h1 className="break-words text-2xl font-bold text-ink">{lead.name}</h1>
+        <h1 className="break-words text-2xl font-bold text-ink">
+          {lead.name ?? CONTACT_UNAVAILABLE}
+        </h1>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <StatusBadge status={lead.status} />
           {lead.possibleDuplicate && <DuplicateBadge />}
@@ -321,9 +324,13 @@ export default function LeadDetail({ id }: { id: string }) {
           <div>
             <dt className="text-ink-muted">Email</dt>
             <dd className="break-all">
-              <a href={`mailto:${lead.email}`} className={LINK}>
-                {lead.email}
-              </a>
+              {lead.email ? (
+                <a href={`mailto:${lead.email}`} className={LINK}>
+                  {lead.email}
+                </a>
+              ) : (
+                CONTACT_UNAVAILABLE
+              )}
             </dd>
           </div>
           <div>

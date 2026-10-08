@@ -9,6 +9,7 @@ import {
   LEAD_NOT_FOUND_BODY,
   type LeadStatus,
 } from '@cribstop/property-contracts';
+import type { ContactsClient } from '../inquiries/account-contacts';
 import type { IntrospectionClient } from '../inquiries/account-introspection';
 import {
   changeLeadStatus,
@@ -30,6 +31,8 @@ import {
 export interface AgentLeadsRouterDeps {
   pool: Queryable & TransactionalPool;
   introspection: IntrospectionClient;
+  /** Buyer name and email come from the account (#691). */
+  contacts: ContactsClient;
 }
 
 const ACTOR_ROLE = 'Agent';
@@ -70,9 +73,9 @@ export function createAgentLeadsRouter(deps: AgentLeadsRouterDeps): Router {
         res.status(400).json(invalidRequest(describeIssues(parsed.error.issues)));
         return;
       }
-      res
-        .status(200)
-        .json({ results: await listAgentLeads(deps.pool, profileOf(res), parsed.data.status) });
+      res.status(200).json({
+        results: await listAgentLeads(deps.pool, deps.contacts, profileOf(res), parsed.data.status),
+      });
     }),
   );
 
@@ -82,7 +85,7 @@ export function createAgentLeadsRouter(deps: AgentLeadsRouterDeps): Router {
     asyncRoute(async (req, res) => {
       const id = idSchema.safeParse(req.params.id);
       const detail = id.success
-        ? await readAgentLeadDetail(deps.pool, profileOf(res), id.data, {
+        ? await readAgentLeadDetail(deps.pool, deps.contacts, profileOf(res), id.data, {
             accountId: staffCallerOf(res).accountId,
           })
         : null;

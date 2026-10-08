@@ -16,7 +16,6 @@ function fakeClient(returnId = '018f2f2a-6d1b-7c3d-8b2e-0000000000aa'): {
 const BASE_INPUT = {
   listingId: '018f2f2a-6d1b-7c3d-8b2e-000000000001',
   kind: 'tour_request' as const,
-  contactEmail: 'jane@example.com',
   phone: null,
   message: null,
   accountId: '018f2f2a-6d1b-7c3d-8b2e-0000000000dd',
@@ -24,12 +23,10 @@ const BASE_INPUT = {
 };
 
 // Bound parameter positions in `createListingInquiry`.
-const P_NAME = 2;
-const P_EMAIL = 3;
-const P_VERIFIED = 7;
-const P_TEXT = 9;
-const P_VERSION = 10;
-const P_CHANNELS = 11;
+const P_ACCOUNT = 4;
+const P_TEXT = 6;
+const P_VERSION = 7;
+const P_CHANNELS = 8;
 
 describe('createListingInquiry', () => {
   it('inserts the inquiry and its creation event in one statement, and returns the id', async () => {
@@ -95,14 +92,14 @@ describe('createListingInquiry', () => {
     expect(params[P_CHANNELS]).toBeNull();
   });
 
-  it('writes the account email to email and name, and verified_account true (#690)', async () => {
+  it('stores the account id and no copied name, email or verified flag (#691)', async () => {
     const { client, calls } = fakeClient();
 
     await createListingInquiry(client, BASE_INPUT);
 
-    expect(calls[0]?.params[P_NAME]).toBe('jane@example.com');
-    expect(calls[0]?.params[P_EMAIL]).toBe('jane@example.com');
-    expect(calls[0]?.params[P_VERIFIED]).toBe(true);
+    expect(calls[0]?.params[P_ACCOUNT]).toBe(BASE_INPUT.accountId);
+    expect(calls[0]?.sql).not.toMatch(/verified_account|recipient_ref/);
+    expect(calls[0]?.sql).not.toMatch(/\(listing_id, kind, (name|email)/);
   });
 
   it('throws rather than returning undefined when the insert yields no row', async () => {

@@ -67,6 +67,18 @@ it('before accept: masked contact, Accept and Decline, no status steps', async (
   expect(screen.queryByText(/Mark as/)).toBeNull();
 });
 
+it('after accept: shows the contact unavailable when the lookup failed (#691)', async () => {
+  const base = accepted();
+  fetchAgentLead.mockResolvedValue({
+    ...base,
+    contact: base.contact ? { ...base.contact, name: null, email: null } : null,
+  });
+  render(<AgentLeadDetailView id={ID} />);
+  expect((await screen.findAllByText(/Unavailable, retry/)).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('link', { name: /Email/ })).toBeNull();
+  expect(screen.getByRole('link', { name: /Call \(202\) 555-0100/ })).toBeInTheDocument();
+});
+
 it('accept reloads the lead and shows the contact', async () => {
   fetchAgentLead.mockResolvedValueOnce(lead()).mockResolvedValueOnce(accepted());
   acceptLead.mockResolvedValue(undefined);
