@@ -10,7 +10,7 @@ export interface SyncQueryable {
   ): Promise<{ rows: Record<string, unknown>[]; rowCount?: number | null }>;
 }
 
-export const SYNC_MODES = ['incremental', 'backfill', 'reconcile', 'audit'] as const;
+export const SYNC_MODES = ['incremental', 'backfill', 'reconcile', 'audit', 'probe'] as const;
 export type SyncMode = (typeof SYNC_MODES)[number];
 
 export type SyncRunStatus = 'requested' | 'running' | 'succeeded' | 'failed';

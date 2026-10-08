@@ -80,6 +80,10 @@ spec:
               value: "120000" # 2 minutes, covers clock and replication lag
             - name: BRIGHT_SYNC_RECONCILE_INTERVAL_MS
               value: "86400000" # 24 hours
+            - name: BRIGHT_SYNC_PROBE_INTERVAL_MS
+              value: "86400000" # 24 hours (#715)
+            - name: BRIGHT_SYNC_PROBE_MAX_TAKEDOWN
+              value: "500" # keys one probe run may take down; above it, none (#715)
             - name: BRIGHT_SOLD_LOOKBACK_DAYS
               value: "365"
             - name: BRIGHT_SYNC_POLL_MS
