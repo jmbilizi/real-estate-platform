@@ -112,11 +112,19 @@ async function run(store: StoreLike, notify: Notify): Promise<void> {
     return;
   }
 
-  const merged: SavedEntry[] = server.map((h) => ({
-    propertyId: h.propertyId,
-    listingId: h.savedFromListingId,
-  }));
-  for (const entry of unsynced) {
+  // The consumer may flip a home while the requests run. Replay those flips over the server list,
+  // so the stale snapshot cannot undo them.
+  const current = store.getState().favorites.homes;
+  const wasLocal = new Set(local.map((h) => h.propertyId));
+  const isLocal = new Set(current.map((h) => h.propertyId));
+  const added = current.filter((h) => !wasLocal.has(h.propertyId));
+  const removed = new Set(local.filter((h) => !isLocal.has(h.propertyId)).map((h) => h.propertyId));
+
+  const merged: SavedEntry[] = server
+    .filter((h) => !removed.has(h.propertyId))
+    .map((h) => ({ propertyId: h.propertyId, listingId: h.savedFromListingId }));
+  const keep = [...unsynced.filter((h) => isLocal.has(h.propertyId)), ...added];
+  for (const entry of keep) {
     if (!merged.some((h) => h.propertyId === entry.propertyId)) merged.push(entry);
   }
   store.dispatch(replaceSaved(merged));

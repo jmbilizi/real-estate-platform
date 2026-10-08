@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import favoritesReducer, { saveEntry } from '@/lib/store/slices/favoritesSlice';
+import favoritesReducer, { saveEntry, unsaveEntry } from '@/lib/store/slices/favoritesSlice';
 import { listAllSavedHomes, saveListing, unsaveHomeById } from '@/lib/api/saved-homes';
 import { removeHome, syncSavedHomes, toggleHome } from './saved-sync';
 
@@ -177,6 +177,22 @@ describe('syncSavedHomes', () => {
 
     expect(homes(store)).toEqual([HOME]);
     expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a flip the consumer made while the sync ran', async () => {
+    let finishList: (v: unknown) => void = () => {};
+    mockedList.mockReturnValue(new Promise((resolve) => (finishList = resolve)));
+    const store = makeStore();
+    store.dispatch(saveEntry({ propertyId: HOME, listingId: 'listing-1' }));
+    const pending = syncSavedHomes(store, jest.fn());
+
+    // During the sync: unsave HOME, save OTHER_HOME.
+    store.dispatch(unsaveEntry(HOME));
+    store.dispatch(saveEntry({ propertyId: OTHER_HOME, listingId: 'listing-9' }));
+    finishList([serverHome(HOME, 'listing-1')]);
+    await pending;
+
+    expect(homes(store)).toEqual([OTHER_HOME]);
   });
 
   it('runs one sync at a time', async () => {
