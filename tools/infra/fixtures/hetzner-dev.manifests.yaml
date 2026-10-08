@@ -2410,6 +2410,36 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+  labels:
+    app: api-gateway
+    app.kubernetes.io/managed-by: kustomize
+    environment: dev
+    managed-by: gitops
+    provider: hetzner
+  name: account-postmark-webhook
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: API_GATEWAY_DOMAIN_PLACEHOLDER
+      http:
+        paths:
+          - backend:
+              service:
+                name: api-gateway-svc
+                port:
+                  number: 8080
+            path: /account/webhooks/postmark
+            pathType: Exact
+  tls:
+    - hosts:
+        - API_GATEWAY_DOMAIN_PLACEHOLDER
+      secretName: api-gateway-dev-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/auth-realm: Authentication Required - API Gateway
     nginx.ingress.kubernetes.io/auth-secret: ingress-secret
