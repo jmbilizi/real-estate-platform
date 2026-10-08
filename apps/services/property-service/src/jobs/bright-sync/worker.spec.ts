@@ -145,6 +145,8 @@ describe('worker settings', () => {
       incrementalIntervalMs: 300_000,
       overlapMs: 120_000,
       reconcileIntervalMs: 86_400_000,
+      probeIntervalMs: 86_400_000,
+      probeMaxTakedown: 500,
       soldLookbackDays: 365,
       soldDisplayDelayDays: null,
       pollMs: 10_000,

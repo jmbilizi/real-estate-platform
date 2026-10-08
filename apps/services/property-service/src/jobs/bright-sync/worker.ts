@@ -27,6 +27,7 @@ import { loadListingStatuses, mapBrightPayloads } from '../bright-map/run';
 import { isSampleFeed } from '../bright-map/sample';
 import type { ListingStatusLookup } from '../bright-map/status';
 import { sweepOtherFeedTiers } from '../bright-map/sweep';
+import { PROBE_DEFAULT_MAX_TAKEDOWN, runProbeSweep } from './probe';
 import {
   claimRequestedRun,
   failInterruptedRuns,
@@ -67,6 +68,13 @@ export interface WorkerSettings {
   readonly incrementalIntervalMs: number;
   readonly overlapMs: number;
   readonly reconcileIntervalMs: number;
+  /**
+   * Time between probe sweeps (#715). A sweep covers every live key. About 91,000 keys is 910
+   * requests of 100 keys, a few minutes at the sync's request rate. The default is daily.
+   */
+  readonly probeIntervalMs: number;
+  /** Most keys one probe sweep takes down. Above it, the sweep takes down nothing (#715). */
+  readonly probeMaxTakedown: number;
   readonly soldLookbackDays: number;
   /** `null` = unconfigured: every sold record fails closed, so the `Closed` backfill is skipped. */
   readonly soldDisplayDelayDays: number | null;
@@ -114,6 +122,8 @@ export function resolveWorkerSettings(env: NodeJS.ProcessEnv = process.env): Wor
     incrementalIntervalMs: numberFrom(env, 'BRIGHT_SYNC_INCREMENTAL_INTERVAL_MS', 5 * 60 * 1000),
     overlapMs: numberFrom(env, 'BRIGHT_SYNC_OVERLAP_MS', 2 * 60 * 1000),
     reconcileIntervalMs: numberFrom(env, 'BRIGHT_SYNC_RECONCILE_INTERVAL_MS', DAY_MS),
+    probeIntervalMs: numberFrom(env, 'BRIGHT_SYNC_PROBE_INTERVAL_MS', DAY_MS),
+    probeMaxTakedown: numberFrom(env, 'BRIGHT_SYNC_PROBE_MAX_TAKEDOWN', PROBE_DEFAULT_MAX_TAKEDOWN),
     soldLookbackDays: numberFrom(env, 'BRIGHT_SOLD_LOOKBACK_DAYS', 365),
     soldDisplayDelayDays:
       delayRaw === undefined || delayRaw.trim() === ''
@@ -468,6 +478,25 @@ export async function executeRun(ctx: WorkerContext, run: SyncRun): Promise<bool
       case 'reconcile':
         counts = await runReconcile(deps, { statuses: scope.statuses ?? LIVE_STATUSES });
         break;
+      case 'probe':
+        counts = await runProbeSweep(
+          {
+            serviceRoot: deps.serviceRoot,
+            fetchPage: deps.fetchPage,
+            listLive: () =>
+              deps.listLiveLocal(
+                statuses
+                  .filter((s) => s.isPubliclySearchable && !s.isTerminal)
+                  .flatMap((s) => (s.resoStandardStatus === null ? [] : [s.resoStandardStatus])),
+              ),
+            takeDown: deps.takeDown,
+            statuses,
+            concurrency: ctx.settings.concurrency,
+            log: ctx.log,
+          },
+          { maxTakedown: ctx.settings.probeMaxTakedown },
+        );
+        break;
       case 'audit':
         counts = await runAudit(deps, {
           areas:
@@ -696,6 +725,15 @@ export async function runWorker(
     ) {
       await scheduled(ctx, 'reconcile', {}, 'worker:schedule');
       await scheduled(ctx, 'audit', {}, 'worker:schedule');
+      continue;
+    }
+
+    const lastProbe = await lastFinishedRun(pool, 'probe', ctx.config.feed);
+    if (
+      lastProbe === null ||
+      nowMs - Date.parse(lastProbe.finishedAt as string) >= settings.probeIntervalMs
+    ) {
+      await scheduled(ctx, 'probe', {}, 'worker:schedule');
       continue;
     }
 
