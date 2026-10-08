@@ -8,6 +8,8 @@ const {
   classifyWorktree,
   reclaim: realReclaim,
   judgePullRequests,
+  sweepOrphans,
+  defaultRemoveDir,
   parseArgs,
   isInside,
   DEFAULT_OLDER_THAN_MS,
@@ -1111,4 +1113,109 @@ test('parseArgs reads --merged-only and --quiet', () => {
   const args = parseArgs(['--apply', '--merged-only', '--quiet']);
   assert.equal(args.mergedOnly, true);
   assert.equal(args.quiet, true);
+});
+
+// --- leftover folders and orphan sweep ------------------------------------------------------
+
+const fsNode = require('node:fs');
+const osNode = require('node:os');
+const pathNode = require('node:path');
+
+test('apply deletes the leftover folder after a successful remove', () => {
+  const { run } = buildRun({
+    listOutput: listFixture('/repo/worktrees/target', 'target-branch'),
+    status: () => ok(''),
+    log: () => ok(''),
+    mergeBase: () => ok(''),
+    reflog: () => ok('commit: work\nbranch: Created from HEAD\n'),
+  });
+  const removed = [];
+  const result = reclaim({
+    run,
+    pathExists: () => true,
+    apply: true,
+    now,
+    statFile: freshStatFile,
+    cwd: '/repo',
+    removeDir: (dir) => {
+      removed.push(dir);
+      return { removed: true };
+    },
+    listDir: () => [],
+  });
+  const target = result.entries.find((entry) => entry.path === '/repo/worktrees/target');
+  assert.equal(target.leftoverRemoved, true);
+  assert.deepEqual(removed, ['/repo/worktrees/target']);
+});
+
+test('defaultRemoveDir refuses a path outside the worktrees root', () => {
+  const root = fsNode.mkdtempSync(pathNode.join(osNode.tmpdir(), 'wt-root-'));
+  const outside = fsNode.mkdtempSync(pathNode.join(osNode.tmpdir(), 'wt-out-'));
+  try {
+    assert.equal(defaultRemoveDir(outside, root).removed, false);
+    assert.equal(defaultRemoveDir(root, root).removed, false);
+    assert.equal(fsNode.existsSync(outside), true);
+  } finally {
+    fsNode.rmSync(root, { recursive: true, force: true });
+    fsNode.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('sweepOrphans removes unregistered residue and keeps live and recent folders', () => {
+  const root = fsNode.mkdtempSync(pathNode.join(osNode.tmpdir(), 'wt-sweep-'));
+  try {
+    const make = (name, git) => {
+      const dir = pathNode.join(root, name);
+      fsNode.mkdirSync(pathNode.join(dir, 'node_modules'), { recursive: true });
+      if (git !== undefined) fsNode.writeFileSync(pathNode.join(dir, '.git'), git);
+      return dir;
+    };
+    const residue = make('residue');
+    const dangling = make('dangling', 'gitdir: ' + pathNode.join(root, 'missing-gitdir'));
+    const registered = make('registered', 'gitdir: ' + pathNode.join(root, 'registered'));
+    const live = make('live-gitdir', 'gitdir: ' + root);
+    const recent = make('recent');
+    const old = Date.now() - 5 * 3_600_000;
+    for (const dir of [residue, dangling, registered, live])
+      fsNode.utimesSync(dir, old / 1000, old / 1000);
+
+    const results = sweepOrphans({
+      root,
+      registered: [registered],
+      apply: true,
+      now: Date.now,
+      olderThanMs: 3_600_000,
+      removeDir: defaultRemoveDir,
+      listDir: (dir) => fsNode.readdirSync(dir),
+      statDir: (dir) => fsNode.statSync(dir),
+    });
+
+    assert.equal(fsNode.existsSync(residue), false);
+    assert.equal(fsNode.existsSync(dangling), false);
+    assert.equal(fsNode.existsSync(registered), true);
+    assert.equal(fsNode.existsSync(live), true);
+    assert.equal(fsNode.existsSync(recent), true);
+    assert.deepEqual(results.map((r) => r.action).sort(), [
+      'kept-recent',
+      'orphan-removed',
+      'orphan-removed',
+    ]);
+  } finally {
+    fsNode.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('sweepOrphans reports a failed delete and does not throw', () => {
+  const results = sweepOrphans({
+    root: '/root',
+    registered: [],
+    apply: true,
+    now,
+    olderThanMs: 0,
+    removeDir: () => ({ removed: false, error: 'EBUSY' }),
+    listDir: () => ['stuck'],
+    statDir: () => ({ isDirectory: () => true, mtimeMs: 0 }),
+  });
+  assert.equal(results[0].action, 'orphan-failed');
+  assert.equal(results[0].error, 'EBUSY');
 });

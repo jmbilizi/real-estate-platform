@@ -250,6 +250,104 @@ function orphanedLocked(record, orphanReason) {
   };
 }
 
+const DEFAULT_ORPHAN_OLDER_THAN_MS = 60 * 60 * 1000;
+
+/** The folder that holds agent worktrees, derived from the primary worktree path. */
+function worktreesRoot(primaryPath) {
+  return path.join(primaryPath, '.claude', 'worktrees');
+}
+
+/** Prefix a Windows absolute path so deep node_modules trees delete past MAX_PATH. */
+function longPath(target) {
+  const resolved = path.resolve(target);
+  if (process.platform !== 'win32' || resolved.startsWith('\\\\?\\')) return resolved;
+  return '\\\\?\\' + resolved;
+}
+
+/**
+ * Delete a folder tree. Refuses any path that is not strictly inside `root`, so a wrong input
+ * can never delete outside `.claude/worktrees/`. Returns `{ removed, error? }`.
+ */
+function defaultRemoveDir(target, root) {
+  if (!root || !isInside(target, root) || isInside(root, target)) {
+    return { removed: false, error: 'the path is outside the worktrees folder' };
+  }
+  try {
+    fs.rmSync(longPath(target), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    return { removed: !fs.existsSync(target) };
+  } catch (error) {
+    return { removed: false, error: error && error.message };
+  }
+}
+
+/** Report whether a `.git` file points to a gitdir that exists. */
+function gitFileTargetExists(dir) {
+  const gitPath = path.join(dir, '.git');
+  let stat;
+  try {
+    stat = fs.statSync(gitPath);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return false;
+    return true; // an unreadable probe never reads as "missing"
+  }
+  if (stat.isDirectory()) return true; // a real clone, not residue
+  try {
+    const match = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(gitPath, 'utf-8'));
+    if (!match) return true;
+    return fs.existsSync(path.resolve(dir, match[1].trim()));
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Find folders under the worktrees root that git does not register and that hold no live
+ * worktree: no `.git`, or a `.git` file that points at a missing gitdir. Each must also be idle
+ * longer than the orphan window. Delete them when `apply` is set.
+ */
+function sweepOrphans({ root, registered, apply, now, olderThanMs, removeDir, listDir, statDir }) {
+  const results = [];
+  let names;
+  try {
+    names = listDir(root);
+  } catch {
+    return results;
+  }
+  const known = new Set(
+    registered.map((p) => (process.platform === 'win32' ? p.toLowerCase() : p)),
+  );
+  for (const name of names) {
+    const dir = path.join(root, name);
+    const key = process.platform === 'win32' ? path.resolve(dir).toLowerCase() : path.resolve(dir);
+    if ([...known].some((p) => path.resolve(p) === key || path.resolve(p).toLowerCase() === key)) {
+      continue;
+    }
+    let stat;
+    try {
+      stat = statDir(dir);
+    } catch {
+      continue;
+    }
+    if (!stat.isDirectory()) continue;
+    if (gitFileTargetExists(dir)) continue;
+    if (now() - stat.mtimeMs < olderThanMs) {
+      results.push({ path: dir, action: 'kept-recent' });
+      continue;
+    }
+    if (!apply) {
+      results.push({ path: dir, action: 'orphan' });
+      continue;
+    }
+    const outcome = removeDir(dir, root);
+    results.push(
+      outcome.removed
+        ? { path: dir, action: 'orphan-removed' }
+        : { path: dir, action: 'orphan-failed', error: outcome.error || 'the folder remains' },
+    );
+  }
+  return results;
+}
+
 /**
  * Read open, merged, and closed pull requests in one `gh` call. Returns `null` on any failure,
  * which means "no PR evidence": the caller then relies on git ancestry alone and removes less.
@@ -455,6 +553,16 @@ function parseArgs(argv) {
     quiet: argv.includes('--quiet'),
   };
 
+  const orphanIndex = argv.indexOf('--orphan-older-than');
+  if (orphanIndex !== -1) {
+    const raw = argv[orphanIndex + 1];
+    const hours = Number(raw);
+    if (raw === undefined || raw === '' || !Number.isFinite(hours) || hours < 0) {
+      throw new Error(`--orphan-older-than needs a non-negative number of hours. Got: ${raw}`);
+    }
+    result.orphanOlderThanHours = hours;
+  }
+
   const flagIndex = argv.indexOf('--older-than');
   if (flagIndex !== -1) {
     const raw = argv[flagIndex + 1];
@@ -483,6 +591,10 @@ function parseArgs(argv) {
  *   isProcessAlive?: Function,
  *   mergedOnly?: boolean,
  *   loadPullRequests?: Function,
+ *   removeDir?: Function,
+ *   listDir?: Function,
+ *   statDir?: Function,
+ *   orphanOlderThanMs?: number,
  * }} [options]
  * @returns {{
  *   entries: Array<{ path: string, branch: string|null, classification: string, reason: string|null, action: string, error?: string }>,
@@ -502,6 +614,13 @@ function reclaim(options = {}) {
   const apply = Boolean(options.apply);
   const force = Boolean(options.force);
   const mergedOnly = Boolean(options.mergedOnly);
+  const removeDir = options.removeDir || defaultRemoveDir;
+  const listDir = options.listDir || ((dir) => fs.readdirSync(dir));
+  const statDir = options.statDir || ((dir) => fs.statSync(dir));
+  const orphanOlderThanMs =
+    typeof options.orphanOlderThanMs === 'number'
+      ? options.orphanOlderThanMs
+      : DEFAULT_ORPHAN_OLDER_THAN_MS;
   const loadPullRequests = options.loadPullRequests || defaultLoadPullRequests;
   const olderThanMs =
     typeof options.olderThanMs === 'number' ? options.olderThanMs : DEFAULT_OLDER_THAN_MS;
@@ -521,6 +640,16 @@ function reclaim(options = {}) {
     pullRequests = null;
   }
   const entries = [];
+  const root = worktreesRoot(records[0] ? records[0].path : '.');
+  // Git leaves ignored files (node_modules, .nx) behind after `worktree remove --force`.
+  const removeLeftover = (entry, dir) => {
+    const outcome = removeDir(dir, root);
+    if (outcome.removed) {
+      entry.leftoverRemoved = true;
+    } else if (outcome.error && !/outside the worktrees folder/.test(outcome.error)) {
+      entry.error = `the worktree is removed, but the folder remains: ${outcome.error}`;
+    }
+  };
   let hasOrphaned = false;
   let failed = false;
 
@@ -592,6 +721,7 @@ function reclaim(options = {}) {
           failed = true;
         } else {
           entry.action = 'removed';
+          removeLeftover(entry, record.path);
           if (verdict.merged && record.branch) {
             const del = run(['-C', entries[0].path, 'branch', '-D', record.branch], {
               encoding: 'utf-8',
@@ -617,6 +747,7 @@ function reclaim(options = {}) {
           failed = true;
         } else {
           entry.action = 'removed';
+          removeLeftover(entry, record.path);
         }
       }
     }
@@ -641,7 +772,19 @@ function reclaim(options = {}) {
     }
   }
 
-  return { entries, apply, force, olderThanMs, failed };
+  const orphans = records[0]
+    ? sweepOrphans({
+        root,
+        registered: records.map((r) => r.path),
+        apply,
+        now,
+        olderThanMs: orphanOlderThanMs,
+        removeDir,
+        listDir,
+        statDir,
+      })
+    : [];
+  return { entries, orphans, apply, force, olderThanMs, failed };
 }
 
 /** Build the readable report: one line per worktree, then a summary line. */
@@ -655,6 +798,7 @@ function formatReport(result) {
     );
     if (entry.reason) lines.push(`  reason: ${entry.reason}`);
     if (entry.branchDeleted) lines.push('  local branch deleted');
+    if (entry.leftoverRemoved) lines.push('  leftover folder deleted');
     if (entry.error) lines.push(`  error: ${entry.error}`);
   }
 
@@ -668,8 +812,21 @@ function formatReport(result) {
 
   const windowHours = (result.olderThanMs / 3_600_000).toFixed(1);
 
+  const orphans = result.orphans || [];
+  const orphanCount = (action) => orphans.filter((o) => o.action === action).length;
+  for (const orphan of orphans.filter((o) => o.action !== 'kept-recent')) {
+    lines.push(`ORPHAN       ${orphan.action.padEnd(13)} ${orphan.path}`);
+    if (orphan.error) lines.push(`  error: ${orphan.error}`);
+  }
+
   lines.push('');
   lines.push(`Summary: ${summary}.`);
+  if (orphans.length > 0) {
+    lines.push(
+      `Residue folders: ${orphanCount('orphan')} found, ${orphanCount('orphan-removed')} removed, ` +
+        `${orphanCount('orphan-failed')} failed, ${orphanCount('kept-recent')} too recent.`,
+    );
+  }
   lines.push(`Worktrees touched within the last ${windowHours}h classify active and are skipped.`);
 
   if (result.entries.some((entry) => entry.classification === 'orphaned-locked')) {
@@ -704,6 +861,8 @@ function main() {
       apply: args.apply,
       force: args.force,
       mergedOnly: args.mergedOnly,
+      orphanOlderThanMs:
+        args.orphanOlderThanHours !== undefined ? args.orphanOlderThanHours * 3_600_000 : undefined,
       olderThanMs: args.olderThanHours !== undefined ? args.olderThanHours * 3_600_000 : undefined,
     });
   } catch (error) {
@@ -716,9 +875,18 @@ function main() {
   if (args.quiet) {
     // Automatic runs print one line at most, and never fail a session.
     const removed = result.entries.filter((e) => e.action === 'removed').length;
-    const failed = result.entries.filter((e) => /failed$/.test(e.action)).length;
-    if (removed > 0 || failed > 0) {
-      console.log(`Worktree cleanup: ${removed} removed, ${failed} failed.`);
+    const orphans = result.orphans || [];
+    const residue = orphans.filter((o) => o.action === 'orphan-removed').length;
+    const failed =
+      result.entries.filter((e) => /failed$/.test(e.action) || e.error).length +
+      orphans.filter((o) => o.action === 'orphan-failed').length;
+    for (const o of orphans.filter((x) => x.action === 'orphan-failed')) {
+      console.log(`Cannot delete ${o.path}: ${o.error}`);
+    }
+    if (removed > 0 || residue > 0 || failed > 0) {
+      console.log(
+        `Worktree cleanup: ${removed} removed, ${residue} residue folders removed, ${failed} failed.`,
+      );
     }
     return;
   }
@@ -741,5 +909,7 @@ module.exports = {
   parseArgs,
   isInside,
   judgePullRequests,
+  sweepOrphans,
+  defaultRemoveDir,
   DEFAULT_OLDER_THAN_MS,
 };
