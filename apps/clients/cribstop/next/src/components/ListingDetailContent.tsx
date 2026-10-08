@@ -92,7 +92,7 @@ export default function ListingDetailContent({
 }: Props) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
-  const saved = isSaved(listing.id);
+  const saved = isSaved(listing.propertyId);
   const rootRef = useRef<HTMLDivElement>(null);
   // #132: one request path for every "Request a Tour" and "Message Agent" button.
   const [requestKind, setRequestKind] = useState<InquiryKind | null>(null);
@@ -271,7 +271,7 @@ export default function ListingDetailContent({
         <span className="hidden sm:inline">Share</span>
       </button>
       <button
-        onClick={() => toggleSave(listing.id)}
+        onClick={() => toggleSave(listing)}
         className={`btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5 ${saved ? 'border-brand text-brand' : ''}`}
         aria-label={saved ? 'Saved' : 'Save'}
       >

@@ -19,7 +19,7 @@ import {
   selectListingTab,
   selectListingType,
   selectMobileSearchOpen,
-  selectSavedIds,
+  selectSavedHomes,
   selectSearchDateRange,
   selectSearchListingType,
   selectSearchLocation,
@@ -37,7 +37,8 @@ import {
   setShowOnboarding,
   updateProfile,
 } from '@/lib/store/slices/authSlice';
-import { clearSaved, toggleSave } from '@/lib/store/slices/favoritesSlice';
+import { clearSaved, type SavedEntry, saveEntry } from '@/lib/store/slices/favoritesSlice';
+import { removeHome, syncSavedHomes, toggleHome } from '@/lib/saved-sync';
 import { addToast } from '@/lib/store/slices/toastSlice';
 
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
@@ -71,7 +72,9 @@ import {
 interface AppContextValue {
   user: User | null;
   sessionLoading: boolean;
-  savedIds: Set<string>;
+  /** Saved homes, keyed on property id (#25). */
+  savedHomes: SavedEntry[];
+  savedPropertyIds: Set<string>;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
   completeSignup: (
     email: string,
@@ -79,8 +82,13 @@ interface AppContextValue {
     password: string,
   ) => Promise<CompleteSignupOutcome>;
   logout: () => void;
-  toggleSave: (id: string) => void;
-  isSaved: (id: string) => boolean;
+  /** Flips the home of a listing, so every listing of that home flips together. */
+  toggleSave: (listing: { id: string; propertyId: string }) => void;
+  /** Removes a saved home by property id, for a home with no listing to flip. */
+  removeSaved: (propertyId: string) => void;
+  /** Adds homes the server reports as saved. Never removes one. */
+  adoptSaved: (entries: SavedEntry[]) => void;
+  isSaved: (propertyId: string) => boolean;
   listingTab: ListingTab;
   setListingTab: (tab: ListingTab) => void;
   activeTab: NavTab;
@@ -116,6 +124,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 }
 
+function notifyError(dispatch: (action: ReturnType<typeof addToast>) => unknown) {
+  return (message: string) =>
+    dispatch(addToast({ id: `saved-${Date.now()}`, message, type: 'error', duration: 5000 }));
+}
+
 /**
  * Runs once inside AppProvider to verify the cached session against the server.
  * Extracted from useApp() to prevent duplicate calls (every useApp() consumer
@@ -148,6 +161,7 @@ function SessionVerifier() {
         } else {
           dispatch(setSessionChecked());
         }
+        void syncSavedHomes(store, notifyError(dispatch));
         // Only fetch profile from API if we don't already have it cached
         const needsProfile = !currentUser?.profileComplete;
         if (needsProfile) {
@@ -199,7 +213,7 @@ export function useApp(): AppContextValue {
 
   const user = useAppSelector(selectUser);
   const sessionChecked = useAppSelector(selectSessionChecked);
-  const savedIdList = useAppSelector(selectSavedIds);
+  const savedHomes = useAppSelector(selectSavedHomes);
   const listingTab = useAppSelector(selectListingTab);
   const activeTab = useAppSelector(selectActiveTab);
   const listingType = useAppSelector(selectListingType);
@@ -213,11 +227,16 @@ export function useApp(): AppContextValue {
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
   const searchListingType = useAppSelector(selectSearchListingType);
 
-  const savedIds = useMemo(() => new Set(savedIdList), [savedIdList]);
+  const savedPropertyIds = useMemo(
+    () => new Set(savedHomes.map((h) => h.propertyId)),
+    [savedHomes],
+  );
 
   const startSession = useCallback(
     async (email: string, res: { email?: string; accessToken?: string }) => {
       dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
+      // The server resolves homes saved while signed out, then its list replaces the local one.
+      void syncSavedHomes(store, notifyError(dispatch));
 
       // Check if profile is complete — show onboarding if not
       try {
@@ -280,13 +299,32 @@ export function useApp(): AppContextValue {
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(
-    (id: string) => {
-      dispatch(toggleSave(id));
+    (listing: { id: string; propertyId: string }) => {
+      const signedIn = store.getState().auth.user !== null;
+      void toggleHome(store, listing, signedIn, notifyError(dispatch));
     },
     [dispatch],
   );
 
-  const isSaved = useCallback((id: string) => savedIds.has(id), [savedIds]);
+  const removeSaved = useCallback(
+    (propertyId: string) => {
+      const signedIn = store.getState().auth.user !== null;
+      void removeHome(store, propertyId, signedIn, notifyError(dispatch));
+    },
+    [dispatch],
+  );
+
+  const adoptSaved = useCallback(
+    (entries: SavedEntry[]) => {
+      for (const entry of entries) dispatch(saveEntry(entry));
+    },
+    [dispatch],
+  );
+
+  const isSaved = useCallback(
+    (propertyId: string) => savedPropertyIds.has(propertyId),
+    [savedPropertyIds],
+  );
 
   const setTab = useCallback(
     (tab: ListingTab) => {
@@ -375,11 +413,14 @@ export function useApp(): AppContextValue {
   return {
     user,
     sessionLoading: !sessionChecked,
-    savedIds,
+    savedHomes,
+    savedPropertyIds,
     login: loginUser,
     completeSignup: completeSignupUser,
     logout: logoutUser,
     toggleSave: toggleSavedListing,
+    removeSaved,
+    adoptSaved,
     isSaved,
     listingTab,
     setListingTab: setTab,
