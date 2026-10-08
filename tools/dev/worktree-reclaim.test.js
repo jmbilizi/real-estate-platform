@@ -6,11 +6,15 @@ const assert = require('node:assert/strict');
 const {
   parsePorcelain,
   classifyWorktree,
-  reclaim,
+  reclaim: realReclaim,
+  judgePullRequests,
   parseArgs,
   isInside,
   DEFAULT_OLDER_THAN_MS,
 } = require('./worktree-reclaim');
+
+// Tests never reach the real GitHub CLI: no PR evidence unless a test supplies it.
+const reclaim = (options) => realReclaim({ loadPullRequests: () => null, ...options });
 
 /** A successful probe result, mirroring the shape of a real `spawnSync` call. */
 function ok(stdout = '') {
@@ -44,6 +48,7 @@ const freshStatFile = () => ({ mtimeMs: FRESH_MTIME_MS });
 function withGitDir(run, gitDir = '/repo/worktrees/target/.git/worktrees/target') {
   return (args, opts) => {
     if (args[2] === 'rev-parse') return ok(gitDir);
+    if (args[0] === 'merge-base') return fail('not an ancestor');
     return run(args, opts);
   };
 }
@@ -387,6 +392,7 @@ test('--older-than narrows the window: a worktree stale under 24h can still be a
 test('a failing git-dir probe classifies unknown, never stale or active', () => {
   const run = (args) => {
     if (args[2] === 'rev-parse') return fail();
+    if (args[0] === 'merge-base') return fail();
     if (args[2] === 'status') return ok('');
     if (args[2] === 'log') return ok('');
     throw new Error(`unexpected call: ${args.join(' ')}`);
@@ -460,6 +466,9 @@ function buildRun(scenario) {
       if (sub === 'status') return scenario.status(args[1]);
       if (sub === 'log') return scenario.log(args[1]);
     }
+    if (args[0] === 'merge-base') return scenario.mergeBase ? scenario.mergeBase() : fail();
+    if (args[0] === 'reflog') return scenario.reflog ? scenario.reflog() : ok('');
+    if (args[2] === 'branch') return scenario.branchDelete ? scenario.branchDelete() : ok();
     if (args[0] === 'worktree' && args[1] === 'remove') {
       return scenario.remove ? scenario.remove(args) : ok();
     }
@@ -930,4 +939,176 @@ test('an orphaned-locked worktree never reports action pruned, and never trigger
     false,
   );
   assert.equal(result.failed, false);
+});
+
+// --- merged worktrees: removable at any age ---------------------------------------------------
+
+const MERGED_REFLOG = ok('commit: work\nbranch: Created from HEAD\n');
+
+function mergedRun({ ancestor = true, reflog = MERGED_REFLOG, log = ok('') } = {}) {
+  return (args) => {
+    if (args[2] === 'rev-parse') return ok('/gitdir');
+    if (args[2] === 'status') return ok('');
+    if (args[2] === 'log') return log;
+    if (args[0] === 'merge-base') return ancestor ? ok('') : fail();
+    if (args[0] === 'reflog') return reflog;
+    throw new Error(`unexpected call: ${args.join(' ')}`);
+  };
+}
+
+const freshOptions = { pathExists: () => true, now, statFile: freshStatFile };
+
+test('a merged branch is reclaimable inside the idle window', () => {
+  const result = classifyWorktree(baseRecord(), { run: mergedRun(), ...freshOptions });
+  assert.equal(result.classification, 'reclaimable');
+  assert.equal(result.merged, true);
+});
+
+test('a new branch with only its creation reflog entry is not merged', () => {
+  const run = mergedRun({ reflog: ok('branch: Created from HEAD\n') });
+  const result = classifyWorktree(baseRecord(), { run, ...freshOptions });
+  assert.equal(result.classification, 'active');
+});
+
+test('a new branch that only pulled is not merged', () => {
+  const run = mergedRun({ reflog: ok('pull: Fast-forward\nbranch: Created from HEAD\n') });
+  const result = classifyWorktree(baseRecord(), { run, ...freshOptions });
+  assert.equal(result.classification, 'active');
+});
+
+test('a base branch is never merged work', () => {
+  const result = classifyWorktree(baseRecord({ branch: 'main' }), {
+    run: mergedRun(),
+    ...freshOptions,
+  });
+  assert.equal(result.classification, 'active');
+});
+
+test('an open PR blocks the ancestry result', () => {
+  const record = baseRecord();
+  const result = classifyWorktree(record, {
+    run: mergedRun(),
+    ...freshOptions,
+    pullRequests: [{ headRefName: record.branch, headRefOid: record.head, state: 'OPEN' }],
+  });
+  assert.equal(result.classification, 'active');
+});
+
+test('a closed PR does not hide unpushed commits', () => {
+  const record = baseRecord();
+  const result = classifyWorktree(record, {
+    run: mergedRun({ ancestor: false, log: ok('abc1234 local only\n') }),
+    ...freshOptions,
+    pullRequests: [{ headRefName: record.branch, headRefOid: record.head, state: 'CLOSED' }],
+  });
+  assert.equal(result.classification, 'unpushed');
+});
+
+test('a branch that is not an ancestor of origin/dev stays active', () => {
+  const result = classifyWorktree(baseRecord(), {
+    run: mergedRun({ ancestor: false }),
+    ...freshOptions,
+  });
+  assert.equal(result.classification, 'active');
+});
+
+test('a failing reflog probe never reads as merged', () => {
+  const result = classifyWorktree(baseRecord(), {
+    run: mergedRun({ reflog: fail() }),
+    ...freshOptions,
+  });
+  assert.equal(result.classification, 'active');
+});
+
+test('a merged branch with a live agent lock classifies running', () => {
+  const record = baseRecord({ locked: true, lockedReason: 'claude agent a (pid 4242)' });
+  const result = classifyWorktree(record, {
+    run: mergedRun(),
+    ...freshOptions,
+    isProcessAlive: () => true,
+  });
+  assert.equal(result.classification, 'running');
+});
+
+test('a dirty merged worktree stays dirty', () => {
+  const run = withGitDir((args) => (args[2] === 'status' ? ok(' M a.txt') : ok()));
+  const result = classifyWorktree(baseRecord(), { run, ...freshOptions });
+  assert.equal(result.classification, 'dirty');
+});
+
+test('judgePullRequests: merged and closed at the same commit are terminal', () => {
+  const record = baseRecord();
+  const pr = (state, oid = record.head) => ({
+    headRefName: record.branch,
+    headRefOid: oid,
+    state,
+  });
+  assert.equal(judgePullRequests(record, [pr('MERGED')]).merged, true);
+  assert.equal(judgePullRequests(record, [pr('CLOSED')]).terminal, true);
+  assert.equal(judgePullRequests(record, [pr('CLOSED')]).merged, false);
+  assert.equal(judgePullRequests(record, [pr('MERGED'), pr('OPEN')]).terminal, false);
+  assert.equal(judgePullRequests(record, [pr('MERGED', 'other')]).terminal, false);
+  assert.equal(judgePullRequests(record, null).terminal, false);
+});
+
+test('a PR-merged branch with commits missing from the remote is reclaimable', () => {
+  const record = baseRecord();
+  const result = classifyWorktree(record, {
+    run: mergedRun({ ancestor: false, log: ok('abc1234 squashed commit\n') }),
+    ...freshOptions,
+    pullRequests: [{ headRefName: record.branch, headRefOid: record.head, state: 'MERGED' }],
+  });
+  assert.equal(result.classification, 'reclaimable');
+  assert.equal(result.merged, true);
+});
+
+test('apply removes a merged worktree and deletes its local branch', () => {
+  const { run, calls } = buildRun({
+    listOutput: listFixture('/repo/worktrees/target', 'target-branch'),
+    status: () => ok(''),
+    log: () => ok(''),
+    mergeBase: () => ok(''),
+    reflog: () => ok('commit: work\nbranch: Created from HEAD\n'),
+  });
+  const result = reclaim({
+    run,
+    pathExists: () => true,
+    apply: true,
+    now,
+    statFile: freshStatFile,
+    cwd: '/repo',
+  });
+  const target = result.entries.find((entry) => entry.path === '/repo/worktrees/target');
+  assert.equal(target.action, 'removed');
+  assert.equal(target.branchDeleted, true);
+  const del = calls.find((call) => call.args[2] === 'branch');
+  assert.deepEqual(del.args, ['-C', '/repo', 'branch', '-D', 'target-branch']);
+});
+
+test('--merged-only keeps an idle worktree that is not merged', () => {
+  const { run, calls } = buildRun({
+    listOutput: listFixture('/repo/worktrees/target', 'target-branch'),
+    status: () => ok(''),
+    log: () => ok(''),
+  });
+  const result = reclaim({
+    run,
+    pathExists: () => true,
+    apply: true,
+    mergedOnly: true,
+    ...staleOptions,
+  });
+  const target = result.entries.find((entry) => entry.path === '/repo/worktrees/target');
+  assert.equal(target.classification, 'stale');
+  assert.equal(target.action, 'skipped');
+  assert.equal(
+    calls.some((call) => call.args[1] === 'remove'),
+    false,
+  );
+});
+
+test('parseArgs reads --merged-only and --quiet', () => {
+  const args = parseArgs(['--apply', '--merged-only', '--quiet']);
+  assert.equal(args.mergedOnly, true);
+  assert.equal(args.quiet, true);
 });

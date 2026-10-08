@@ -43,6 +43,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/github/session-brief.js\"",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/dev/worktree-cleanup-start.js\"",
+            "timeout": 5
           }
         ]
       }

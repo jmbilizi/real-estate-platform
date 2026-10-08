@@ -86,7 +86,10 @@ guide.
    worktree that has uncommitted changes, holds unpushed commits, was touched in the last 24 hours,
    or carries a git lock that names a live agent process. Use `--apply` to act and
    `--older-than <hours>` to change the window. The hook fails open, so it is a guardrail and not a
-   security boundary.
+   security boundary. A worktree whose branch is merged into `origin/dev`, or whose PR is merged or
+   closed, has no age limit. Reclaim also deletes the local branch of a merged worktree.
+   `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background at every
+   session start (throttled to once per 10 minutes). Run it after a PR merges.
 
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
