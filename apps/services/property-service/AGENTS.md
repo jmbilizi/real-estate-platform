@@ -303,13 +303,13 @@ that empties `listings` while the checkpoint still reads complete still refills.
   than 1 % short of Bright's own count, or when it would change more than 20 % of the local
   listings.
 - **Probe**, every `BRIGHT_SYNC_PROBE_INTERVAL_MS` (daily, #715): asks Bright about every live local
-  key in batches of 100 (`ListingKey in ('a','b',...)`, `$select=ListingKey,StandardStatus`). Bright
-  rejects a batched `or`. About 91,000 keys is 910 requests, a few minutes at the sync's request
-  rate. A key becomes `Off Market` when Bright returns it in a status that search does not show, or
-  when a complete batch answer and a read of that key alone both omit it. A failed, truncated or
-  malformed batch leaves its keys live and counts as errors. A run that finds more than
-  `BRIGHT_SYNC_PROBE_MAX_TAKEDOWN` (500) keys takes down nothing and logs the abort. Code:
-  `src/jobs/bright-sync/probe.ts`. It has no per-environment flag.
+  key in batches of 100 (`ListingKey in (1,2,...)`, bare digits because `ListingKey` is `Edm.Int64`,
+  `$select=ListingKey,StandardStatus`). Bright rejects a batched `or`. About 91,000 keys is 910
+  requests, a few minutes at the sync's request rate. A key becomes `Off Market` when Bright returns
+  it in a status that search does not show, or when a complete batch answer and a read of that key
+  alone both omit it. A failed, truncated or malformed batch leaves its keys live and counts as
+  errors. A run that finds more than `BRIGHT_SYNC_PROBE_MAX_TAKEDOWN` (500) keys takes down nothing
+  and logs the abort. Code: `src/jobs/bright-sync/probe.ts`. It has no per-environment flag.
 - **Audit**, after a backfill and after each reconcile: Bright `$count` against the local count per
   status for the places in `DEFAULT_AUDIT_AREAS`. The rows go to the run's `counts`.
 

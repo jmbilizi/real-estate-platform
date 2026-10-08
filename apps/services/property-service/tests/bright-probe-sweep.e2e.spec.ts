@@ -43,7 +43,7 @@ const brightFetch: FetchLike = (url) => {
     });
   if (url.includes('/token')) return ok({ access_token: 'stub', expires_in: 3600 });
   const filter = new URL(url).searchParams.get('$filter') ?? '';
-  const asked = [...filter.matchAll(/'(\d+)'/g)].map((m) => m[1] as string);
+  const asked = [...filter.matchAll(/\d+/g)].map((m) => m[0]);
   const value = asked
     .filter((key) => key in BRIGHT_FEED)
     .map((key) => ({ ListingKey: Number(key), StandardStatus: BRIGHT_FEED[key] }));

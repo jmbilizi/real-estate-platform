@@ -36,7 +36,7 @@ function harness(
   const fetchPage = (url: string): Promise<BrightPage> => {
     urls.push(url);
     const filter = new URL(url).searchParams.get('$filter') ?? '';
-    const keys = [...filter.matchAll(/'(\d+)'/g)].map((m) => m[1] as string);
+    const keys = [...filter.matchAll(/\d+/g)].map((m) => m[0]);
     const forced = override?.(url, keys);
     if (forced instanceof Error) return Promise.reject(forced);
     if (forced !== undefined) return Promise.resolve(forced);
@@ -98,17 +98,16 @@ describe('runProbeSweep', () => {
     expect(h.urls).toHaveLength(3);
     for (const url of h.urls) {
       const filter = new URL(url).searchParams.get('$filter') ?? '';
-      expect(filter).toMatch(/^ListingKey in \('\d+'(,'\d+')*\)$/);
+      expect(filter).toMatch(/^ListingKey in \(\d+(,\d+)*\)$/);
       expect(filter).not.toMatch(/ or /);
     }
   });
 
   it('leaves a batch live when the request fails (AC 5)', async () => {
     const h = harness(['1', '2'], {}, () => new Error('HTTP 503'));
-    const report = await h.run();
 
-    expect(h.taken).toEqual([[]]);
-    expect(report).toMatchObject({ takenDown: 0, errors: 2 });
+    await expect(h.run()).rejects.toThrow(/every batch failed/);
+    expect(h.taken).toEqual([]);
   });
 
   it('leaves a batch live when the answer is truncated or malformed (AC 5)', async () => {
@@ -133,9 +132,8 @@ describe('runProbeSweep', () => {
     ];
     for (const [, page] of cases) {
       const h = harness(['1', '2'], {}, () => page);
-      const report = await h.run();
-      expect(h.taken).toEqual([[]]);
-      expect(report).toMatchObject({ takenDown: 0, errors: 2 });
+      await expect(h.run()).rejects.toThrow(/every batch failed/);
+      expect(h.taken).toEqual([]);
     }
   });
 
@@ -176,15 +174,19 @@ describe('runProbeSweep', () => {
   });
 
   it('leaves a key live when Bright returns it with no status (AC 5)', async () => {
-    const h = harness(['1'], {}, () => ({
-      records: [{ ListingKey: 1 }],
-      nextLink: null,
-      count: 1,
-    }));
+    const h = harness(['1', '2'], { '2': 'Active' }, (_url, asked) =>
+      asked.length === 2
+        ? {
+            records: [{ ListingKey: 1 }, { ListingKey: 2, StandardStatus: 'Active' }],
+            nextLink: null,
+            count: 2,
+          }
+        : undefined,
+    );
     const report = await h.run();
 
     expect(h.taken).toEqual([[]]);
-    expect(report).toMatchObject({ takenDown: 0, errors: 1 });
+    expect(report).toMatchObject({ takenDown: 0, kept: 1, errors: 1 });
   });
 
   it('never sends a key that is not all digits (AC 5)', async () => {

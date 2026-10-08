@@ -68,7 +68,8 @@ function verdictFor(status: unknown, statuses: readonly ListingStatusLookup[]): 
 
 function probeUrl(serviceRoot: string, keys: readonly string[]): string {
   const search = new URLSearchParams();
-  search.set('$filter', `ListingKey in (${keys.map((k) => `'${k}'`).join(',')})`);
+  // `ListingKey` is `Edm.Int64`. A quoted key is a 400 (measured on production, 2026-10-08).
+  search.set('$filter', `ListingKey in (${keys.join(',')})`);
   search.set('$select', 'ListingKey,StandardStatus');
   search.set('$top', String(keys.length));
   search.set('$count', 'true');
@@ -150,6 +151,10 @@ export async function runProbeSweep(deps: ProbeDeps, options: ProbeOptions): Pro
       deps.log(`Bright probe: batch of ${batch.length} failed, left live: ${messageOf(error)}`);
     }
   });
+
+  if (keys.length > 0 && kept + gone.size + absent.length === 0) {
+    throw new Error(`Bright probe: every batch failed (${errors} keys unchecked).`);
+  }
 
   const abort = (candidates: number): ProbeReport => {
     deps.log(
