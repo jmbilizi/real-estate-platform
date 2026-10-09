@@ -217,4 +217,23 @@ describe('Group by broker (#722)', () => {
     resolve({ groups: [], total: 0, listingTotal: 0 });
     expect(await screen.findByTestId('broker-group-empty')).toBeTruthy();
   });
+
+  it('names the brokerages, not the listings service, when the gateway times out (#759)', async () => {
+    const { ListingsApiError } = jest.requireMock('@/lib/api/listings');
+    mockedBrokers.mockRejectedValueOnce(
+      new ListingsApiError(
+        'The listings service is temporarily unavailable. Please try again shortly.',
+        'upstream_unavailable',
+        503,
+      ),
+    );
+    render(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
+
+    expect(await screen.findByText(/could not load brokerages/i)).toBeTruthy();
+    expect(screen.queryByText(/listings service/i)).toBeNull();
+
+    // The retry fetches the page again and shows the groups.
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(await screen.findByTestId('broker-group-grid')).toBeTruthy();
+  });
 });

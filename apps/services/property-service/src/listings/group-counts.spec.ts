@@ -14,7 +14,7 @@ function recordingPool(rows: unknown[]): { pool: ReadPool; texts: string[]; valu
   const query = <T>(text: string, params?: unknown[]): Promise<{ rows: T[] }> => {
     texts.push(text);
     values.push(params ?? []);
-    return Promise.resolve({ rows: text.includes('WITH grouped') ? (rows as T[]) : [] });
+    return Promise.resolve({ rows: text.includes('WITH filtered') ? (rows as T[]) : [] });
   };
   return {
     pool: { query, connect: () => Promise.resolve({ query, release: () => undefined }) },
@@ -53,7 +53,7 @@ describe('getZipGroups', () => {
   it('reads listings with the collapse when the request has only scope filters', async () => {
     const { pool, texts } = recordingPool([]);
     await getZipGroups(pool, parse({ city: 'Bethesda', state: 'MD' }));
-    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
     expect(sql).toContain('FROM listings v');
     expect(sql).not.toContain('listing_search_v');
     expect(sql).toContain('left(v.zip5, 5)');
@@ -65,7 +65,7 @@ describe('getZipGroups', () => {
   it('reads the search view when the request has a filter beyond the scope', async () => {
     const { pool, texts } = recordingPool([]);
     await getZipGroups(pool, parse({ city: 'Bethesda', state: 'MD', beds: '3' }));
-    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
     expect(sql).toContain('FROM listing_search_v v');
     expect(sql).toContain('left(v.zip, 5)');
     expect(sql).toContain('NOT EXISTS');
@@ -75,7 +75,7 @@ describe('getZipGroups', () => {
     const { pool, texts } = recordingPool([]);
     await getZipGroups(pool, parse({ order: 'count' }));
     await getZipGroups(pool, parse({ order: 'name' }));
-    const [byCount, byName] = texts.filter((text) => text.includes('WITH grouped'));
+    const [byCount, byName] = texts.filter((text) => text.includes('WITH filtered'));
     expect(byCount).toContain('ORDER BY group_count DESC, group_key ASC');
     expect(byName).toContain('ORDER BY group_key ASC');
     for (const sql of [byCount as string, byName as string]) {
@@ -111,12 +111,21 @@ describe('group preview photos (#722)', () => {
   it('picks the photos after the page limit, with the media display flag and the neighborhood count', async () => {
     const { pool, texts } = recordingPool([]);
     await getZipGroups(pool, parse({}));
-    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
-    expect(sql).toContain('v.media_display_allowed OR m.retained_when_suppressed');
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
+    expect(sql).toContain('f.media_display_allowed OR m.retained_when_suppressed');
     expect(sql).toContain(`LIMIT ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX}`);
-    expect(sql).toContain('left(v.zip5, 5) = page.group_key');
-    // The group's own collapsed card set: the collapse is in the photo query too.
-    expect(sql.split('NOT EXISTS').length).toBeGreaterThan(3);
+    expect(sql).toContain('f.group_key = page.group_key');
+  });
+
+  it('runs the search filter once: the photo lookup reads the filtered rows (#759)', async () => {
+    const { pool, texts } = recordingPool([]);
+    await getBrokerGroups(pool, parse({ zip: '22314' }));
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
+    expect(sql).toContain('WITH filtered AS MATERIALIZED');
+    expect(sql).toContain('FROM filtered f');
+    // One source scan: the view, and no second copy of the filter or the collapse.
+    expect(sql.split('FROM listing_search_v v').length).toBe(2);
+    expect(sql.split('starts_with(v.zip').length).toBe(2);
   });
 });
 
@@ -139,29 +148,28 @@ describe('getBrokerGroups (#722)', () => {
   it('groups by office key, never by name, and puts a missing key in `unlisted`', async () => {
     const { pool, texts } = recordingPool([]);
     await getBrokerGroups(pool, parse({ city: 'Bethesda', state: 'MD' }));
-    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
-    expect(sql).toContain("GROUP BY COALESCE(v.office_key, 'unlisted')");
-    expect(sql).toContain('bool_and(v.office_key IS NULL)');
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
+    expect(sql).toContain("COALESCE(v.office_key, 'unlisted') AS group_key");
+    expect(sql).toContain('GROUP BY group_key');
+    expect(sql).toContain('bool_and(office_key IS NULL)');
     expect(sql).toContain("'Other / unlisted'");
     // The name comes from the most recently updated listing of the group.
-    expect(sql).toContain(
-      'array_agg(v.office_name\n                        ORDER BY v.source_modification_timestamp DESC NULLS LAST, v.id DESC)',
-    );
+    expect(sql).toMatch(/array_agg\(office_name\s+ORDER BY modified_at DESC NULLS LAST, id DESC\)/);
   });
 
   it('reads the office key through a join to listings on the view source', async () => {
     const { pool, texts } = recordingPool([]);
     await getBrokerGroups(pool, parse({ city: 'Bethesda', state: 'MD', beds: '3' }));
-    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
     expect(sql).toContain('listing_search_v v JOIN listings l ON l.id = v.id');
-    expect(sql).toContain("GROUP BY COALESCE(l.office_key, 'unlisted')");
+    expect(sql).toContain("COALESCE(l.office_key, 'unlisted') AS group_key");
   });
 
   it('orders by count or by name, and breaks every tie by key', async () => {
     const { pool, texts } = recordingPool([]);
     await getBrokerGroups(pool, parse({ order: 'count' }));
     await getBrokerGroups(pool, parse({ order: 'name' }));
-    const [byCount, byName] = texts.filter((text) => text.includes('WITH grouped'));
+    const [byCount, byName] = texts.filter((text) => text.includes('WITH filtered'));
     expect(byCount).toContain('ORDER BY group_count DESC, group_key ASC');
     expect(byName).toContain('ORDER BY lower(group_name) ASC, group_key ASC');
   });
@@ -169,7 +177,7 @@ describe('getBrokerGroups (#722)', () => {
   it('reads no brokerage identity to rank: nothing names a brokerage in the ORDER BY', async () => {
     const { pool, texts } = recordingPool([]);
     await getBrokerGroups(pool, parse({}));
-    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    const sql = texts.find((text) => text.includes('WITH filtered')) as string;
     expect(sql).not.toMatch(/real broker/i);
     expect(sql).not.toMatch(/featured/i);
   });
