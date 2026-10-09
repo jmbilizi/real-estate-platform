@@ -243,7 +243,7 @@ describe('price history on the detail page (#717)', () => {
   });
 });
 
-describe('migration 056 backfill (#717)', () => {
+describe('migration 058 backfill (#717)', () => {
   it('restates an earlier price from the stored listed events, and adds no price', async () => {
     const id = homeOf('1 Same Cut Ln').ids[0];
     await pool.query(
@@ -251,7 +251,7 @@ describe('migration 056 backfill (#717)', () => {
       [id],
     );
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const migration = require('../migrations/1785801600056_backfill-price-change-events');
+    const migration = require('../migrations/1785801600058_backfill-price-change-events');
     const statements: string[] = [];
     migration.up({ sql: (text: string) => statements.push(text) });
     await pool.query(statements.join(';'));
