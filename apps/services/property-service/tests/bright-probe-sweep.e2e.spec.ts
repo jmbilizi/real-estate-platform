@@ -23,6 +23,7 @@ const KEEP_KEYS = ['971500001', '971500002', '971500003'];
 const STALE_KEY = '971500004';
 const TERMINAL_KEY = '971500005';
 const ALL_KEYS = [...KEEP_KEYS, STALE_KEY, TERMINAL_KEY];
+const PROPERTY_KEY_PREFIX = 'probe-sweep-e2e:';
 
 /** Bright's stub: the stale key is absent, the terminal key comes back Closed. */
 const BRIGHT_FEED: Record<string, string> = {
@@ -80,19 +81,49 @@ async function searchTotals(): Promise<{ total: number; ids: string[] }> {
   }
 }
 
+/** Column names of a table, minus generated columns and the ones the caller overrides. */
+async function copyableColumns(table: string, skip: string[]): Promise<string> {
+  const { rows } = await getPool().query(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_name = $1 AND table_schema = 'public' AND is_generated = 'NEVER'
+        AND column_name <> ALL($2::text[])`,
+    [table, skip],
+  );
+  return rows.map((row) => `"${String(row.column_name)}"`).join(', ');
+}
+
+/**
+ * Clones the sample listing onto its own copy of the sample property. The one-card-per-home
+ * collapse (#716) merges records that share a property, so a clone on the shared property would
+ * vanish from search. A distinct `address_key` makes each clone its own home.
+ */
 async function cloneSampleListing(sourceKey: string): Promise<string> {
   const pool = getPool();
-  const { rows } = await pool.query(
-    `SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'listings' AND table_schema = 'public' AND is_generated = 'NEVER'
-        AND column_name NOT IN ('id', 'source_system', 'source_listing_key')`,
-  );
-  const columns = rows.map((row) => `"${String(row.column_name)}"`).join(', ');
-  const inserted = await pool.query(
-    `INSERT INTO listings (id, source_system, source_listing_key, ${columns})
-     SELECT gen_random_uuid(), 'BrightMLS', $2, ${columns} FROM listings WHERE id = $1
+  const propertyColumns = await copyableColumns('properties', [
+    'id',
+    'address_key',
+    'street_line',
+    'address_raw',
+  ]);
+  const property = await pool.query(
+    `INSERT INTO properties (id, address_key, street_line, address_raw, ${propertyColumns})
+     SELECT gen_random_uuid(), $2, $3, $3, ${propertyColumns}
+       FROM properties
+      WHERE id = (SELECT property_id FROM listings WHERE id = $1)
      RETURNING id`,
-    [fixtures.sampleListingId, sourceKey],
+    [fixtures.sampleListingId, `${PROPERTY_KEY_PREFIX}${sourceKey}`, `${sourceKey} Probe Sweep St`],
+  );
+  const listingColumns = await copyableColumns('listings', [
+    'id',
+    'source_system',
+    'source_listing_key',
+    'property_id',
+  ]);
+  const inserted = await pool.query(
+    `INSERT INTO listings (id, source_system, source_listing_key, property_id, ${listingColumns})
+     SELECT gen_random_uuid(), 'BrightMLS', $2, $3, ${listingColumns} FROM listings WHERE id = $1
+     RETURNING id`,
+    [fixtures.sampleListingId, sourceKey, property.rows[0].id],
   );
   return String(inserted.rows[0].id);
 }
@@ -112,6 +143,7 @@ async function removeSeeded(): Promise<void> {
   const seeded = 'SELECT id FROM listings WHERE source_listing_key = ANY($1::text[])';
   await pool.query(`DELETE FROM listing_events WHERE listing_id IN (${seeded})`, [ALL_KEYS]);
   await pool.query('DELETE FROM listings WHERE source_listing_key = ANY($1::text[])', [ALL_KEYS]);
+  await pool.query('DELETE FROM properties WHERE address_key LIKE $1', [`${PROPERTY_KEY_PREFIX}%`]);
 }
 
 beforeAll(async () => {
