@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CustomMapControls, type ViewControls } from '@/components/CustomMapControls';
+import MapDrawLayer, { type DrawOutcome } from '@/components/MapDrawLayer';
 import { MapContainer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -13,6 +14,7 @@ import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { hasMapCoordinates } from '@/lib/listing-format';
 import { formatBounds, roundBounds } from '@/lib/map-bounds';
+import { areaBounds, drawnPathToRing, ringToGeoJson } from '@/lib/draw-area';
 import {
   createUserMoveGate,
   shouldSwitchToMapView,
@@ -374,7 +376,18 @@ function FitView({
   return null;
 }
 
-function BoundaryLayer({ geojson }: { geojson: object | null }) {
+/** The drawn area: a solid outline with a light fill, apart from the dashed place outline. */
+const AREA_STYLE: L.PathOptions = {
+  color: '#FF385C',
+  weight: 3,
+  opacity: 0.95,
+  fillOpacity: 0.12,
+  fillColor: '#FF385C',
+  lineCap: 'round',
+  lineJoin: 'round',
+};
+
+function BoundaryLayer({ geojson, style }: { geojson: object | null; style?: L.PathOptions }) {
   const map = useMap();
   const layerRef = useRef<L.GeoJSON | null>(null);
   useEffect(() => {
@@ -387,7 +400,7 @@ function BoundaryLayer({ geojson }: { geojson: object | null }) {
       // The outline is a picture. An interactive polygon sits above the canvas dots and takes
       // their hover and tap events.
       interactive: false,
-      style: {
+      style: style ?? {
         color: '#FF385C',
         weight: 2,
         opacity: 0.75,
@@ -406,7 +419,7 @@ function BoundaryLayer({ geojson }: { geojson: object | null }) {
         layerRef.current = null;
       }
     };
-  }, [geojson, map]);
+  }, [geojson, map, style]);
   return null;
 }
 
@@ -429,6 +442,11 @@ interface Props {
   onUserMove?: (bounds: MapBounds) => void;
   /** Filter and group buttons for the expanded map (#576). */
   viewControls?: ViewControls;
+  /** The drawn area, a GeoJSON Polygon string (#747). */
+  area?: string | null;
+  /** A shape was drawn. The page makes it the filter. */
+  onAreaDrawn?: (area: string) => void;
+  onAreaClear?: () => void;
 }
 
 export type NeighborhoodBounds = NonNullable<NeighborhoodRow['bounds']>;
@@ -454,6 +472,9 @@ export default function ListingsMapInner({
   viewBounds,
   onUserMove,
   viewControls,
+  area,
+  onAreaDrawn,
+  onAreaClear,
 }: Props) {
   const emittedView = useRef('');
   const grouped = neighborhoods !== undefined;
@@ -504,6 +525,38 @@ export default function ListingsMapInner({
     return [38.9072, -77.0369];
   }, [searchCenter, pinCoords, grouped, groupCoords]);
 
+  const [drawing, setDrawing] = useState(false);
+  // Back, a shared link or a new search changes the area under an open draw surface. Draw mode ends.
+  useEffect(() => setDrawing(false), [area]);
+  const areaGeoJson = useMemo(() => {
+    if (!area) return null;
+    try {
+      return JSON.parse(area) as object;
+    } catch {
+      return null;
+    }
+  }, [area]);
+  // A drawn area is the view: the map fits it once for a shared link or Back, never for a shape
+  // the user just drew, which is already on screen.
+  const areaView = useMemo(() => (area ? areaBounds(area) : null), [area]);
+  const finishDrawing = (path: readonly [number, number][]): DrawOutcome => {
+    const result = drawnPathToRing(path);
+    if (result.status !== 'ok') return result.status;
+    const drawn = ringToGeoJson(result.ring);
+    const bounds = areaBounds(drawn);
+    if (bounds) emittedView.current = formatBounds(bounds);
+    onAreaDrawn?.(drawn);
+    setDrawing(false);
+    return 'ok';
+  };
+  const drawControls = onAreaDrawn
+    ? {
+        drawing,
+        hasArea: Boolean(area),
+        onToggle: () => setDrawing((on) => !on),
+        onClear: () => onAreaClear?.(),
+      }
+    : undefined;
   const [scrollActive, setScrollActive] = useState(false);
   const { failed: tilesFailed, onTileError } = useTileFailure();
   const mapConfig = useMapConfig();
@@ -525,7 +578,7 @@ export default function ListingsMapInner({
       >
         <BasemapLayer config={mapConfig} onTileError={onTileError} />
         <InvalidateOnMount />
-        <CustomMapControls viewControls={viewControls} />
+        <CustomMapControls viewControls={viewControls} draw={drawControls} />
         <ClickToActivateScroll onChange={setScrollActive} />
         {/* Fit view to boundary, then pinned listings, then center — in priority order */}
         <FitView
@@ -533,10 +586,10 @@ export default function ListingsMapInner({
           coords={grouped ? groupCoords : pinCoords}
           center={searchCenter ?? null}
           bounds={grouped ? null : focusBounds}
-          viewBounds={viewBounds}
+          viewBounds={areaView ?? viewBounds}
           emitted={emittedView}
         />
-        {onUserMove && (
+        {onUserMove && !drawing && !area && (
           <UserMoveReporter
             onUserMove={onUserMove}
             emitted={emittedView}
@@ -545,6 +598,8 @@ export default function ListingsMapInner({
         )}
         {/* Searched area boundary outline */}
         <BoundaryLayer geojson={searchPolygon ?? null} />
+        {areaGeoJson && <BoundaryLayer geojson={areaGeoJson} style={AREA_STYLE} />}
+        {drawing && <MapDrawLayer onFinish={finishDrawing} onCancel={() => setDrawing(false)} />}
         {grouped ? (
           <NeighborhoodMapLayer
             rows={groupMarkers}
@@ -597,7 +652,7 @@ export default function ListingsMapInner({
           </div>
         )}
       </div>
-      {!scrollActive && (
+      {!scrollActive && !drawing && (
         <div className="pointer-events-none absolute bottom-6 left-1/2 z-[400] -translate-x-1/2 rounded-full bg-ink/85 px-4 py-1.5 text-xs font-semibold text-white shadow-card backdrop-blur">
           Click map to zoom with scroll
         </div>

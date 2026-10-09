@@ -8,6 +8,7 @@ import {
   SORT_VALUES,
   STATUS_FILTER_VALUES,
 } from '@cribstop/property-contracts';
+import { AREA_PARAM, areaToParam, paramToArea } from '@/lib/draw-area';
 import { formatBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import type { SearchFilters } from '@/lib/types';
 
@@ -117,6 +118,12 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   const boundsRaw = str(VIEWPORT_PARAM);
   const parsedBounds = boundsRaw ? searchBoundsSchema.safeParse(boundsRaw) : null;
   filters.bounds = parsedBounds?.success ? parsedBounds.data : undefined;
+
+  // #747. A drawn area. A shape the service would refuse is dropped. A valid one wins over the
+  // viewport, so a link that carries both reads as the area alone.
+  const areaRaw = str(AREA_PARAM);
+  filters.area = areaRaw ? paramToArea(areaRaw) : undefined;
+  if (filters.area) filters.bounds = undefined;
 
   /**
    * Enum parameters are validated against the contract's own value sets before being forwarded.
@@ -256,6 +263,7 @@ const FILTER_PARAM_KEYS = [
   'officeKey',
   'boundary',
   VIEWPORT_PARAM,
+  AREA_PARAM,
   'type',
   'listingType',
   'propertyType',
@@ -314,7 +322,9 @@ export function filtersToSearchParams(
   set('neighborhood', filters.neighborhood);
   set('officeKey', filters.officeKey);
   set('boundary', filters.boundary);
-  set(VIEWPORT_PARAM, filters.bounds ? formatBounds(filters.bounds) : undefined);
+  // A drawn area replaces the viewport, so only one of the two is written.
+  set(AREA_PARAM, filters.area ? areaToParam(filters.area) : undefined);
+  set(VIEWPORT_PARAM, filters.bounds && !filters.area ? formatBounds(filters.bounds) : undefined);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);
   for (const type of filters.propertyType ?? []) params.append('propertyType', type);
   // Only written when the caller narrowed away from the contract's own default (`Active`,

@@ -3,6 +3,38 @@ import { useMap } from 'react-leaflet';
 import { useMapExpand } from '@/lib/useMapExpand';
 import ToolbarIconButton, { FILTERS_ICON, GROUP_ICON } from '@/components/ToolbarIconButton';
 
+const DRAW_ICON = (
+  <svg
+    width={22}
+    height={22}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.8}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
+const CLEAR_ICON = (
+  <svg
+    width={22}
+    height={22}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    aria-hidden="true"
+  >
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
 const BUTTON_STYLE = {
   background: '#fff',
   border: 'none',
@@ -53,8 +85,23 @@ export interface ViewControls {
   onToggleGroup: () => void;
 }
 
+/** The draw-an-area controls (#747). */
+export interface DrawControls {
+  drawing: boolean;
+  hasArea: boolean;
+  /** Starts draw mode, or ends it with no shape while it is on. */
+  onToggle: () => void;
+  onClear: () => void;
+}
+
 // Custom zoom and expand controls styled for top right
-export function CustomMapControls({ viewControls }: { viewControls?: ViewControls }) {
+export function CustomMapControls({
+  viewControls,
+  draw,
+}: {
+  viewControls?: ViewControls;
+  draw?: DrawControls;
+}) {
   const map = useMap();
   const { expanded, enter, exit } = useMapExpand(map.getContainer());
   // Leaflet learns about window resizes by itself, but not about the container growing or
@@ -71,7 +118,7 @@ export function CustomMapControls({ viewControls }: { viewControls?: ViewControl
         zIndex: 1000,
         display: 'flex',
         flexDirection: 'column',
-        gap: 18,
+        gap: draw ? 12 : 18,
         alignItems: 'start',
       }}
     >
@@ -94,6 +141,25 @@ export function CustomMapControls({ viewControls }: { viewControls?: ViewControl
             <path d="M19 15v4h-4" />
           </svg>
         </button>
+      )}
+      {draw && (
+        <>
+          <ToolbarIconButton
+            data-testid="map-draw"
+            label={draw.drawing ? 'Cancel drawing' : draw.hasArea ? 'Redraw area' : 'Draw an area'}
+            icon={DRAW_ICON}
+            pressed={draw.drawing}
+            onClick={draw.onToggle}
+          />
+          {draw.hasArea && !draw.drawing && (
+            <ToolbarIconButton
+              data-testid="map-draw-clear"
+              label="Clear drawn area"
+              icon={CLEAR_ICON}
+              onClick={draw.onClear}
+            />
+          )}
+        </>
       )}
       {/* The toolbar is hidden behind the expanded map, so its filter and group controls move here. */}
       {expanded && viewControls && (
