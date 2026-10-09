@@ -151,6 +151,31 @@ describe('Group by ZIP code (#722)', () => {
     expect(lastZipQuery()).toMatchObject({ limit: 24, offset: 0, order: 'count', minCount: 1 });
   });
 
+  it('shows the neighborhood photo stack on a card, and the same placeholder with no photo (#722)', async () => {
+    mockedZips.mockImplementation((query: { limit?: number }) =>
+      Promise.resolve({
+        groups: [
+          {
+            key: '20814',
+            count: 4,
+            previewPhotos:
+              query.limit === 1
+                ? undefined
+                : [{ url: 'https://cdn.example/a.jpg', listingId: 'a' }],
+          },
+          { key: '20815', count: 3 },
+        ],
+        total: 2,
+        listingTotal: 7,
+      }),
+    );
+    render(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
+    const grid = await screen.findByTestId('zip-group-grid');
+
+    expect(grid.querySelectorAll('img')).toHaveLength(1);
+    expect(grid.querySelectorAll('[data-testid="neighborhood-photo-placeholder"]')).toHaveLength(1);
+  });
+
   it('opens a ZIP with a removable chip, and removing it returns to the ZIP groups', async () => {
     render(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
     const card = await screen.findByRole('link', { name: 'ZIP code 20815, 9 homes' });

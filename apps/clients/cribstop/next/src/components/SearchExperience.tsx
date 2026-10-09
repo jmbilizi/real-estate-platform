@@ -21,8 +21,10 @@ import NeighborhoodGroupGrid, {
   NeighborhoodGroupGridSkeleton,
 } from '@/components/NeighborhoodGroupGrid';
 import ListingGroupGrid, {
+  brokerGroupCards,
   type ListingGroupCard,
   ListingGroupGridSkeleton,
+  zipGroupCards,
 } from '@/components/ListingGroupGrid';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
@@ -32,18 +34,16 @@ import {
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
 import {
-  BROKER_UNLISTED_NAME,
   type MapBounds,
   maxReachablePage,
   type NeighborhoodRow,
-  OFFICE_KEY_UNLISTED,
   type SearchPlace,
 } from '@cribstop/property-contracts';
 import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { AREA_PARAM, areaToParam } from '@/lib/draw-area';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
-import { useBrokerGroups } from '@/lib/useBrokerGroups';
+import { useBrokerGroups, useBrokerName } from '@/lib/useBrokerGroups';
 import { useZipGroups, useZipTotal } from '@/lib/useZipGroups';
 import {
   GROUP_PAGE_SIZE,
@@ -572,6 +572,8 @@ export default function SearchExperience({
     group.order,
     brokerGrouped && !deferred,
   );
+  /** The chip name of an `officeKey` filter, from the server (never from the URL). */
+  const brokerName = useBrokerName(requestFilters, !deferred && !grouped);
   /** The paging, status and total of whichever grouping is on. */
   const activeGroups = zipGrouped ? zipGroups : brokerGrouped ? brokerGroups : groups;
 
@@ -787,16 +789,11 @@ export default function SearchExperience({
   /**
    * A ZIP code or broker card opens the search filtered to that group (#722): the `zip` filter or
    * the `officeKey` filter. Both are real filters. `groupDrill` records the grouping, so the chip
-   * can return to it. A broker chip shows `groupLabel`, because the filter holds only the key.
+   * can return to it. A broker chip asks the server for the office name.
    */
   const drillTarget = (kind: 'zip' | 'broker', card: ListingGroupCard) => ({
     filters: kind === 'zip' ? { ...filters, zip: card.key } : { ...filters, officeKey: card.key },
-    group: {
-      ...group,
-      groupBy: undefined,
-      drill: kind,
-      drillLabel: kind === 'broker' ? card.title : undefined,
-    } as GroupState,
+    group: { ...group, groupBy: undefined, drill: kind } as GroupState,
   });
   const drillCardHref = (card: ListingGroupCard) => {
     const target = drillTarget(zipGrouped ? 'zip' : 'broker', card);
@@ -832,12 +829,13 @@ export default function SearchExperience({
       });
     }
     if (filters.officeKey) {
+      // The name comes from the server. A URL never names the brokerage.
       const name =
-        group.drillLabel ?? (filters.officeKey === OFFICE_KEY_UNLISTED ? BROKER_UNLISTED_NAME : '');
+        brokerName === undefined ? 'Brokerage' : (brokerName ?? `Brokerage ${filters.officeKey}`);
       chips.push({
         kind: 'broker',
-        label: name || 'Broker',
-        aria: `${name ? `Broker ${name}` : 'Broker'} filter on. Remove it to show every broker.`,
+        label: name,
+        aria: `${name} filter on. Remove it to show every brokerage.`,
       });
     }
     return chips;
@@ -854,7 +852,6 @@ export default function SearchExperience({
         ...group,
         groupBy: returns ? kind : group.groupBy,
         drill: returns ? undefined : group.drill,
-        drillLabel: kind === 'broker' ? undefined : group.drillLabel,
       },
     );
   };
@@ -1213,16 +1210,8 @@ export default function SearchExperience({
                       testId={zipGrouped ? 'zip-group-grid' : 'broker-group-grid'}
                       cards={
                         zipGrouped
-                          ? zipGroups.rows.map((zip) => ({
-                              key: zip.key,
-                              title: zip.key,
-                              count: zip.count,
-                            }))
-                          : brokerGroups.rows.map((broker) => ({
-                              key: broker.key,
-                              title: broker.name,
-                              count: broker.count,
-                            }))
+                          ? zipGroupCards(zipGroups.rows)
+                          : brokerGroupCards(brokerGroups.rows)
                       }
                       hrefFor={drillCardHref}
                       onSelect={drillIntoCard}

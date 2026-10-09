@@ -89,7 +89,7 @@ export interface ReadPool extends ReadClient {
  * `is_primary` — and none at all when no row is marked. That "none at all" is the fail-closed case
  * a media pass that has not run yet must land in, never an arbitrary photo.
  */
-const mediaVisibleSql = (listingAlias: string): string =>
+export const mediaVisibleSql = (listingAlias: string): string =>
   `(${listingAlias}.media_display_allowed OR m.retained_when_suppressed)`;
 const MEDIA_VISIBLE = mediaVisibleSql('v');
 
@@ -101,7 +101,7 @@ const MEDIA_VISIBLE = mediaVisibleSql('v');
  * `idx_listing_media_one_retained`), so `is_primary`/`sort_order` are never consulted to choose
  * among candidates in that case.
  */
-const PRIMARY_MEDIA_ORDER = 'm.is_primary DESC, m.sort_order, m.id';
+export const PRIMARY_MEDIA_ORDER = 'm.is_primary DESC, m.sort_order, m.id';
 
 /** #717. The earlier MLS price of the shown record. Page rows only, never the count. */
 const PRICE_CHANGE_JOIN = `

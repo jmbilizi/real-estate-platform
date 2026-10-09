@@ -15,7 +15,11 @@ import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { hasMapCoordinates } from '@/lib/listing-format';
 import { formatBounds, roundBounds } from '@/lib/map-bounds';
 import { areaBounds, drawnPathToRing, ringToGeoJson } from '@/lib/draw-area';
-import { createUserMoveGate } from '@/lib/user-move-gate';
+import {
+  createUserMoveGate,
+  shouldSwitchToMapView,
+  USER_MOVE_INTENT_WINDOW_MS,
+} from '@/lib/user-move-gate';
 import PricePinLayer from '@/components/PricePinLayer';
 import BasemapLayer from '@/components/BasemapLayer';
 import { useMapConfig, useTileFailure } from '@/components/map-tiles';
@@ -138,30 +142,51 @@ function ViewportQuery({
  * the fit to the searched place, are not reported. `emitted` records what was reported, so
  * `FitView` does not fit the map to a view the user already made.
  */
-function UserMoveReporter({
+export function UserMoveReporter({
   onUserMove,
   emitted,
+  points,
 }: {
   onUserMove: (bounds: MapBounds) => void;
   emitted: { current: string };
+  /** The current results as `[lat, lng]`: the pins, or the neighborhood centroids (#746). */
+  points: readonly (readonly [number, number])[];
 }) {
   const map = useMap();
   const onUserMoveRef = useRef(onUserMove);
   onUserMoveRef.current = onUserMove;
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
 
   useEffect(() => {
-    const gate = createUserMoveGate<MapBounds>({
-      onSettle: (view) => {
+    // Only a view change switches the filter (#746), so the settled view is judged against the
+    // zoom of the last committed view and the results as they were before the move began.
+    let committedZoom = map.getZoom();
+    let before: typeof points | null = null;
+    let lastMarkAt = 0;
+    const gate = createUserMoveGate<MapBounds & { zoom: number }>({
+      onSettle: ({ zoom, ...view }) => {
+        const results = before ?? pointsRef.current;
+        before = null;
+        if (!shouldSwitchToMapView({ committedZoom, zoom, bounds: view, points: results })) return;
+        committedZoom = zoom;
         emitted.current = formatBounds(roundBounds(view));
         onUserMoveRef.current(view);
       },
     });
     const container = map.getContainer();
-    const mark = () => gate.markIntent();
+    const mark = () => {
+      // An input that moved nothing leaves a snapshot behind. A later move takes a fresh one.
+      if (before === null || Date.now() - lastMarkAt > USER_MOVE_INTENT_WINDOW_MS) {
+        before = pointsRef.current;
+      }
+      lastMarkAt = Date.now();
+      gate.markIntent();
+    };
     // The page scrolls under the pointer until the user clicks the map to turn on wheel zoom, and a
     // scroll then is not a map move. Only the keys Leaflet's keyboard handler reads move the map.
     const markWheel = () => {
-      if (map.scrollWheelZoom.enabled()) gate.markIntent();
+      if (map.scrollWheelZoom.enabled()) mark();
     };
     const MAP_KEYS = new Set([
       'ArrowUp',
@@ -174,23 +199,38 @@ function UserMoveReporter({
       '_',
     ]);
     const markKey = (e: KeyboardEvent) => {
-      if (e.target === container && MAP_KEYS.has(e.key)) gate.markIntent();
+      if (e.target === container && MAP_KEYS.has(e.key)) mark();
     };
     const markPinch = (e: TouchEvent) => {
-      if (e.touches.length > 1) gate.markIntent();
+      if (e.touches.length > 1) mark();
     };
     const markZoomButton = (e: MouseEvent) => {
-      if ((e.target as Element | null)?.closest('button[aria-label^="Zoom"]')) gate.markIntent();
+      if ((e.target as Element | null)?.closest('button[aria-label^="Zoom"]')) mark();
     };
-    const read = (): MapBounds => {
+    const read = () => {
       const b = map.getBounds();
-      return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+      return {
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+        zoom: map.getZoom(),
+      };
     };
-    const onMoveEnd = () => gate.moveEnd(read);
+    const onMoveEnd = () => {
+      // An app move (fit, drill-down, expand) starts a new committed view.
+      if (!gate.moveEnd(read)) committedZoom = map.getZoom();
+    };
+    // A popup auto-pan is the app's move, even right after a drag.
+    const onPopupOpen = () => {
+      gate.reset();
+      before = null;
+    };
 
     map.on('dragstart', mark);
     map.on('dragend', mark);
     map.on('moveend', onMoveEnd);
+    map.on('popupopen', onPopupOpen);
     container.addEventListener('wheel', markWheel, { passive: true });
     container.addEventListener('dblclick', mark);
     container.addEventListener('keydown', markKey);
@@ -200,6 +240,7 @@ function UserMoveReporter({
       map.off('dragstart', mark);
       map.off('dragend', mark);
       map.off('moveend', onMoveEnd);
+      map.off('popupopen', onPopupOpen);
       container.removeEventListener('wheel', markWheel);
       container.removeEventListener('dblclick', mark);
       container.removeEventListener('keydown', markKey);
@@ -459,6 +500,10 @@ export default function ListingsMapInner({
     [pins],
   );
   const mapPins = viewport === null ? pagePins : viewport.pins;
+  const pinPoints = useMemo<[number, number][]>(
+    () => mapPins.map((p) => [p.latitude, p.longitude]),
+    [mapPins],
+  );
   const sampleBannerCopy = useMemo(
     () =>
       viewport === null
@@ -544,7 +589,13 @@ export default function ListingsMapInner({
           viewBounds={areaView ?? viewBounds}
           emitted={emittedView}
         />
-        {onUserMove && <UserMoveReporter onUserMove={onUserMove} emitted={emittedView} />}
+        {onUserMove && !drawing && !area && (
+          <UserMoveReporter
+            onUserMove={onUserMove}
+            emitted={emittedView}
+            points={grouped ? groupCoords : pinPoints}
+          />
+        )}
         {/* Searched area boundary outline */}
         <BoundaryLayer geojson={searchPolygon ?? null} />
         {areaGeoJson && <BoundaryLayer geojson={areaGeoJson} style={AREA_STYLE} />}

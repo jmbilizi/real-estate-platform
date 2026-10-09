@@ -6,11 +6,14 @@ import {
 } from '@cribstop/property-contracts';
 import { closePool, getPool } from '../src/db/pool';
 import {
+  addPhoto,
   COLLAPSE_CITY,
   COLLAPSE_STATE,
   type HomeInput,
+  photoUrlOf,
   removeCollapseFixtures,
   seedHomes,
+  suppressMedia,
 } from './support/collapse-fixtures';
 
 /**
@@ -66,8 +69,16 @@ async function searchTotal(params: Record<string, unknown> = {}): Promise<number
 const sum = (response: BrokersResponse): number =>
   response.groups.reduce((total, group) => total + group.count, 0);
 
+const ids = { real: '', blank: '', twin: '' };
+
 beforeAll(async () => {
-  await seedHomes(pool, HOMES);
+  const seeded = await seedHomes(pool, HOMES);
+  const id = (street: string): string => seeded[street]?.ids[0] as string;
+  ids.real = id('1 Real Rd');
+  ids.blank = id('1 Blank Rd');
+  ids.twin = id('2 Twin Rd');
+  for (const record of [ids.real, ids.blank, ids.twin]) await addPhoto(pool, record);
+  await suppressMedia(pool, ids.twin);
 });
 
 afterAll(async () => {
@@ -78,7 +89,7 @@ afterAll(async () => {
 describe('GET /listings/brokers (#722)', () => {
   it('groups by office key, names a group by its most recently updated listing', async () => {
     const response = await brokers();
-    expect(response.groups).toEqual([
+    expect(response.groups.map(({ key, name, count }) => ({ key, name, count }))).toEqual([
       { key: '1001', name: 'Acme Realty LLC', count: 3 },
       { key: '2002', name: 'Twin Brokerage', count: 2 },
       { key: 'unlisted', name: 'Other / unlisted', count: 2 },
@@ -86,6 +97,19 @@ describe('GET /listings/brokers (#722)', () => {
       { key: '3001', name: 'Real Broker, LLC', count: 1 },
     ]);
     expect(response.total).toBe(5);
+  });
+
+  it('shows the same primary photos as a neighborhood row, with media suppression applied (#722)', async () => {
+    const byKey = new Map((await brokers()).groups.map((g) => [g.key, g]));
+    expect(byKey.get('3001')?.previewPhotos).toEqual([
+      { url: photoUrlOf(ids.real), listingId: ids.real },
+    ]);
+    expect(byKey.get('unlisted')?.previewPhotos).toEqual([
+      { url: photoUrlOf(ids.blank), listingId: ids.blank },
+    ]);
+    // `2 Twin Rd` has suppressed media. The group has no photo, and the field is absent.
+    expect(byKey.get('2002')).not.toHaveProperty('previewPhotos');
+    expect(byKey.get('1001')).not.toHaveProperty('previewPhotos');
   });
 
   it('adds the group counts up to the search total, on the direct and the view source', async () => {

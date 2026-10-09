@@ -1,9 +1,11 @@
+import { selectFingerprint } from './select';
 import type { BackfillState } from './sync';
 import {
   backfillIncomplete,
   backfillStatuses,
   prepareWorker,
   resolveWorkerSettings,
+  SELECT_FINGERPRINT_STREAM,
   soldCloseDateFrom,
   waitForSchema,
   type WorkerPool,
@@ -92,7 +94,10 @@ function checkpointPool(
     }
     if (sql.startsWith('SELECT state FROM bright_sync_state')) {
       const key = `${String(params[0])}:${String(params[1])}`;
-      const state = states.get(key) ?? seed;
+      // A tier whose last backfill plan used today's field list, unless a test says otherwise.
+      const fallback =
+        params[1] === SELECT_FINGERPRINT_STREAM ? { fingerprint: selectFingerprint() } : seed;
+      const state = states.get(key) ?? fallback;
       return Promise.resolve({ rows: [{ state: JSON.stringify(state) }] });
     }
     if (sql.startsWith('INSERT INTO bright_sync_state')) {
@@ -136,6 +141,53 @@ describe('prepareWorker resets an empty tier (2026-09-27 ruling)', () => {
     await prepareWorker(pool, 'production', SETTINGS, () => undefined);
 
     expect(await backfillIncomplete(pool, 'production', statuses)).toBe(true);
+  });
+});
+
+describe('prepareWorker backfills again when the field list changes (#722)', () => {
+  const statuses = backfillStatuses(SETTINGS);
+  const complete: BackfillState = { through: '2026-01-01', complete: true };
+  const fingerprintKey = `production:${SELECT_FINGERPRINT_STREAM}`;
+
+  it('resets a complete backfill when the stored fingerprint differs', async () => {
+    const { pool, states } = checkpointPool(true, complete);
+    states.set(fingerprintKey, { fingerprint: 'old' } as unknown as BackfillState);
+    const log: string[] = [];
+
+    await prepareWorker(pool, 'production', SETTINGS, (m) => log.push(m));
+
+    expect(await backfillIncomplete(pool, 'production', statuses)).toBe(true);
+    expect(states.get(fingerprintKey)).toEqual({ fingerprint: selectFingerprint() });
+    expect(log.join(' ')).toContain('field list changed');
+  });
+
+  it('plans a backfill for a tier that never stored a fingerprint', async () => {
+    const { pool, states } = checkpointPool(true, complete);
+    states.set(fingerprintKey, {} as unknown as BackfillState);
+
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
+
+    expect(await backfillIncomplete(pool, 'production', statuses)).toBe(true);
+  });
+
+  it('is idempotent: a second start keeps a resumed backfill and writes nothing', async () => {
+    const { pool, states } = checkpointPool(true, complete);
+    states.set(fingerprintKey, { fingerprint: 'old' } as unknown as BackfillState);
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
+    const progress: BackfillState = { through: '2026-05-01', complete: false };
+    for (const status of statuses) states.set(`production:backfill:${status}`, progress);
+
+    await prepareWorker(pool, 'production', SETTINGS, () => undefined);
+
+    expect(states.get(`production:backfill:${statuses[0]}`)).toEqual(progress);
+  });
+});
+
+describe('selectFingerprint', () => {
+  it('ignores field order and changes when a field is added', () => {
+    expect(selectFingerprint(['A', 'B'])).toBe(selectFingerprint(['B', 'A']));
+    expect(selectFingerprint(['A', 'B'])).not.toBe(selectFingerprint(['A', 'B', 'C']));
+    expect(selectFingerprint()).toMatch(/^[0-9a-f]{16}$/);
   });
 });
 

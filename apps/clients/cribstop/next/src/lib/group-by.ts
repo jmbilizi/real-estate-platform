@@ -12,9 +12,11 @@ export const GROUP_BY_PARAM = 'groupBy';
 export const GROUP_ORDER_PARAM = 'groupOrder';
 /** Set when a group card opened the search: names the group type, so the chip can go back. */
 export const GROUP_DRILL_PARAM = 'groupDrill';
-/** The display name of the opened broker group, for the chip. It is not a filter. */
-export const GROUP_LABEL_PARAM = 'groupLabel';
-const GROUP_LABEL_MAX = 120;
+/**
+ * An old link may carry a `groupLabel`. It is never read: a URL must not name the brokerage on the
+ * chip, so the chip name comes from the server. The writer drops the parameter.
+ */
+const LEGACY_GROUP_LABEL_PARAM = 'groupLabel';
 
 /** Group cards per page. Matches the API default `limit`. */
 export const GROUP_PAGE_SIZE = 24;
@@ -26,8 +28,6 @@ export interface GroupState {
   from?: string;
   /** The group type of the card the user opened. The filter chip returns to that grouped view. */
   drill?: GroupBy;
-  /** The name the chip shows for a broker drill-down. */
-  drillLabel?: string;
 }
 
 const isGroupBy = (value: string | null): value is GroupBy =>
@@ -42,7 +42,6 @@ export function parseGroupState(params: URLSearchParams): GroupState {
     order: params.get(GROUP_ORDER_PARAM) === 'name' ? 'name' : 'count',
     from: params.get(FROM_PARAM) ?? undefined,
     drill: isGroupBy(drill) ? drill : undefined,
-    drillLabel: params.get(GROUP_LABEL_PARAM)?.slice(0, GROUP_LABEL_MAX) || undefined,
   };
 }
 
@@ -51,13 +50,10 @@ export function writeGroupState(params: URLSearchParams, state: GroupState): URL
   params.delete(GROUP_BY_PARAM);
   params.delete(GROUP_ORDER_PARAM);
   params.delete(GROUP_DRILL_PARAM);
-  params.delete(GROUP_LABEL_PARAM);
+  params.delete(LEGACY_GROUP_LABEL_PARAM);
   if (state.groupBy) params.set(GROUP_BY_PARAM, state.groupBy);
   if (state.groupBy && state.order === 'name') params.set(GROUP_ORDER_PARAM, 'name');
   if (state.drill) params.set(GROUP_DRILL_PARAM, state.drill);
-  if (state.drill === 'broker' && state.drillLabel) {
-    params.set(GROUP_LABEL_PARAM, state.drillLabel.slice(0, GROUP_LABEL_MAX));
-  }
   return params;
 }
 

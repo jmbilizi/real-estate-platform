@@ -3,6 +3,7 @@ import {
   type BrokersResponse,
   brokersResponseSchema,
   type ListingGroupsRequest,
+  NEIGHBORHOOD_PREVIEW_PHOTOS_MAX,
   OFFICE_KEY_UNLISTED,
   PAGE_SIZE_DEFAULT,
   type SearchRequest,
@@ -12,7 +13,7 @@ import {
 import { LISTING_VISIBILITY_SQL } from './columns';
 import { collapseCondition, DISABLE_JIT_SQL, LISTINGS_SUBJECT } from './collapse';
 import { resolvedSearchRequest } from './on-demand';
-import type { ReadPool } from './repository';
+import { mediaVisibleSql, PRIMARY_MEDIA_ORDER, type ReadPool } from './repository';
 import {
   buildSearchQuery,
   isScopeOnlyRequest,
@@ -83,7 +84,12 @@ interface GroupDbRow {
   key: string | null;
   name: string | null;
   count: number | null;
+  preview_photos: { url: string; listingId: string }[];
 }
+
+/** The same optional `previewPhotos` field a neighborhood row carries. */
+const photosOf = (row: GroupDbRow): { previewPhotos?: GroupDbRow['preview_photos'] } =>
+  row.preview_photos?.length > 0 ? { previewPhotos: row.preview_photos } : {};
 
 async function queryGroups(
   pool: ReadPool,
@@ -150,9 +156,36 @@ async function queryGroups(
           ORDER BY rn
           LIMIT ${limitParam} OFFSET ${offsetParam}
        )
+       -- Photos join AFTER the page LIMIT, as in getNeighborhoods: one lookup per returned group.
+       -- Same rule as there: the primary photo of each listing card in the group, newest listed
+       -- first, with the media display flag applied.
        SELECT totals.group_total, totals.listing_total, page.group_key AS key,
-              page.group_name AS name, page.group_count AS count
-         FROM totals LEFT JOIN page ON true
+              page.group_name AS name, page.group_count AS count,
+              coalesce(pp.preview_photos, '[]'::jsonb) AS preview_photos
+         FROM totals
+         LEFT JOIN page ON true
+         LEFT JOIN LATERAL (
+           SELECT coalesce(
+                    jsonb_agg(jsonb_build_object('url', c.url, 'listingId', c.id)
+                              ORDER BY c.listed_at DESC NULLS LAST, c.id DESC),
+                    '[]'::jsonb) AS preview_photos
+             FROM (
+               SELECT v.id, v.listed_at, pm.url
+                 FROM ${sourceSql}
+                 JOIN LATERAL (
+                   SELECT m.source_url AS url
+                     FROM listing_media m
+                    WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
+                      AND ${mediaVisibleSql('v')}
+                    ORDER BY ${PRIMARY_MEDIA_ORDER}
+                    LIMIT 1
+                 ) pm ON true
+                WHERE ${filterSql}
+                  AND ${keySql} = page.group_key
+                ORDER BY v.listed_at DESC NULLS LAST, v.id DESC
+                LIMIT ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX}
+             ) c
+         ) pp ON true
         ORDER BY page.rn`,
       params,
     );
@@ -179,6 +212,7 @@ export async function getBrokerGroups(
         key: row.key as string,
         name: row.name as string,
         count: row.count as number,
+        ...photosOf(row),
       })),
     total: rows[0]?.group_total ?? 0,
     listingTotal: rows[0]?.listing_total ?? 0,
@@ -194,7 +228,7 @@ export async function getZipGroups(
   return zipsResponseSchema.parse({
     groups: rows
       .filter((row) => row.key !== null)
-      .map((row) => ({ key: row.key as string, count: row.count as number })),
+      .map((row) => ({ key: row.key as string, count: row.count as number, ...photosOf(row) })),
     total: rows[0]?.group_total ?? 0,
     listingTotal: rows[0]?.listing_total ?? 0,
   });
