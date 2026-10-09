@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import type { ListingType } from '@/lib/types';
 import { formatListingPrice } from '@/lib/listing-format';
 import BasemapLayer from '@/components/BasemapLayer';
+import MapErrorBoundary from '@/components/MapErrorBoundary';
 import { useMapConfig, useTileFailure } from '@/components/map-tiles';
 
 function InvalidateOnMount() {
@@ -55,33 +56,35 @@ export default function SingleListingMapInner({
 
   return (
     <div className={`relative isolate ${className ?? ''}`}>
-      <MapContainer
-        center={[latitude, longitude]}
-        zoom={14}
-        // Set here, not only on `<TileLayer>` — see `ListingsMapInner` for why. This map has no
-        // marker clustering, so it does not hit that crash, but the tile URL still arrives
-        // asynchronously and the map should not be able to zoom past the provider's coverage
-        // before `<TileLayer>` mounts.
-        maxZoom={19}
-        scrollWheelZoom={false}
-        zoomControl
-        className="h-full w-full"
-        style={{ background: '#f2ede6' }}
-      >
-        <BasemapLayer config={mapConfig} onTileError={onTileError} />
-        <InvalidateOnMount />
-        <Circle
+      <MapErrorBoundary>
+        <MapContainer
           center={[latitude, longitude]}
-          radius={350}
-          pathOptions={{
-            color: '#FF385C',
-            fillColor: '#FF385C',
-            fillOpacity: 0.12,
-            weight: 1,
-          }}
-        />
-        <Marker position={[latitude, longitude]} icon={icon} />
-      </MapContainer>
+          zoom={14}
+          // Set here, not only on `<TileLayer>` — see `ListingsMapInner` for why. This map has no
+          // marker clustering, so it does not hit that crash, but the tile URL still arrives
+          // asynchronously and the map should not be able to zoom past the provider's coverage
+          // before `<TileLayer>` mounts.
+          maxZoom={19}
+          scrollWheelZoom={false}
+          zoomControl
+          className="h-full w-full"
+          style={{ background: '#f2ede6' }}
+        >
+          <BasemapLayer config={mapConfig} onTileError={onTileError} />
+          <InvalidateOnMount />
+          <Circle
+            center={[latitude, longitude]}
+            radius={350}
+            pathOptions={{
+              color: '#FF385C',
+              fillColor: '#FF385C',
+              fillOpacity: 0.12,
+              weight: 1,
+            }}
+          />
+          <Marker position={[latitude, longitude]} icon={icon} />
+        </MapContainer>
+      </MapErrorBoundary>
       {/* Tiles failed to load — surface it rather than a silent blank map (#291). The pin above
           still carries the real price, so this only calls out the missing basemap imagery. */}
       {tilesFailed && (
