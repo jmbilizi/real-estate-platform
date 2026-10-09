@@ -50,6 +50,25 @@ describe('CustomMapControls expand and exit', () => {
     expect(screen.getByRole('button', { name: 'Full screen map' })).toBeTruthy();
   });
 
+  it('gives every control over the map a white background (#764)', () => {
+    const view: ViewControls = {
+      filterCount: 1,
+      onOpenFilters: jest.fn(),
+      grouped: false,
+      onToggleGroup: jest.fn(),
+    };
+    render(
+      <CustomMapControls
+        viewControls={view}
+        draw={{ drawing: false, hasArea: true, onToggle: jest.fn(), onClear: jest.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen map' }));
+    const buttons = screen.getAllByRole('button');
+    expect(buttons.length).toBeGreaterThanOrEqual(7);
+    for (const b of buttons) expect(b.className).toContain('bg-white');
+  });
+
   it('swaps the expand control for a 44px exit control in the same slot', () => {
     render(<CustomMapControls />);
     fireEvent.click(screen.getByRole('button', { name: 'Full screen map' }));
