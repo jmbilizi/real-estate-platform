@@ -750,7 +750,8 @@ html[data-map-expanded] {
 
 /*
  * #717. The price change sits after the price on a wide card (a viewport of 640px or more and a card
- * of 300px or more) and on its own line under the price everywhere else. Exactly one of the two
+ * of 260px or more) and on its own line under the price everywhere else. The inline form names the
+ * day only on a card of 340px or more: the price, the change and the day do not fit a 276px grid card. Exactly one of the two
  * renders, so a screen reader reads the change once.
  */
 .listing-card-change-inline {
@@ -759,13 +760,21 @@ html[data-map-expanded] {
 .listing-card-change-line {
   display: block;
 }
+.listing-card-change-date {
+  display: none;
+}
 @media (min-width: 640px) {
-  @container (min-width: 300px) {
+  @container (min-width: 260px) {
     .listing-card-change-inline {
       display: inline;
     }
     .listing-card-change-line {
       display: none;
+    }
+  }
+  @container (min-width: 340px) {
+    .listing-card-change-date {
+      display: inline;
     }
   }
 }

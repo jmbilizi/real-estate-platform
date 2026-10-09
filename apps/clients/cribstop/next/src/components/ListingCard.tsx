@@ -30,6 +30,8 @@ import {
   describeCardPriceChange,
   describePriceChange,
   formatCardPriceChange,
+  formatCardPriceChangeAmount,
+  formatCardPriceChangeDate,
 } from '@/lib/price-change';
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
@@ -398,7 +400,13 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                 {priceChange && (
                   <span className="listing-card-change-inline text-ink-body">
                     {' '}
-                    <span aria-hidden="true">({formatCardPriceChange(priceChange)})</span>
+                    <span aria-hidden="true">
+                      ({formatCardPriceChangeAmount(priceChange)}
+                      <span className="listing-card-change-date">
+                        {formatCardPriceChangeDate(priceChange)}
+                      </span>
+                      )
+                    </span>
                     <span className="sr-only">{describeCardPriceChange(priceChange)}</span>
                   </span>
                 )}
@@ -451,7 +459,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         </div>
 
         {/*
-         * #717. Narrow cards (every card below 640px, and any card under 300px) show the change on
+         * #717. Narrow cards (every card below 640px, and any card under 260px) show the change on
          * a line of its own. The arrow and the amount carry the meaning. The color is the neutral
          * body color for a cut and an increase alike. The two change classes in globals.css show
          * one of the two renders.

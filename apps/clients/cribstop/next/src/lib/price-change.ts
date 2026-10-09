@@ -99,9 +99,18 @@ export function describePriceChange(
 
 /** `↓ $100K` or `↑ $100K`, with the day inside `CARD_DATE_DAYS`. The arrow carries the direction. */
 export function formatCardPriceChange(change: PriceChange): string {
+  return `${formatCardPriceChangeAmount(change)}${formatCardPriceChangeDate(change)}`;
+}
+
+/** `↓ $100K`. The arrow carries the direction. */
+export function formatCardPriceChangeAmount(change: PriceChange): string {
   const arrow = change.direction === 'down' ? '↓' : '↑';
-  const date = change.ageDays <= CARD_DATE_DAYS ? ` · ${change.dateText}` : '';
-  return `${arrow} ${change.amountText}${date}`;
+  return `${arrow} ${change.amountText}`;
+}
+
+/** ` · Oct 2` inside `CARD_DATE_DAYS`, else an empty string. */
+export function formatCardPriceChangeDate(change: PriceChange): string {
+  return change.ageDays <= CARD_DATE_DAYS ? ` · ${change.dateText}` : '';
 }
 
 /** The screen-reader text of the card indicator, with the full amount: "Price reduced by $100,000". */
