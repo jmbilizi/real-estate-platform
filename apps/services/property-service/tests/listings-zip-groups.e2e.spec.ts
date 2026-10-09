@@ -2,11 +2,14 @@ import axios from 'axios';
 import { listingsEnvelopeSchema, zipsResponseSchema } from '@cribstop/property-contracts';
 import { closePool, getPool } from '../src/db/pool';
 import {
+  addPhoto,
   COLLAPSE_CITY,
   COLLAPSE_STATE,
   type HomeInput,
+  photoUrlOf,
   removeCollapseFixtures,
   seedHomes,
+  suppressMedia,
 } from './support/collapse-fixtures';
 
 /**
@@ -43,8 +46,19 @@ async function searchTotal(params: Record<string, unknown> = {}): Promise<number
   return listingsEnvelopeSchema.parse(response.data).total;
 }
 
+const ids = { relistWinner: '', shown: '', suppressed: '' };
+
 beforeAll(async () => {
-  await seedHomes(pool, HOMES);
+  const seeded = await seedHomes(pool, HOMES);
+  const id = (street: string, index: number): string => seeded[street]?.ids[index] as string;
+  ids.relistWinner = id('1 Alpha Rd', 1);
+  ids.shown = id('2 Alpha Rd', 0);
+  ids.suppressed = id('3 Alpha Rd', 0);
+  // The older relist record has a photo too. The collapse hides it, so it must not show.
+  for (const record of [id('1 Alpha Rd', 0), ids.relistWinner, ids.shown, ids.suppressed]) {
+    await addPhoto(pool, record);
+  }
+  await suppressMedia(pool, ids.suppressed);
 });
 
 afterAll(async () => {
@@ -55,12 +69,24 @@ afterAll(async () => {
 describe('GET /listings/zips (#722)', () => {
   it('counts the cards of each ZIP, ordered by count and then by key', async () => {
     const response = await zips();
-    expect(response.groups).toEqual([
+    expect(response.groups.map(({ key, count }) => ({ key, count }))).toEqual([
       { key: '00001', count: 3 },
       { key: '00002', count: 2 },
       { key: '00003', count: 2 },
     ]);
     expect(response.total).toBe(3);
+  });
+
+  it('shows the primary photo of each card of the group, newest listed first (#722)', async () => {
+    const group = (await zips()).groups.find((g) => g.key === '00001');
+    // The relist's newest record wins the card. Its older record, and the home with suppressed
+    // media, add no photo.
+    expect(group?.previewPhotos).toEqual([
+      { url: photoUrlOf(ids.relistWinner), listingId: ids.relistWinner },
+      { url: photoUrlOf(ids.shown), listingId: ids.shown },
+    ]);
+    const bare = (await zips()).groups.find((g) => g.key === '00002');
+    expect(bare).not.toHaveProperty('previewPhotos');
   });
 
   it('adds the group counts up to the search total, on the direct and the view source', async () => {
@@ -97,7 +123,9 @@ describe('GET /listings/zips (#722)', () => {
 
   it('omits a group below minCount and keeps listingTotal exact', async () => {
     const response = await zips({ minCount: 3 });
-    expect(response.groups).toEqual([{ key: '00001', count: 3 }]);
+    expect(response.groups.map(({ key, count }) => ({ key, count }))).toEqual([
+      { key: '00001', count: 3 },
+    ]);
     expect(response.total).toBe(1);
     expect(response.listingTotal).toBe(await searchTotal());
   });

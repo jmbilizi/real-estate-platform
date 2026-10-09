@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+  NEIGHBORHOOD_PREVIEW_PHOTOS_MAX,
+  neighborhoodPreviewPhotoSchema,
   NEIGHBORHOODS_LIMIT_MAX,
   NEIGHBORHOODS_MIN_COUNT_MAX,
   NEIGHBORHOODS_ORDERS,
@@ -69,9 +71,21 @@ export type ListingGroupsRequest = z.infer<typeof listingGroupsRequestSchema>;
 export const zipsRequestSchema = listingGroupsRequestSchema;
 export type ZipsRequest = ListingGroupsRequest;
 
+/** The same photo field, count and rule as a neighborhood row (#486). */
+const previewPhotos = z
+  .array(neighborhoodPreviewPhotoSchema)
+  .max(NEIGHBORHOOD_PREVIEW_PHOTOS_MAX)
+  .optional()
+  .describe(
+    `Up to ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX} primary photos, one per listing card of the group, ` +
+      'newest listed first. A listing whose media display is suppressed adds none. Absent when no ' +
+      'listing qualifies.',
+  );
+
 export const zipGroupSchema = z.object({
   key: z.string().describe('The five-digit ZIP code.'),
   count: z.number().int().nonnegative().describe('Listing cards in the ZIP code.'),
+  previewPhotos,
 });
 
 export type ZipGroup = z.infer<typeof zipGroupSchema>;
@@ -111,6 +125,7 @@ export const brokerGroupSchema = z.object({
         `\`${BROKER_UNLISTED_NAME}\` for the unlisted group.`,
     ),
   count: z.number().int().nonnegative().describe('Listing cards of the office.'),
+  previewPhotos,
 });
 
 export type BrokerGroup = z.infer<typeof brokerGroupSchema>;

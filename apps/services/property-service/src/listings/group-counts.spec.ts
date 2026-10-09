@@ -1,5 +1,8 @@
 import request from 'supertest';
-import { listingGroupsRequestSchema } from '@cribstop/property-contracts';
+import {
+  listingGroupsRequestSchema,
+  NEIGHBORHOOD_PREVIEW_PHOTOS_MAX,
+} from '@cribstop/property-contracts';
 import { createApp } from '../app';
 import { getBrokerGroups, getZipGroups } from './group-counts';
 import type { ReadPool } from './repository';
@@ -86,6 +89,34 @@ describe('getZipGroups', () => {
     await getZipGroups(pool, parse({ minCount: '2', limit: '10', offset: '20' }));
     const params = values.find((v) => v.length > 0) as unknown[];
     expect(params.slice(-3)).toEqual([2, 10, 20]);
+  });
+});
+
+describe('group preview photos (#722)', () => {
+  const photos = [{ url: 'https://cdn.example/a.jpg', listingId: 'a' }];
+
+  it('maps preview photos onto ZIP and broker groups, and leaves the field out when empty', async () => {
+    const rows = [
+      { group_total: 2, listing_total: 3, key: 'k1', name: 'N1', count: 2, preview_photos: photos },
+      { group_total: 2, listing_total: 3, key: 'k2', name: 'N2', count: 1, preview_photos: [] },
+    ];
+    const zips = await getZipGroups(recordingPool(rows).pool, parse({}));
+    expect(zips.groups[0]?.previewPhotos).toEqual(photos);
+    expect(zips.groups[1]).not.toHaveProperty('previewPhotos');
+    const brokers = await getBrokerGroups(recordingPool(rows).pool, parse({}));
+    expect(brokers.groups[0]?.previewPhotos).toEqual(photos);
+    expect(brokers.groups[1]).not.toHaveProperty('previewPhotos');
+  });
+
+  it('picks the photos after the page limit, with the media display flag and the neighborhood count', async () => {
+    const { pool, texts } = recordingPool([]);
+    await getZipGroups(pool, parse({}));
+    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    expect(sql).toContain('v.media_display_allowed OR m.retained_when_suppressed');
+    expect(sql).toContain(`LIMIT ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX}`);
+    expect(sql).toContain('left(v.zip5, 5) = page.group_key');
+    // The group's own collapsed card set: the collapse is in the photo query too.
+    expect(sql.split('NOT EXISTS').length).toBeGreaterThan(3);
   });
 });
 

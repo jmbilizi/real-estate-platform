@@ -24,8 +24,10 @@ import NeighborhoodGroupGrid, {
   NeighborhoodGroupGridSkeleton,
 } from '@/components/NeighborhoodGroupGrid';
 import ListingGroupGrid, {
+  brokerGroupCards,
   type ListingGroupCard,
   ListingGroupGridSkeleton,
+  zipGroupCards,
 } from '@/components/ListingGroupGrid';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
@@ -1161,16 +1163,8 @@ export default function SearchExperience({
                       testId={zipGrouped ? 'zip-group-grid' : 'broker-group-grid'}
                       cards={
                         zipGrouped
-                          ? zipGroups.rows.map((zip) => ({
-                              key: zip.key,
-                              title: zip.key,
-                              count: zip.count,
-                            }))
-                          : brokerGroups.rows.map((broker) => ({
-                              key: broker.key,
-                              title: broker.name,
-                              count: broker.count,
-                            }))
+                          ? zipGroupCards(zipGroups.rows)
+                          : brokerGroupCards(brokerGroups.rows)
                       }
                       hrefFor={drillCardHref}
                       onSelect={drillIntoCard}
