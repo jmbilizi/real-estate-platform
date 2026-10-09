@@ -153,16 +153,17 @@ describe('Group by neighborhood (#502)', () => {
     expect(screen.getByLabelText('Open filters, 1 active').textContent).toBe('1');
   });
 
-  it('shows an icon-only Group button, a fixed Sort label, and names the current choice in the aria-label', async () => {
+  it('shows icon-only Group and Sort buttons, and names the current choice in the aria-label', async () => {
     render(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const groupBy = screen.getByTestId('group-by-control');
     const sort = screen.getByTestId('sort-control');
     expect(groupBy.getAttribute('aria-label')).toBe('Group, current: None');
     expect(sort.getAttribute('aria-label')).toBe('Sort, current: Recommended');
-    // The button text is the fixed label, never the choice.
+    // No button shows text; the tooltip is the fixed label.
     expect(groupBy.textContent).toBe('');
-    expect(sort.textContent).toBe('Sort');
+    expect(sort.textContent).toBe('');
+    expect(sort.getAttribute('title')).toBe('Sort');
 
     choose('group-by-control', 'Neighborhood');
     await screen.findByTestId('neighborhood-group-grid');
@@ -172,7 +173,7 @@ describe('Group by neighborhood (#502)', () => {
     );
     // Grouped view: the order control is the Sort button.
     const order = screen.getByTestId('group-order-control');
-    expect(order.textContent).toBe('Sort');
+    expect(order.textContent).toBe('');
     expect(order.getAttribute('aria-label')).toBe('Sort, current: Most homes');
     expect(screen.queryByTestId('sort-control')).toBeNull();
   });
@@ -205,23 +206,20 @@ describe('Group by neighborhood (#502)', () => {
     expect(screen.getByRole('option', { name: 'Newest' }).querySelector('svg')).toBeNull();
   });
 
-  it('shows Filters and Group as icon-only 44px buttons, and Sort as an icon below sm', async () => {
+  it('shows Filters, Group and Sort as icon-only 44px buttons with a tooltip', async () => {
     render(<SearchExperience initialQuery="q=Bethesda" />);
     for (const button of [
       screen.getByLabelText('Open filters'),
       screen.getByTestId('group-by-control'),
+      screen.getByTestId('sort-control'),
     ]) {
       expect(button.textContent).toBe('');
       expect(button.className).toContain('h-11');
       expect(button.className).toContain('w-11');
       expect(button.querySelector('svg')).not.toBeNull();
+      expect(button.getAttribute('title')).toBeTruthy();
+      expect(button.getAttribute('aria-label')).toBeTruthy();
     }
-    const sort = screen.getByTestId('sort-control');
-    const label = [...sort.querySelectorAll('span')].find((s) => s.textContent);
-    expect(label?.className).toContain('hidden');
-    expect(label?.className).toContain('sm:inline');
-    expect(sort.className).toContain('min-h-11');
-    expect(sort.className).toContain('min-w-11');
   });
 
   it('orders by name and keeps the order in the URL', async () => {

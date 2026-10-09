@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SearchFilters } from '@/lib/types';
 import FilterModalContent from '@/components/FilterModalContent';
+import { deferUnlockScroll, lockScroll } from '@/lib/rootScrollLock';
 import { applyLandInterlock, filtersToSearchParams } from '@/lib/listing-filters';
 
 interface Props {
@@ -112,12 +113,10 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
    */
   const [draft, setDraft] = useState<SearchFilters>(filters);
 
-  // Lock body scroll for as long as the dialog is mounted.
+  // Same lock as `Modal`: the scrollbar gutter stays, so the page does not shift.
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
+    lockScroll();
+    return deferUnlockScroll;
   }, []);
 
   // Keep focus inside the dialog: move it in on open, wrap Tab, and give it back on close.

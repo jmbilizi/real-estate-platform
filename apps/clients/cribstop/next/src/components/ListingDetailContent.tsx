@@ -1,6 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import ToolbarIconButton, {
+  BACK_ICON,
+  HEART_ICON,
+  SHARE_ICON,
+} from '@/components/ToolbarIconButton';
 import Link from 'next/link';
 import type { InquiryKind } from '@cribstop/property-contracts';
 import BuyerAgentRequestDialog from '@/components/listing/BuyerAgentRequestDialog';
@@ -270,40 +275,14 @@ export default function ListingDetailContent({
   // Shared by the detail header and the full-screen photo viewer.
   const shareSaveButtons = (
     <>
-      <button
-        onClick={handleShare}
-        className="btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5"
-        aria-label="Share"
-      >
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-          />
-        </svg>
-        <span className="hidden sm:inline">Share</span>
-      </button>
-      <button
+      <ToolbarIconButton label="Share" icon={SHARE_ICON} onClick={handleShare} />
+      <ToolbarIconButton
+        label="Save"
+        tooltip={saved ? 'Remove from saved' : 'Save'}
+        icon={HEART_ICON}
+        pressed={saved}
         onClick={() => toggleSave(listing)}
-        className={`btn-secondary h-11 w-11 px-0 sm:h-auto sm:w-auto sm:gap-1.5 sm:px-5 ${saved ? 'border-brand text-brand' : ''}`}
-        aria-label={saved ? 'Saved' : 'Save'}
-      >
-        <svg
-          className={`h-4 w-4 ${saved ? 'fill-brand' : 'fill-none'}`}
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-          />
-        </svg>
-        <span className="hidden sm:inline">{saved ? 'Saved' : 'Save'}</span>
-      </button>
+      />
     </>
   );
 
@@ -318,23 +297,7 @@ export default function ListingDetailContent({
         ref={headerRef}
         className="listing-header flex-shrink-0 flex items-center gap-3 border-b border-surface-border px-6 sm:px-8 pt-4 pb-3 bg-white"
       >
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-surface-border bg-white hover:bg-surface-soft transition-colors"
-            aria-label="Go back"
-          >
-            <svg
-              className="h-5 w-5 text-ink"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        )}
+        {onClose && <ToolbarIconButton label="Go back" icon={BACK_ICON} onClick={onClose} />}
         {/* The price and address repeat the overview. The stakeholder accepts this one exception. */}
         <ListingHeaderNav
           headerRef={headerRef}

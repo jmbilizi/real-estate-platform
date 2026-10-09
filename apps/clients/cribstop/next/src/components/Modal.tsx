@@ -1,5 +1,11 @@
 import React, { ReactNode, useEffect, useId, useRef, useState } from 'react';
 import DismissButton from '@/components/DismissButton';
+import {
+  cancelDeferredUnlock,
+  deferUnlockScroll,
+  lockScroll,
+  unlockScroll,
+} from '@/lib/rootScrollLock';
 
 /**
  * What counts as a tab stop inside the dialog, for the focus trap below.
@@ -19,50 +25,6 @@ const FOCUSABLE_SELECTOR = [
   '[contenteditable]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
-
-// Module-level: survives React Strict Mode unmount/remount cycles (unlike useRef)
-let scheduledScrollUnlock: ReturnType<typeof setTimeout> | null = null;
-
-function lockScroll() {
-  // Cancel any pending deferred unlock first (handles Strict Mode re-mount)
-  if (scheduledScrollUnlock !== null) {
-    clearTimeout(scheduledScrollUnlock);
-    scheduledScrollUnlock = null;
-  }
-  /*
-   * The gutter is kept instead of padding the page by the scrollbar's width. Padding was measured and
-   * applied after hydration, so the viewport widened by a scrollbar width at that moment and a
-   * directly-loaded panel visibly slid right. `globals.css` applies the same two declarations to
-   * the server-rendered panel from its first paint, so this call changes nothing on screen.
-   */
-  const root = document.documentElement;
-  if (
-    typeof CSS !== 'undefined' &&
-    typeof CSS.supports === 'function' &&
-    CSS.supports('scrollbar-gutter', 'stable')
-  ) {
-    root.style.scrollbarGutter = 'stable';
-  } else if (root.style.overflow !== 'hidden') {
-    // Older browsers: pad by the scrollbar width, as before.
-    root.style.paddingRight = `${window.innerWidth - root.clientWidth}px`;
-  }
-  root.style.overflow = 'hidden';
-}
-
-function unlockScroll() {
-  document.documentElement.style.paddingRight = '';
-  document.documentElement.style.scrollbarGutter = '';
-  document.documentElement.style.overflow = '';
-}
-
-function deferUnlockScroll() {
-  // Schedules unlock as a macrotask — Strict Mode re-mount cancels it via lockScroll()
-  // before it ever fires, so scroll stays locked across the double-mount cycle
-  scheduledScrollUnlock = setTimeout(() => {
-    scheduledScrollUnlock = null;
-    unlockScroll();
-  }, 0);
-}
 
 type MobileStyle = 'center' | 'bottom-sheet' | 'full-screen';
 
@@ -227,10 +189,7 @@ export default function Modal({
       // The cleanup of the open=true branch just scheduled a deferred unlock
       // (setTimeout 0). Cancel it immediately — we own the unlock timing now
       // and will fire it properly after the 300ms exit animation.
-      if (scheduledScrollUnlock !== null) {
-        clearTimeout(scheduledScrollUnlock);
-        scheduledScrollUnlock = null;
-      }
+      cancelDeferredUnlock();
       // Slide out, then remove from DOM and unlock
       setVisible(false);
       const timer = setTimeout(() => {

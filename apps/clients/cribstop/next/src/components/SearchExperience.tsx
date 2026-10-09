@@ -10,7 +10,11 @@ import { listingIdFromPath } from '@/lib/listing-panel';
 
 import type { SearchFilters } from '@/lib/types';
 import type { SearchSuggestionValue } from '@/lib/store/types';
-import ToolbarIconButton, { FILTERS_ICON, GROUP_ICON } from '@/components/ToolbarIconButton';
+import ToolbarIconButton, {
+  FILTERS_ICON,
+  GROUP_ICON,
+  SORT_ICON,
+} from '@/components/ToolbarIconButton';
 import ToolbarSelect, { type ToolbarOption } from '@/components/ToolbarSelect';
 import ResultsPager from '@/components/ResultsPager';
 import {
@@ -1126,7 +1130,6 @@ export default function SearchExperience({
                 value={groupBy ?? 'none'}
                 options={zipOffered || zipGrouped ? GROUP_BY_OPTIONS_WITH_ZIP : GROUP_BY_OPTIONS}
                 icon={GROUP_ICON}
-                iconOnly
                 active={grouped}
                 onChange={changeGroupBy}
               />
@@ -1339,26 +1342,6 @@ const GROUP_ORDER_OPTIONS: { value: GroupOrder; label: string }[] = [
   { value: 'count', label: 'Most homes' },
   { value: 'name', label: 'Name A-Z' },
 ];
-
-const ICON_PROPS = {
-  width: 18,
-  height: 20,
-  fill: 'none',
-  viewBox: '0 0 24 24',
-  stroke: 'currentColor',
-  strokeWidth: 1.5,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-} as const;
-
-const SORT_ICON = (
-  <svg {...ICON_PROPS}>
-    <path d="m3 18 4 4 4-4" />
-    <path d="M7 22V2" />
-    <path d="m21 6-4-4-4 4" />
-    <path d="M17 2v20" />
-  </svg>
-);
 
 function EmptyState({
   activeFilterCount,

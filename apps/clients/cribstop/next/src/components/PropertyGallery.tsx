@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import ToolbarIconButton, { BACK_ICON, FORWARD_ICON } from '@/components/ToolbarIconButton';
 import type { Media } from '@/lib/types';
 import ListingImage from '@/components/listing/ListingImage';
 import { resolveTourEntry } from '@/lib/tour-url';
@@ -180,7 +181,6 @@ function PhotoViewer({
   // never crops the Bright MLS watermark. Nothing overlays the photo.
   const ring =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2';
-  const circle = `flex h-11 w-11 items-center justify-center rounded-full border border-surface-border bg-white text-ink shadow-card transition-colors hover:bg-surface-soft disabled:opacity-30 ${ring}`;
 
   return (
     <div
@@ -227,48 +227,26 @@ function PhotoViewer({
       </div>
       {/* Bottom bar: prev/next and the photo caption, when the photo has one. */}
       <div className="flex items-center justify-between gap-3 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-        <button
-          type="button"
+        <ToolbarIconButton
+          label="Previous"
+          icon={BACK_ICON}
           onClick={prev}
           disabled={count <= 1}
-          className={circle}
-          aria-label="Previous"
-        >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+          className="disabled:opacity-30"
+        />
         <p
           className="min-w-0 flex-1 px-3 text-center text-sm text-ink-muted"
           data-testid="gallery-caption"
         >
           {photo?.caption ?? ''}
         </p>
-        <button
-          type="button"
+        <ToolbarIconButton
+          label="Next"
+          icon={FORWARD_ICON}
           onClick={next}
           disabled={count <= 1}
-          className={circle}
-          aria-label="Next"
-        >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
+          className="disabled:opacity-30"
+        />
       </div>
     </div>
   );

@@ -81,7 +81,7 @@ describe('PropertyGallery lightbox', () => {
       /focus-visible:ring-brand/,
     );
     expect(within(dialog).getByRole('button', { name: 'Next' }).className).toMatch(
-      /rounded-full.*shadow-card/,
+      /rounded-full.*border-gray-300/,
     );
     expect(within(dialog).getByTestId('gallery-caption').className).toMatch(/text-ink-muted/);
   });

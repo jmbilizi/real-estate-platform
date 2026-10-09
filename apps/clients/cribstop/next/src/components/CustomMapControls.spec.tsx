@@ -55,8 +55,9 @@ describe('CustomMapControls expand and exit', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Full screen map' }));
 
     const exit = screen.getByRole('button', { name: 'Exit full screen map' });
-    expect(exit.style.width).toBe('44px');
-    expect(exit.style.height).toBe('44px');
+    expect(exit.className).toContain('w-11');
+    expect(exit.className).toContain('h-11');
+    expect(exit.getAttribute('title')).toBe('Exit full screen map');
     expect(screen.queryByRole('button', { name: 'Full screen map' })).toBeNull();
     expect(container.classList.contains('fullscreen-map')).toBe(true);
     expect(htmlExpanded()).toBe(true);
@@ -263,7 +264,7 @@ describe('filter and group buttons on the expanded map (#576)', () => {
     expect(button.className).toContain('w-11');
     expect(button.className).toContain('h-11');
     expect(button.textContent).toBe('');
-    expect(button.getAttribute('title')).toBeNull();
+    expect(button.getAttribute('title')).toBe('Open filters');
   });
 
   it('shows the active filter count as a badge and in the name', () => {
