@@ -29,6 +29,8 @@ const row = {
   featured: false,
   sponsored: false,
   priceReduced: false,
+  previousPrice: null,
+  priceChangedAt: null,
   newConstruction: false,
   isSample: true,
   closePrice: null,
@@ -78,6 +80,20 @@ describe('listingCardSchema', () => {
     expect(keys).not.toContain('description');
     expect(keys).not.toContain('imageUrls');
     expect(keys).not.toContain('hasOpenHouse');
+  });
+
+  it('requires the price change keys, and accepts two stored prices (#717)', () => {
+    const { previousPrice: _p, ...withoutPrevious } = row;
+    expect(listingCardSchema.safeParse(withoutPrevious).success).toBe(false);
+    const { priceChangedAt: _c, ...withoutDate } = row;
+    expect(listingCardSchema.safeParse(withoutDate).success).toBe(false);
+    expect(
+      listingCardSchema.safeParse({
+        ...row,
+        previousPrice: 2297500,
+        priceChangedAt: '2026-10-02T00:00:00.000Z',
+      }).success,
+    ).toBe(true);
   });
 
   it('carries an exact total and page info on the envelope', () => {

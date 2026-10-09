@@ -42,6 +42,8 @@ const BASE_CARD_INPUT = {
   featured: false,
   sponsored: false,
   priceReduced: false,
+  previousPrice: null as number | null,
+  priceChangedAt: null as string | null,
   newConstruction: false,
   isSample: true,
   closePrice: null,
@@ -229,6 +231,7 @@ export function detailFixture(overrides: DetailFixtureOverrides = {}): ListingDe
       listAgentEmail: null,
       alsoListedAs: [],
       listedSince: null,
+      priceHistory: [],
       facts: {
         parking: null,
         heating: null,

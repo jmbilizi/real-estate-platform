@@ -99,7 +99,8 @@ export async function upsertListing(
   const isSample = row.is_sample || facts.is_sample;
 
   const { rows: writeResult } = await client.query(
-    `INSERT INTO listings
+    `WITH prior AS (SELECT list_price FROM listings WHERE id = $1)
+     INSERT INTO listings
        (id, property_id, unit_id, title, offer_kind, consumer_status, status, source,
         source_system, source_listing_key, source_listing_id, source_modification_timestamp,
         list_price, close_price, close_date,
@@ -202,7 +203,7 @@ export async function upsertListing(
        deleted_at = NULL
      -- #391. xmax = 0 is Postgres' own "this row was just inserted, not updated" signal, cheaper
      -- and more direct than a second SELECT to tell the two cases apart for the event below.
-     RETURNING (xmax = 0) AS inserted`,
+     RETURNING (xmax = 0) AS inserted, (SELECT list_price FROM prior) AS prior_price`,
     [
       row.id,
       row.property_id,
@@ -285,6 +286,28 @@ export async function upsertListing(
   // long ago the listing actually first appeared.
   const occurredAt =
     !row.close_date && isFreshInsert ? (row.listed_at ?? row.last_updated) : row.last_updated;
+
+  // #717. The price this record carried before this write. Bright sends no previous price on this
+  // MLS, so this row is the only record of a change on one key. The `prior` CTE reads the
+  // statement snapshot. The sync worker holds a lock, so one writer updates a key at a time.
+  // `FOR UPDATE` in the CTE reads nothing: the CTE runs after the update.
+  const priorPrice = writeResult[0]?.prior_price;
+  if (
+    !isFreshInsert &&
+    priorPrice != null &&
+    row.list_price != null &&
+    Number(priorPrice) !== Number(row.list_price)
+  ) {
+    await appendEvent(client, {
+      listing_id: row.id,
+      property_id: row.property_id,
+      event_type: 'price_change',
+      occurred_at: row.last_updated,
+      old_price: Number(priorPrice),
+      new_price: row.list_price,
+      is_sample: isSample,
+    });
+  }
 
   await appendEvent(client, {
     listing_id: row.id,
@@ -532,6 +555,7 @@ async function appendEvent(
     property_id: string;
     event_type: string;
     occurred_at: string;
+    old_price?: number | null;
     new_price?: number | null;
     new_status?: string | null;
     note?: string | null;
@@ -540,14 +564,16 @@ async function appendEvent(
 ): Promise<void> {
   await client.query(
     `INSERT INTO listing_events
-       (id, listing_id, property_id, event_type, occurred_at, new_price, new_status, note, is_sample)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       (id, listing_id, property_id, event_type, occurred_at, old_price, new_price, new_status, note,
+        is_sample)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       randomUUID(),
       event.listing_id,
       event.property_id,
       event.event_type,
       event.occurred_at,
+      event.old_price ?? null,
       event.new_price ?? null,
       event.new_status ?? null,
       event.note ?? null,

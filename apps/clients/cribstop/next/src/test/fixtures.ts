@@ -44,6 +44,8 @@ export function aListingCardRow(overrides: Partial<ListingCardRow> = {}): Listin
     featured: false,
     sponsored: false,
     priceReduced: false,
+    previousPrice: null,
+    priceChangedAt: null,
     newConstruction: false,
     isSample: true,
     closePrice: null,
@@ -122,6 +124,7 @@ export function aListingDetail(
       listAgentEmail: null,
       alsoListedAs: [],
       listedSince: null,
+      priceHistory: [],
       facts: {
         parking: null,
         heating: null,

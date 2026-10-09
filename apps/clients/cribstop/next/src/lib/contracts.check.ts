@@ -64,6 +64,8 @@ type ExpectedCardKeys =
   | 'featured'
   | 'sponsored'
   | 'priceReduced'
+  | 'previousPrice'
+  | 'priceChangedAt'
   | 'newConstruction'
   | 'isSample'
   | 'closePrice'
