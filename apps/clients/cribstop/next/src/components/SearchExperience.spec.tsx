@@ -65,7 +65,8 @@ jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
  */
 // `mock`-prefixed so `jest.mock`'s hoisted factory is allowed to close over it.
 const mockAppContext = {
-  savedIds: new Set<string>(),
+  savedHomes: [],
+  savedPropertyIds: new Set<string>(),
   setSearchLocation: jest.fn(),
   setSearchSuggestion: jest.fn(),
   setSearchListingType: jest.fn(),

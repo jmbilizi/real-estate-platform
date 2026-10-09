@@ -45,7 +45,8 @@ jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
 
 // Stable identities, like the real context: see the note in SearchExperience.spec.tsx.
 const mockAppContext = {
-  savedIds: new Set<string>(),
+  savedHomes: [],
+  savedPropertyIds: new Set<string>(),
   setSearchLocation: jest.fn(),
   setSearchSuggestion: jest.fn(),
   setSearchListingType: jest.fn(),

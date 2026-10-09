@@ -146,7 +146,8 @@ export default function SearchExperience({
   place,
 }: SearchExperienceProps) {
   const {
-    savedIds,
+    savedHomes,
+    savedPropertyIds,
     setSearchLocation: setLocation,
     setSearchSuggestion,
     setSearchListingType,
@@ -498,6 +499,15 @@ export default function SearchExperience({
     !deferred,
   );
 
+  // Pins carry a listing id, a save keys on the home (#25). Every row of a saved home gets the saved
+  // pin. A viewport-only pin has no home id, so it shows saved only when it is the listing saved from.
+  const savedPinIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of results) if (savedPropertyIds.has(row.propertyId)) ids.add(row.id);
+    for (const home of savedHomes) if (home.listingId) ids.add(home.listingId);
+    return ids;
+  }, [results, savedPropertyIds, savedHomes]);
+
   const groups = useNeighborhoodGroups(requestFilters, page, group.order, grouped && !deferred);
 
   const isLoading = status === 'loading';
@@ -732,7 +742,7 @@ export default function SearchExperience({
           <div className="sticky top-[65px] h-[45vh] search-map-sticky md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
             <ListingsMap
               listings={results}
-              savedIds={savedIds}
+              savedIds={savedPinIds}
               activeId={hoveredId}
               // Sizing only. The radius used to be asserted here as `md:rounded-2xl` and had no
               // effect — an inline style inside the map overrode it at every breakpoint — so the
