@@ -146,7 +146,12 @@ describe('single neighborhood card guard (#534)', () => {
   });
 
   it('keeps count copy, photo-stack and card markup out of every other file', () => {
-    const allowed = new Set(['NeighborhoodCard.tsx', 'NeighborhoodPhotoStack.tsx']);
+    // #722. The ZIP and broker group cards reuse the one photo stack and own no photo markup.
+    const allowed = new Set([
+      'NeighborhoodCard.tsx',
+      'NeighborhoodPhotoStack.tsx',
+      'ListingGroupGrid.tsx',
+    ]);
     const offenders = readdirSync(dir)
       .filter((f) => /\.tsx?$/.test(f) && !/\.spec\./.test(f) && !allowed.has(f))
       .filter((f) => {

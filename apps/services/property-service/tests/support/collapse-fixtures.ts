@@ -265,6 +265,36 @@ export async function setRecordFacts(
   }
 }
 
+/** The photo URL `addPhoto` writes for a record. Listing media cascade-delete with the listing. */
+export const photoUrlOf = (id: string): string => `https://cdn.example/e2e-group/${id}.jpg`;
+
+/** Test-only. Gives a record one primary photo. */
+export async function addPhoto(pool: CollapsePool, id: string): Promise<void> {
+  assertFixturesEnabled();
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO listing_media (listing_id, source_url, sort_order, is_primary,
+                                  retained_when_suppressed, is_sample)
+       VALUES ($1, $2, 0, true, false, true)`,
+      [id, photoUrlOf(id)],
+    );
+  } finally {
+    client.release();
+  }
+}
+
+/** Test-only. The seller withholds the media. The record keeps its photo row. */
+export async function suppressMedia(pool: CollapsePool, id: string): Promise<void> {
+  assertFixturesEnabled();
+  const client = await pool.connect();
+  try {
+    await client.query('UPDATE listings SET media_display_allowed = false WHERE id = $1', [id]);
+  } finally {
+    client.release();
+  }
+}
+
 /** Test-only. Moves a record off-market, as the sync does when the feed withdraws it. */
 export async function takeDown(pool: CollapsePool, id: string): Promise<void> {
   assertFixturesEnabled();
