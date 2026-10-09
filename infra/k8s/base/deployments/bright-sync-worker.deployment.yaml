@@ -86,6 +86,11 @@ spec:
               value: "500" # keys one probe run may take down; above it, none (#715)
             - name: BRIGHT_SOLD_LOOKBACK_DAYS
               value: "365"
+            # Days after close before a sold displays (#228). 0 shows a sold from its close date.
+            # Unset fails closed: every sold is withheld. Keep the value in the property-service
+            # Deployment equal to this one.
+            - name: BRIGHT_SOLD_DISPLAY_DELAY_DAYS
+              value: "0"
             - name: BRIGHT_SYNC_POLL_MS
               value: "10000" # scheduler tick, not a Bright request rate
             - name: BRIGHT_MLS_REQUEST_TIMEOUT_MS

@@ -47,8 +47,12 @@ describe('formatClosePrice', () => {
     expect(formatClosePrice(690000, null)).toBe('Sold for $690,000');
   });
 
-  it('renders nothing when there is no close price', () => {
-    expect(formatClosePrice(null, '2026-03-14')).toBeNull();
+  it('shows the sold date alone when there is no close price (#228)', () => {
+    expect(formatClosePrice(null, '2026-03-14')).toBe('Sold on Mar 14, 2026');
+  });
+
+  it('renders nothing when there is neither a close price nor a close date', () => {
+    expect(formatClosePrice(null, null)).toBeNull();
   });
 
   it('does not shift the close date across a timezone boundary', () => {
