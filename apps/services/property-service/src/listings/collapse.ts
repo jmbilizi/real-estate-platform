@@ -93,15 +93,23 @@ function statusRank(column: string): string {
   return `CASE ${column} WHEN 'Active' THEN 3 WHEN 'Coming Soon' THEN 2 ELSE 1 END`;
 }
 
-/** `o` is a `listings` row. The caller names it in its own `FROM`. */
-function mergeableConditions(subject: SubjectColumns): string[] {
+/**
+ * `o` is a `listings` row. The caller names it in its own `FROM`. With `live`, both records must be
+ * on the market. Without it, `o` may be any record the seller allows on the internet. #717 reads a
+ * relist predecessor that has ended.
+ */
+export function sameHomeConditions(subject: SubjectColumns, live = true): string[] {
   return [
     `o.property_id = ${subject.propertyId}`,
     `o.unit_id IS NOT DISTINCT FROM ${subject.unitId}`,
     `o.id <> ${subject.id}`,
-    'o.deleted_at IS NULL AND o.internet_display_allowed',
-    `o.consumer_status IN ${LIVE_STATUS_SQL}`,
-    `${subject.status} IN ${LIVE_STATUS_SQL}`,
+    ...(live
+      ? [
+          'o.deleted_at IS NULL AND o.internet_display_allowed',
+          `o.consumer_status IN ${LIVE_STATUS_SQL}`,
+          `${subject.status} IN ${LIVE_STATUS_SQL}`,
+        ]
+      : ['o.internet_display_allowed']),
     `o.listing_type = ${subject.listingType}`,
     `o.office_name IS NOT NULL AND o.office_name = ${subject.officeName}`,
     `(o.beds IS NULL OR ${subject.beds} IS NULL OR o.beds = ${subject.beds})`,
@@ -151,7 +159,7 @@ export function collapseCondition(subject: SubjectColumns = VIEW_SUBJECT): strin
         AND s.consumer_status IN ${LIVE_STATUS_SQL})
     OR NOT EXISTS (
       SELECT 1 FROM listings o
-      WHERE ${[...mergeableConditions(subject), beatsConditions(subject)].join('\n        AND ')}))`;
+      WHERE ${[...sameHomeConditions(subject), beatsConditions(subject)].join('\n        AND ')}))`;
 }
 
 /**
@@ -169,7 +177,7 @@ export function mergedRecordsLateral(subject: SubjectColumns = VIEW_SUBJECT): st
         ORDER BY o.listed_at NULLS LAST, o.id), '[]'::json) AS also_listed_as,
       LEAST(${subject.listedAt}, min(o.listed_at)) AS listed_since
     FROM listings o
-    WHERE ${mergeableConditions(subject).join('\n      AND ')}
+    WHERE ${sameHomeConditions(subject).join('\n      AND ')}
       -- A record that withholds its address is never tied to one that shows it (#48).
       AND o.address_display_allowed = (${subject.address} IS NOT NULL)
   )`;
