@@ -110,6 +110,47 @@ describe('ToolbarIconButton (#748)', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  it('is transparent on the page surface by default', () => {
+    render(<ToolbarIconButton label="Group" icon={GROUP_ICON} />);
+    const { className } = screen.getByRole('button', { name: 'Group' });
+    expect(className).toContain('bg-transparent');
+    expect(className).not.toContain('bg-white');
+  });
+
+  it('is white with a distinct hover on the map surface and keeps the shared look (#764)', () => {
+    render(
+      <ToolbarIconButton
+        label="Zoom in"
+        icon={GROUP_ICON}
+        surface="map"
+        count={2}
+        countTestId="b"
+      />,
+    );
+    const button = screen.getByRole('button', { name: 'Zoom in' });
+    for (const c of [
+      'bg-white',
+      'hover:bg-gray-100',
+      'h-11',
+      'w-11',
+      'rounded-full',
+      'border-gray-300',
+    ]) {
+      expect(button.className).toContain(c);
+    }
+    expect(button.className).not.toContain('bg-transparent');
+    expect(button.getAttribute('title')).toBe('Zoom in');
+    expect(screen.getByTestId('b').textContent).toBe('2');
+  });
+
+  it('keeps the active look on the map surface: filled icon, no dark background', () => {
+    render(<ToolbarIconButton label="Draw" icon={GROUP_ICON} surface="map" pressed />);
+    const button = screen.getByRole('button', { name: 'Draw' });
+    expect(button.className).toContain('text-ink');
+    expect(button.className).not.toContain('bg-ink');
+    expect(button.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');
+  });
+
   it('is the one button behind the list toolbar and the map toolbar', () => {
     const read = (f: string) => fs.readFileSync(path.join(__dirname, f), 'utf8');
     expect(read('SearchExperience.tsx')).toContain('<ToolbarIconButton');

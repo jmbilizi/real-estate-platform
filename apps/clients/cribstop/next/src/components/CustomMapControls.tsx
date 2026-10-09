@@ -60,6 +60,7 @@ export function CustomMapControls({
       {/* One slot, one corner: the expand control and the exit control swap in place. */}
       {expanded ? (
         <ToolbarIconButton
+          surface="map"
           data-testid="map-expand"
           label="Exit full screen map"
           icon={EXIT_EXPAND_ICON}
@@ -67,6 +68,7 @@ export function CustomMapControls({
         />
       ) : (
         <ToolbarIconButton
+          surface="map"
           data-testid="map-expand"
           label="Full screen map"
           icon={EXPAND_ICON}
@@ -76,6 +78,7 @@ export function CustomMapControls({
       {draw && (
         <>
           <ToolbarIconButton
+            surface="map"
             data-testid="map-draw"
             label={draw.drawing ? 'Cancel drawing' : draw.hasArea ? 'Redraw area' : 'Draw an area'}
             icon={DRAW_ICON}
@@ -84,6 +87,7 @@ export function CustomMapControls({
           />
           {draw.hasArea && !draw.drawing && (
             <ToolbarIconButton
+              surface="map"
               data-testid="map-draw-clear"
               label="Clear drawn area"
               icon={CLEAR_ICON}
@@ -96,6 +100,7 @@ export function CustomMapControls({
       {expanded && viewControls && (
         <>
           <ToolbarIconButton
+            surface="map"
             data-testid="map-filters"
             countTestId="map-filters-count"
             label={
@@ -108,6 +113,7 @@ export function CustomMapControls({
             onClick={viewControls.onOpenFilters}
           />
           <ToolbarIconButton
+            surface="map"
             data-testid="map-group"
             label="Group by neighborhood"
             icon={GROUP_ICON}
@@ -116,8 +122,18 @@ export function CustomMapControls({
           />
         </>
       )}
-      <ToolbarIconButton label="Zoom in" icon={PLUS_ICON} onClick={() => map.zoomIn()} />
-      <ToolbarIconButton label="Zoom out" icon={MINUS_ICON} onClick={() => map.zoomOut()} />
+      <ToolbarIconButton
+        surface="map"
+        label="Zoom in"
+        icon={PLUS_ICON}
+        onClick={() => map.zoomIn()}
+      />
+      <ToolbarIconButton
+        surface="map"
+        label="Zoom out"
+        icon={MINUS_ICON}
+        onClick={() => map.zoomOut()}
+      />
     </div>
   );
 }

@@ -162,7 +162,17 @@ export interface ToolbarIconButtonProps
   /** The active look without `aria-pressed`, for a button that opens a menu. */
   active?: boolean;
   countTestId?: string;
+  /**
+   * Where the button sits. `page` (default) is transparent. `map` is white with a light shadow,
+   * for a button over map tiles (#764). Nothing else differs.
+   */
+  surface?: 'page' | 'map';
 }
+
+export const SURFACE_CLASSES = {
+  page: 'bg-transparent hover:bg-surface-soft disabled:hover:bg-transparent aria-expanded:bg-surface-soft',
+  map: 'bg-white shadow-[0_1px_4px_rgba(34,34,34,0.25)] hover:bg-gray-100 disabled:hover:bg-white aria-expanded:bg-gray-100',
+} as const;
 
 /** The one round icon-only toolbar button: list toolbar and map (#748, #758). A transparent fill and a light border, on every surface. */
 export default function ToolbarIconButton({
@@ -173,6 +183,7 @@ export default function ToolbarIconButton({
   pressed,
   active,
   countTestId,
+  surface = 'page',
   className = '',
   type = 'button',
   ...rest
@@ -191,7 +202,7 @@ export default function ToolbarIconButton({
       aria-label={label}
       title={tooltip ?? label}
       aria-pressed={pressed}
-      className={`${position} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-gray-300 bg-transparent hover:bg-surface-soft disabled:cursor-not-allowed disabled:hover:bg-transparent aria-expanded:bg-surface-soft transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
+      className={`${position} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-gray-300 ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
         dark ? 'text-ink' : 'text-ink-muted'
       } ${className}`}
       {...rest}
