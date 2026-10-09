@@ -39,7 +39,8 @@ function segmentsTouch(a: Point, b: Point, c: Point, d: Point): boolean {
 /**
  * Whether a closed ring is a simple polygon with area: no zero-length segment, no back-tracking
  * spike, no segment that touches a non-adjacent segment, and a non-zero area. Pure, so the web app
- * uses the same test to discard a shape the service would refuse.
+ * uses the same test to discard a shape the service would refuse. The test is planar in lng/lat. That
+ * is exact enough for a city-sized shape, where geodesic and planar edges agree.
  */
 export function isSimpleRing(ring: readonly Point[]): boolean {
   const n = ring.length - 1; // The last point repeats the first.
@@ -93,7 +94,7 @@ export const areaPolygon = z
       return;
     }
     const shape = z
-      .object({
+      .strictObject({
         type: z.literal('Polygon'),
         coordinates: z.tuple([z.array(z.tuple([coordinate(-180, 180), coordinate(-90, 90)]))]),
       })

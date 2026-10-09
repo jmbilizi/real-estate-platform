@@ -112,6 +112,21 @@ export function scopeConditions(
   ];
 }
 
+const AREA_BOX_PADDING_DEGREES = 0.01;
+
+/** The bounding box of a validated `area` ring, padded. The contract has already checked the shape. */
+function areaBox(area: string): { south: number; north: number; west: number; east: number } {
+  const ring = (JSON.parse(area) as { coordinates: [number, number][][] }).coordinates[0] ?? [];
+  const lngs = ring.map((point) => point[0]);
+  const lats = ring.map((point) => point[1]);
+  return {
+    west: Math.max(-180, Math.min(...lngs) - AREA_BOX_PADDING_DEGREES),
+    east: Math.min(180, Math.max(...lngs) + AREA_BOX_PADDING_DEGREES),
+    south: Math.max(-90, Math.min(...lats) - AREA_BOX_PADDING_DEGREES),
+    north: Math.min(90, Math.max(...lats) + AREA_BOX_PADDING_DEGREES),
+  };
+}
+
 const SEARCH_ONLY_KEYS = new Set(['sort', 'page', 'pageSize']);
 const SCOPE_KEYS = new Set(['listingType', 'status', 'city', 'state']);
 
@@ -314,7 +329,14 @@ export function buildSearchQuery(request: SearchRequest): {
   // is NULL for a withheld address (migration 030), so a hidden listing never matches. Every read
   // path (list, count, pins, group rows) builds its WHERE from these conditions.
   if (request.area) {
-    conditions.push(`ST_Covers(ST_GeomFromGeoJSON(${bind(request.area)})::geography, v.geog)`);
+    // The shape's padded bounding box first, so the coordinate index prunes rows before the
+    // geodesic test runs. The padding covers a geodesic edge that bulges past the planar box.
+    const box = areaBox(request.area);
+    conditions.push(
+      `v.latitude BETWEEN ${bind(box.south)} AND ${bind(box.north)}
+       AND v.longitude BETWEEN ${bind(box.west)} AND ${bind(box.east)}
+       AND ST_Covers(ST_GeomFromGeoJSON(${bind(request.area)})::geography, v.geog)`,
+    );
   }
 
   // #558. The viewport, as an extra AND on the place scope. `v.latitude` and `v.longitude` are the

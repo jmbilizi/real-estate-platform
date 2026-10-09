@@ -31,6 +31,15 @@ describe('area (#747)', () => {
     expect(params).toContainEqual(area);
   });
 
+  it('prunes with the padded bounding box before the geodesic test', () => {
+    const { where, params } = build({ area });
+    expect(where.indexOf('v.latitude BETWEEN')).toBeLessThan(where.indexOf('ST_Covers('));
+    expect(params).toContainEqual(38.89 - 0.01);
+    expect(params).toContainEqual(38.9 + 0.01);
+    expect(params).toContainEqual(-77.05 - 0.01);
+    expect(params).toContainEqual(-77.04 + 0.01);
+  });
+
   it('is not a scope-only request, so the group counts use the view and the shape', () => {
     expect(isScopeOnlyRequest(searchRequestSchema.parse({ city: 'Washington' }))).toBe(true);
     expect(isScopeOnlyRequest(searchRequestSchema.parse({ city: 'Washington', area }))).toBe(false);

@@ -82,6 +82,13 @@ describe('area polygon (#747)', () => {
     expect(ok(JSON.stringify({ type: 'Polygon', coordinates: [outer, outer] }))).toBe(false);
   });
 
+  it('rejects extra GeoJSON members such as crs and bbox', () => {
+    const base = JSON.parse(square) as Record<string, unknown>;
+    const crs = { type: 'name', properties: { name: 'EPSG:3857' } };
+    expect(ok(JSON.stringify({ ...base, crs }))).toBe(false);
+    expect(ok(JSON.stringify({ ...base, bbox: [0, 0, 1, 1] }))).toBe(false);
+  });
+
   it('rejects a self-intersecting shape, a zero-area line and a spike', () => {
     const bowtie = ringOf([
       [0, 0],
