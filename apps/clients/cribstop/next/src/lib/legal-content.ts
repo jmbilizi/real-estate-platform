@@ -4,24 +4,18 @@ export interface LegalSection {
   body: readonly string[];
 }
 
-/**
- * The content of one legal page. Copy lives here, never inline in a page component, so approved
- * copy from #156 is a content change, not a component change.
- */
+/** The content of one legal page. Copy lives in JSON modules, never inline in a page component. */
 export interface LegalContent {
   title: string;
-  /** ISO date (YYYY-MM-DD) the copy took effect. Null only while `isDraft` is true. */
+  /** ISO date (YYYY-MM-DD) the copy took effect. Null only when the date is unknown. */
   effectiveDate: string | null;
   sections: readonly LegalSection[];
-  /**
-   * True until #156 delivers approved copy. `LegalPage` shows a draft banner while this is set;
-   * see #157 for the pending decision on a build- or deploy-time block.
-   */
+  /** True blocks the prod deploy (`scripts/check-legal-content.js`). Published pages set false. */
   isDraft: boolean;
 }
 
 /**
- * Formats an ISO effective date for display, or a pending note while there is none or the value
+ * Formats an ISO effective date for display, or a neutral note while there is none or the value
  * is not a real calendar date — a bad date must never render "Invalid Date", or a silently
  * rolled-over wrong date, on a public legal page.
  *
@@ -31,7 +25,7 @@ export interface LegalContent {
  */
 export function formatEffectiveDate(effectiveDate: string | null): string {
   if (!effectiveDate) {
-    return 'Pending legal approval';
+    return 'Date unavailable';
   }
   const date = new Date(`${effectiveDate}T00:00:00Z`);
   // `new Date` rolls an out-of-range day/month over (e.g. "2026-02-30" becomes March 2) instead
@@ -40,7 +34,7 @@ export function formatEffectiveDate(effectiveDate: string | null): string {
   const isRealCalendarDate =
     !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === effectiveDate;
   if (!isRealCalendarDate) {
-    return 'Pending legal approval';
+    return 'Date unavailable';
   }
   return date.toLocaleDateString('en-US', {
     timeZone: 'UTC',

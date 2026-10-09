@@ -17,12 +17,6 @@ import {
 } from '@/lib/api/account';
 import AuthCodeStep from '@/components/AuthCodeStep';
 import AuthSetPasswordStep, { SetPasswordFailure } from '@/components/AuthSetPasswordStep';
-import privacyContent from '@/content/legal/privacy.json';
-import termsContent from '@/content/legal/terms.json';
-
-// Neither page has approved copy yet, so the form must not claim a binding agreement to a page
-// that says, on its own face, "carries no approved legal copy" (#156, #157).
-const legalCopyApproved = !privacyContent.isDraft && !termsContent.isDraft;
 
 /** Keyed by hostname so it never collides across environments or domains. */
 function getRememberEmailKey() {
@@ -360,7 +354,7 @@ export default function AuthForm({
             </button>
 
             <p className="text-center text-xs text-ink-muted">
-              {legalCopyApproved ? 'By continuing, you agree to our' : 'Review our'}{' '}
+              By continuing, you agree to our{' '}
               <Link
                 href="/terms"
                 className="inline-flex min-h-11 items-center font-medium text-brand hover:underline"
@@ -374,7 +368,7 @@ export default function AuthForm({
               >
                 Privacy Policy
               </Link>
-              {legalCopyApproved ? '.' : ' (draft, pending approval).'}
+              .
             </p>
           </form>
         )}

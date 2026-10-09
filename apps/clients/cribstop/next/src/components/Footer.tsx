@@ -113,10 +113,14 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <span>Fair Housing</span>
+                <Link href="/fair-housing" className="hover:text-ink">
+                  Fair Housing
+                </Link>
               </li>
               <li>
-                <span>Accessibility</span>
+                <Link href="/accessibility" className="hover:text-ink">
+                  Accessibility
+                </Link>
               </li>
             </ul>
           </div>

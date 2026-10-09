@@ -8,7 +8,7 @@
 const path = require('path');
 
 const CONTENT_DIR = path.join(__dirname, '..', 'src', 'content', 'legal');
-const CONTENT_FILES = ['privacy.json', 'terms.json'];
+const CONTENT_FILES = ['privacy.json', 'terms.json', 'fair-housing.json', 'accessibility.json'];
 
 /** Returns the file names, from `files` in `contentDir`, whose module has `isDraft: true`. */
 function findDraftFiles(contentDir, files) {
@@ -30,7 +30,7 @@ function main() {
     for (const file of draftFiles) {
       console.error(`  - src/content/legal/${file}`);
     }
-    console.error('Approve copy in #156 and set isDraft to false before the prod deploy.');
+    console.error('Set isDraft to false before the prod deploy.');
     process.exit(1);
   }
 }
