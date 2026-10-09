@@ -82,6 +82,10 @@ export interface MappedListingInput {
   readonly statusChangedAt: string | null;
   /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
   readonly daysOnMarket: number | null;
+  /** #716. `ListingId`, the MLS number a consumer knows. Null when the feed omits it. */
+  readonly mlsNumber: string | null;
+  /** #716. `ModificationTimestamp` as an ISO instant. Null when absent or unparseable. */
+  readonly sourceModifiedAt: string | null;
   /** #564. Tax, HOA, tour, agent contact and grouped facts. Detail endpoint only. */
   readonly detail: MappedListingDetailFacts;
 }
@@ -355,7 +359,9 @@ export function mapBrightPropertyRecord(
       status: statusMap.code,
       consumerStatus: statusMap.consumerStatus,
       listPrice,
-      closePrice: toNumber(payload.ClosePrice),
+      // A seller who withheld the price withholds the sold price too (#146, #228). The view does
+      // not mask `close_price`, so the mapper does.
+      closePrice: suppression.priceDisplayAllowed ? toNumber(payload.ClosePrice) : null,
       closeDate,
       description: nonBlank(payload.PublicRemarks),
       attribution: attribution.fields,
@@ -366,6 +372,8 @@ export function mapBrightPropertyRecord(
       comingSoonDate: toDateInstant(payload.ExpectedOnMarketDate),
       statusChangedAt: toTimestampInstant(payload.StatusChangeTimestamp),
       daysOnMarket: daysOnMarket.value,
+      mlsNumber: keyString(payload.ListingId),
+      sourceModifiedAt: toTimestampInstant(payload.ModificationTimestamp),
       detail: mapListingDetailFacts(payload),
     },
   };

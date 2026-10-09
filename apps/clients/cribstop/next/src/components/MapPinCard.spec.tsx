@@ -93,7 +93,9 @@ describe('MapPinCard (#549)', () => {
     await screen.findByText(ADDRESS);
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(mockToggleSave).toHaveBeenCalledWith('off-page');
+    expect(mockToggleSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'off-page', propertyId: expect.any(String) }),
+    );
     expect(getListingPanel()).toBeNull();
 
     fireEvent.click(screen.getByText(ADDRESS));

@@ -82,6 +82,9 @@ export interface ListingCardDbRow {
   list_agent_phone?: string | null;
   list_agent_email?: string | null;
   facts?: Partial<Record<string, string[]>> | null;
+  /** #716. The other live records of the same home. Detail projection only. */
+  also_listed_as?: { id: string; mls_number: string | null }[] | null;
+  listed_since?: Date | null;
   open_houses?: { starts_at: string; ends_at: string; remarks: string | null }[] | null;
   primary_media_url?: string | null;
   primary_media_alt_text?: string | null;
@@ -270,6 +273,11 @@ export function toListingDetail(row: ListingCardDbRow): ListingDetail {
       virtualTourUrl: row.virtual_tour_url ?? null,
       listAgentPhone: row.list_agent_phone ?? null,
       listAgentEmail: row.list_agent_email ?? null,
+      alsoListedAs: (row.also_listed_as ?? []).map((item) => ({
+        id: item.id,
+        mlsNumber: item.mls_number,
+      })),
+      listedSince: row.listed_since == null ? null : instant(row.listed_since),
       facts: {
         parking: row.facts?.parking ?? null,
         heating: row.facts?.heating ?? null,

@@ -201,7 +201,7 @@ work by hand.
    `pnpm run gh:ticket:update-status -- --issue <n> --status "In Review"`.
 10. **Report** — what shipped, how each acceptance criterion is satisfied, validation results
     (actual output, not claims), PR link, board state. Anything unfinished or skipped: say so
-    plainly.
+    plainly. After a PR merges, run `pnpm run dev:worktree:cleanup` to remove merged worktrees.
 
 ## Running the stack locally
 

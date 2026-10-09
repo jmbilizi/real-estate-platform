@@ -2,23 +2,12 @@ import { BRAND } from '@/lib/brand';
 import { formatEffectiveDate, type LegalContent } from '@/lib/legal-content';
 
 /**
- * Server-rendered shell for a legal page (`/privacy`, `/terms`). Copy comes entirely from the
- * `content` prop, a JSON content module under `src/content/legal/` — this component never holds
- * page-specific copy itself, so approved wording from #156 is a content change only.
+ * Server-rendered shell for a legal page. Copy comes entirely from the `content` prop, a JSON
+ * content module under `src/content/legal/`. This component holds no page-specific copy.
  */
 export default function LegalPage({ content }: { content: LegalContent }) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
-      {content.isDraft && (
-        <div
-          role="status"
-          className="mb-8 rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 text-sm font-medium text-amber-900"
-        >
-          Draft — not approved for publication. This page does not state {BRAND.brokerageShort}
-          &apos;s actual policy.
-        </div>
-      )}
-
       <h1 className="font-display text-3xl font-extrabold sm:text-4xl">{content.title}</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Effective date: {formatEffectiveDate(content.effectiveDate)}

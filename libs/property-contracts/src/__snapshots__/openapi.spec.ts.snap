@@ -863,6 +863,28 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "nullable": true,
                 "type": "string",
               },
+              "alsoListedAs": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string",
+                    },
+                    "mlsNumber": {
+                      "nullable": true,
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "mlsNumber",
+                  ],
+                  "type": "object",
+                },
+                "type": "array",
+              },
               "amenities": {
                 "items": {
                   "enum": [
@@ -1069,6 +1091,12 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "listedBy": {
+                "type": "string",
+              },
+              "listedSince": {
+                "format": "date-time",
+                "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
                 "type": "string",
               },
               "listingAgentName": {
@@ -1308,6 +1336,8 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
               "listAgentPhone",
               "listAgentEmail",
               "facts",
+              "alsoListedAs",
+              "listedSince",
             ],
             "type": "object",
           },
@@ -1422,6 +1452,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "description": "Required for new clients (#631). The consent text version the consumer saw. An older client may omit it, and the server then records \`v1\`. The server stores the text for the version, never a client string. Needs \`consentToContact\` true.",
             "enum": [
               "v1",
+              "v2",
             ],
             "type": "string",
           },

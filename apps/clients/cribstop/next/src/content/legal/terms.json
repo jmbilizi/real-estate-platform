@@ -1,14 +1,92 @@
 {
   "title": "Terms of Service",
-  "effectiveDate": null,
-  "isDraft": true,
+  "effectiveDate": "2026-10-08",
+  "isDraft": false,
   "sections": [
     {
-      "heading": "Draft placeholder",
+      "heading": "Acceptance of these terms",
       "body": [
-        "This page is a draft placeholder, not the published Terms of Service. It carries no approved legal copy.",
-        "Approved copy is pending legal and broker review. See issue #156."
+        "These terms govern your use of Cribstop.com. Real Broker, LLC, a real estate brokerage licensed in Maryland, the District of Columbia and Virginia, operates the site.",
+        "By using the site, you agree to these terms and to our Privacy Policy. If you do not agree, do not use the site."
       ]
+    },
+    {
+      "heading": "Accounts and multi-role use",
+      "body": [
+        "You must be at least 18 years old to create an account. Give accurate information and keep it current.",
+        "One account can hold more than one role. For example, one person can be a buyer, a renter and an owner at the same time. Your roles do not change your duties under these terms.",
+        "Keep your sign-in details private. You are responsible for activity on your account. Tell us at contact@cribstop.com if you think someone used it without permission."
+      ]
+    },
+    {
+      "heading": "Acceptable use",
+      "body": [
+        "Use the site only for lawful purposes. Do not break the law, harass others, post false information, try to access accounts or systems that are not yours, or interfere with the site.",
+        "Do not use the site to discriminate against any person because of a protected class under fair housing law. Do not post or send content that shows a preference or limit based on a protected class.",
+        "We may suspend or close an account that breaks these terms."
+      ]
+    },
+    {
+      "heading": "Listing data and MLS content",
+      "body": [
+        "Listing information is deemed reliable but is not guaranteed. Prices, status, size, fees and other details can change or contain errors. Check the details with the listing agent before you rely on them.",
+        "Listings from Bright MLS show the name of the listing brokerage and the contact method that MLS rules require. Bright MLS and its participants own this content.",
+        "Listing data is for your personal, non-commercial use. Do not scrape, copy, republish, resell or redistribute listing data or photos. Do not use automated tools to collect them.",
+        "Information on the site, including estimates, is not an appraisal, legal advice, tax advice or financial advice."
+      ]
+    },
+    {
+      "heading": "Inquiries and agent matching",
+      "body": [
+        "When you send an inquiry, we send it to the listing agent named on the listing. An agent of Real Broker, LLC may also respond.",
+        "Your inquiry does not create an agency or representation relationship. A representation relationship starts only when you sign a written agreement with an agent.",
+        "You are never required to use a particular lender, title company or other settlement service provider. If we refer you to one, we tell you about the relationship, as the Real Estate Settlement Procedures Act (RESPA) requires."
+      ]
+    },
+    {
+      "heading": "Content you submit",
+      "body": [
+        "You keep ownership of the content you submit, such as messages and profile details. You give us a non-exclusive, worldwide license to use, store and display it to run the site and to deliver your inquiries.",
+        "You confirm that you have the right to submit the content and that it is accurate and lawful."
+      ]
+    },
+    {
+      "heading": "Intellectual property",
+      "body": [
+        "The site, its design, its software and its marks belong to Real Broker, LLC or its licensors. These terms give you no right to use them except to use the site as intended.",
+        "Third-party names, logos and listing content belong to their owners."
+      ]
+    },
+    {
+      "heading": "Disclaimers",
+      "body": [
+        "We provide the site \"as is\" and \"as available\". To the extent the law allows, we make no warranty of any kind, express or implied, including warranties of accuracy, availability, merchantability and fitness for a purpose.",
+        "We do not guarantee that the site will be uninterrupted or free of errors."
+      ]
+    },
+    {
+      "heading": "Limitation of liability",
+      "body": [
+        "To the extent the law allows, Real Broker, LLC and its agents, officers and employees are not liable for indirect, incidental, special, consequential or punitive damages from your use of the site.",
+        "To the extent the law allows, our total liability for any claim about the site is limited to 100 US dollars.",
+        "Some laws do not allow these limits. In that case, the limits apply as far as the law permits."
+      ]
+    },
+    {
+      "heading": "Governing law",
+      "body": [
+        "The laws of the State of Maryland govern these terms, without regard to conflict of law rules. Courts located in Maryland have jurisdiction over any dispute about these terms, unless the law requires otherwise."
+      ]
+    },
+    {
+      "heading": "Changes to these terms",
+      "body": [
+        "We may change these terms. When we do, we change the effective date at the top of this page. If you keep using the site after a change, you accept the new terms."
+      ]
+    },
+    {
+      "heading": "Contact us",
+      "body": ["Write to contact@cribstop.com with any question about these terms."]
     }
   ]
 }

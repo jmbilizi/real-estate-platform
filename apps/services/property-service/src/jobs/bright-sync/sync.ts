@@ -17,6 +17,7 @@ import {
   type SliceBounds,
   type SliceScope,
 } from '../bright-ingest/odata-query';
+import { SUPPRESSION_FIELDS_BY_SOURCE } from '../bright-map/suppression';
 import { BRIGHT_SYNC_SELECT } from './select';
 
 /**
@@ -71,7 +72,18 @@ export interface PageResult {
   readonly withheld: number;
   readonly takenDown: number;
   readonly withheldByReason: Readonly<Record<string, number>>;
+  /** Seller election flags set to suppressed, per flag (#146). Absent in a test harness. */
+  readonly suppressedByFlag?: Readonly<Record<string, number>>;
+  /** Election fields that held a non-boolean value, per flag (#146). */
+  readonly suppressionAnomalies?: Readonly<Record<string, number>>;
 }
+
+/**
+ * A run that maps more records than this and sets no suppression flag logs a warning (#146). It is
+ * not a failure: a feed with no seller elections is valid. It can also mean the election fields
+ * left the feed.
+ */
+export const SUPPRESSION_WARN_MIN_RECORDS = 1000;
 
 export interface SyncDeps {
   readonly serviceRoot: string;
@@ -98,6 +110,8 @@ export interface SyncDeps {
   readonly writeState: (stream: string, state: unknown) => Promise<void>;
   readonly progress: (counts: Record<string, unknown>, cursor: unknown) => Promise<void>;
   readonly now: () => Date;
+  /** The `$select` list the worker requests. Defaults to `BRIGHT_SYNC_SELECT`. Tests override it. */
+  readonly select?: readonly string[];
   readonly log: (message: string) => void;
 }
 
@@ -114,6 +128,9 @@ interface Bucket {
 class Tally {
   private readonly buckets = new Map<string, Bucket>();
   private readonly reasons: Record<string, number> = {};
+  private readonly suppressed: Record<string, number> = {};
+  private readonly anomalies: Record<string, number> = {};
+  private mappedTotal = 0;
   requests = 0;
 
   add(bucket: string, result: PageResult): void {
@@ -132,17 +149,57 @@ class Tally {
     current.withheld += result.withheld;
     current.takenDown += result.takenDown;
     this.buckets.set(bucket, current);
+    this.mappedTotal += result.mapped;
     for (const [reason, count] of Object.entries(result.withheldByReason)) {
       this.reasons[reason] = (this.reasons[reason] ?? 0) + count;
     }
+    for (const [flag, count] of Object.entries(result.suppressedByFlag ?? {})) {
+      this.suppressed[flag] = (this.suppressed[flag] ?? 0) + count;
+    }
+    for (const [flag, count] of Object.entries(result.suppressionAnomalies ?? {})) {
+      this.anomalies[flag] = (this.anomalies[flag] ?? 0) + count;
+    }
+  }
+
+  /** The warning for a large run that suppressed nothing, or `null`. */
+  suppressionWarning(): string | null {
+    const suppressedTotal = Object.values(this.suppressed).reduce((a, b) => a + b, 0);
+    if (this.mappedTotal <= SUPPRESSION_WARN_MIN_RECORDS || suppressedTotal > 0) {
+      return null;
+    }
+    return (
+      `WARNING: ${this.mappedTotal} records mapped and no seller suppression flag was set. ` +
+      'Check that Bright still sends the election fields.'
+    );
   }
 
   snapshot(): Record<string, unknown> {
     return {
       byStatus: Object.fromEntries(this.buckets),
       withheldByReason: { ...this.reasons },
+      suppressedByFlag: { ...this.suppressed },
+      suppressionAnomalies: { ...this.anomalies },
       brightRequests: this.requests,
     };
+  }
+}
+
+/**
+ * True when the select list requests every election field of the source system. The warning means
+ * "the feed stopped sending the fields". It is meaningless while the fields are not requested.
+ */
+export function electionFieldsRequested(select: readonly string[] = BRIGHT_SYNC_SELECT): boolean {
+  const { price, priceHistory, daysOnMarket } = SUPPRESSION_FIELDS_BY_SOURCE.BrightMLS;
+  return [price, priceHistory, daysOnMarket].every((field) => select.includes(field));
+}
+
+function logSuppressionWarning(deps: SyncDeps, tally: Tally): void {
+  if (!electionFieldsRequested(deps.select)) {
+    return;
+  }
+  const warning = tally.suppressionWarning();
+  if (warning !== null) {
+    deps.log(warning);
   }
 }
 
@@ -511,6 +568,7 @@ export async function runBackfill(
       await deps.writeState(stream, { through: until, complete: true } satisfies BackfillState);
     }
   }
+  logSuppressionWarning(deps, tally);
   return tally.snapshot();
 }
 
@@ -558,6 +616,7 @@ export async function runIncremental(
   );
 
   await deps.writeState(INCREMENTAL_STREAM, { watermark: until } satisfies IncrementalState);
+  logSuppressionWarning(deps, tally);
   return { ...tally.snapshot(), window: { from, until } };
 }
 

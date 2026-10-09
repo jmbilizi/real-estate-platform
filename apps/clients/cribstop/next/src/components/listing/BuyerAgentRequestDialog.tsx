@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import {
   CONSENT_TEXTS,
   type ConsentChannel,
@@ -15,6 +16,28 @@ import { InquiryError, submitInquiry } from '@/lib/api/inquiries';
 import { normalizeUsPhone } from '@/lib/phone';
 
 const MESSAGE_MAX = 2000;
+const LINK_CLASS = 'font-medium text-brand underline';
+
+/** The consent text with its two legal names linked. The wording stays the contract text. */
+function ConsentText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(Terms of Service|Privacy Policy)/).map((part, i) =>
+        part === 'Terms of Service' ? (
+          <Link key={i} href="/terms" target="_blank" className={LINK_CLASS}>
+            {part}
+          </Link>
+        ) : part === 'Privacy Policy' ? (
+          <Link key={i} href="/privacy" target="_blank" className={LINK_CLASS}>
+            {part}
+          </Link>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -318,6 +341,16 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
               match you with an agent when one is available.
               {kind === 'tour_request' && ' A tour request is not a booking.'}
             </p>
+            <p className="mt-3 text-sm font-medium text-ink" data-testid="no-charge-line">
+              Cribstop does not charge you for this request.
+            </p>
+            <p
+              className="mt-3 text-sm leading-snug text-ink-muted"
+              data-testid="written-agreement-notice"
+            >
+              Before you tour a home, your agent will ask you to sign a written agreement. It states
+              what the agent does and how the agent is paid. Compensation is negotiable.
+            </p>
             <button
               ref={doneRef}
               type="button"
@@ -437,7 +470,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
             {signedIn && !(phase.status === 'failed' && !phase.retryable) && (
               <p className="text-sm leading-snug text-ink" data-testid="consent-disclosure">
                 By selecting “{phase.status === 'failed' ? 'Try Again' : copy.submit}”:{' '}
-                {CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION]}
+                <ConsentText text={CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION]} />
               </p>
             )}
 

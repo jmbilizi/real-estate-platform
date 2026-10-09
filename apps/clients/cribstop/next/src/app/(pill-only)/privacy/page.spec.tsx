@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { BRAND } from '@/lib/brand';
 import privacyContent from '@/content/legal/privacy.json';
-import PrivacyPage from './page';
+import PrivacyPage, { metadata } from './page';
 
 describe('PrivacyPage', () => {
   it('renders the page title and one h1', () => {
@@ -10,26 +10,25 @@ describe('PrivacyPage', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Privacy Policy');
   });
 
-  it('shows a visible draft marker while the content module is a draft (#156 gate)', () => {
-    // Asserts against the module's actual state rather than hardcoding `true`, so this test
-    // starts failing the day #156 ships approved copy — the signal to remove the assumption.
-    expect(privacyContent.isDraft).toBe(true);
+  it('is published: indexable, no draft marker, no pending text', () => {
+    const { container } = render(<PrivacyPage />);
 
-    render(<PrivacyPage />);
-
-    expect(screen.getByRole('status')).toHaveTextContent(/draft/i);
+    expect(privacyContent.isDraft).toBe(false);
+    expect(metadata.robots).toBeUndefined();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/pending|draft|placeholder/i);
   });
 
-  it('shows the effective date from the content module', () => {
+  it('shows a real effective date', () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/Effective date:/)).toBeInTheDocument();
+    expect(screen.getByText(/Effective date: [A-Z][a-z]+ \d{1,2}, \d{4}/)).toBeInTheDocument();
   });
 
   it('carries Real Broker, LLC brand prominence and the Equal Housing Opportunity line (PRD §6.1)', () => {
     render(<PrivacyPage />);
 
     expect(screen.getByText(new RegExp(`Brokered by ${BRAND.brokerageShort}`))).toBeInTheDocument();
-    expect(screen.getByText(/Equal Housing Opportunity/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Equal Housing Opportunity/).length).toBeGreaterThan(0);
   });
 });

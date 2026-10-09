@@ -13,11 +13,12 @@ import { formatNumber, formatPrice, formatPriceShort, PROPERTY_TIME_ZONE } from 
  */
 
 /**
- * Bright is rolling out seller-directed field-level suppression in the DMV. A withheld price is
+ * Fallback text when the feed withholds a price (#146, ruling 2026-10-08). A withheld price is
  * never blank, never `$0`, and never an estimate — an imputed price is both a fabricated fact
- * (PRD §6.3) and a display-rule violation.
+ * (PRD §6.3) and a display-rule violation. Price history and days on market have no placeholder:
+ * their rows are hidden.
  */
-export const PRICE_WITHHELD_COPY = 'Price withheld at the seller’s direction';
+export const PRICE_WITHHELD_COPY = 'Contact Listing Agent for Additional Information.';
 
 /**
  * The provenance sentence for one row, driven off **that row's** `source` and nothing else.

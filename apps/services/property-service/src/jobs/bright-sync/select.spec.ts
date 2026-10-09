@@ -1,5 +1,6 @@
 import { mapBrightPropertyRecord, type MapContext } from '../bright-map/map-record';
 import type { ListingStatusLookup } from '../bright-map/status';
+import { UNDECLARED_SUPPRESSION_FIELDS } from '../bright-map/suppression';
 import { BRIGHT_SYNC_SELECT } from './select';
 
 const STATUSES: readonly ListingStatusLookup[] = [
@@ -102,8 +103,18 @@ describe('BRIGHT_SYNC_SELECT', () => {
   ])('carries every field the mapper reads for %s', (_label, payload) => {
     const reads = new Set<string>();
     mapBrightPropertyRecord(recording(payload, reads), CTX);
-    const fieldReads = [...reads].filter((key) => /^[A-Z]/.test(key));
+    // The #146 election fields are read but deliberately left out: `$metadata` does not declare
+    // them, and a `$select` that names one fails with HTTP 400.
+    const fieldReads = [...reads]
+      .filter((key) => /^[A-Z]/.test(key))
+      .filter((key) => !UNDECLARED_SUPPRESSION_FIELDS.includes(key));
     expect(fieldReads.filter((key) => !BRIGHT_SYNC_SELECT.includes(key))).toEqual([]);
+  });
+
+  it('leaves out every field the live $metadata does not declare (#146)', () => {
+    expect(UNDECLARED_SUPPRESSION_FIELDS.filter((key) => BRIGHT_SYNC_SELECT.includes(key))).toEqual(
+      [],
+    );
   });
 
   it('maps the projected record exactly as the full record', () => {

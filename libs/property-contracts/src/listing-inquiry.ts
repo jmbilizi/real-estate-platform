@@ -24,15 +24,30 @@ const CONSENT_TEXT_V1 =
   'Consent is not required to use Cribstop, and message and data rates may apply.';
 
 /**
+ * Consent text v2 (#630). Adds the TCPA and CTIA elements `v1` lacks: "not a condition" of a
+ * purchase, message frequency, STOP, and the Terms and Privacy Policy. The web form links the
+ * words "Terms of Service" and "Privacy Policy" to `/terms` and `/privacy`.
+ */
+const CONSENT_TEXT_V2 =
+  "I agree that Real Broker, LLC (Cribstop's brokerage), its agents and Cribstop may contact me " +
+  'about this home by phone call, text message or email, including by autodialer or prerecorded ' +
+  'message, at the number and email I gave. Consent is not a condition of buying any property, ' +
+  'goods or services. Message frequency varies. Message and data rates may apply. Reply STOP to ' +
+  'stop texts. I also agree to the Terms of Service and Privacy Policy.';
+
+/**
  * The consent text per version (#627). The server stores the text, the version, the channels and
  * the time with each request. A client names a version and never sends its own text. A wording
  * change adds a new version. It never edits an old one, because stored rows point at the old one.
  */
-export const CONSENT_TEXTS = { v1: CONSENT_TEXT_V1 } as const;
-export const CONSENT_TEXT_VERSIONS = ['v1'] as const;
+export const CONSENT_TEXTS = { v1: CONSENT_TEXT_V1, v2: CONSENT_TEXT_V2 } as const;
+export const CONSENT_TEXT_VERSIONS = ['v1', 'v2'] as const;
 export const consentTextVersionSchema = z.enum(CONSENT_TEXT_VERSIONS);
 export type ConsentTextVersion = z.infer<typeof consentTextVersionSchema>;
-export const CURRENT_CONSENT_TEXT_VERSION: ConsentTextVersion = 'v1';
+export const CURRENT_CONSENT_TEXT_VERSION: ConsentTextVersion = 'v2';
+
+/** A request that names no version came from a client that showed `v1`. */
+export const LEGACY_CONSENT_TEXT_VERSION: ConsentTextVersion = 'v1';
 
 /** The text of `CURRENT_CONSENT_TEXT_VERSION`. Kept for the current web form. */
 export const CONSENT_DISCLOSURE_TEXT = CONSENT_TEXTS[CURRENT_CONSENT_TEXT_VERSION];

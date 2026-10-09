@@ -1,0 +1,35 @@
+{
+  "title": "Accessibility",
+  "effectiveDate": "2026-10-08",
+  "isDraft": false,
+  "sections": [
+    {
+      "heading": "Our commitment",
+      "body": [
+        "Real Broker, LLC wants everyone to be able to use Cribstop.com, including people with disabilities.",
+        "We work to meet the Web Content Accessibility Guidelines (WCAG) 2.1 Level AA."
+      ]
+    },
+    {
+      "heading": "What we do",
+      "body": [
+        "We design pages to work with a keyboard, a screen reader and browser zoom. We aim for clear text contrast and readable layouts on phones, tablets and computers.",
+        "We check new pages and features for accessibility when we build them."
+      ]
+    },
+    {
+      "heading": "Known limits",
+      "body": [
+        "Some content comes from other sources, such as listing photos and descriptions from Bright MLS, and map tools from providers. We cannot always control how accessible this content is.",
+        "We work to fix accessibility problems when we find them."
+      ]
+    },
+    {
+      "heading": "Tell us about a problem",
+      "body": [
+        "If you have trouble using any part of the site, or you need information in another format, write to contact@cribstop.com.",
+        "Tell us the page, what went wrong and the tool you use, if any. We will work with you to give you the information or service you need."
+      ]
+    }
+  ]
+}

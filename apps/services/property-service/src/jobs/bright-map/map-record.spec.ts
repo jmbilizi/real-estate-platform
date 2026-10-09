@@ -255,6 +255,24 @@ describe('mapBrightPropertyRecord', () => {
     });
   });
 
+  it('drops the sold price when the seller withheld the price (#146)', () => {
+    const sold = {
+      ...BASE_PAYLOAD,
+      StandardStatus: 'Closed',
+      ClosePrice: 495000,
+      CloseDate: '2000-01-01',
+    };
+    const shown = mapBrightPropertyRecord(sold, ctx({ soldDisplayDelayDays: 0 }));
+    const withheld = mapBrightPropertyRecord(
+      { ...sold, InternetListingDisplayPricesYN: false },
+      ctx({ soldDisplayDelayDays: 0 }),
+    );
+    if (shown.kind !== 'mapped' || withheld.kind !== 'mapped') throw new Error('expected mapped');
+    expect(shown.listing.closePrice).toBe(495000);
+    expect(withheld.listing.closePrice).toBeNull();
+    expect(withheld.listing.closeDate).toBe('2000-01-01');
+  });
+
   it('rounds a fractional LotSizeSquareFeet to fit the integer lot_sqft column (#207)', () => {
     const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, LotSizeSquareFeet: 127195.2 }, ctx());
     if (result.kind !== 'mapped') throw new Error('expected mapped');
@@ -333,6 +351,39 @@ describe('mapBrightPropertyRecord', () => {
       ['non numeric', { Latitude: '38.93', Longitude: null }],
     ])('stores null for %s', (_name, extra) => {
       expect(coords(extra).some((v) => v === null)).toBe(true);
+    });
+  });
+
+  describe('ListingId and ModificationTimestamp (#716)', () => {
+    it('maps ListingId to the MLS number, as text even when the feed sends a number', () => {
+      const text = mapBrightPropertyRecord({ ...BASE_PAYLOAD, ListingId: 'VAAX2065936' }, ctx());
+      const number = mapBrightPropertyRecord({ ...BASE_PAYLOAD, ListingId: 805334387444 }, ctx());
+
+      if (text.kind !== 'mapped' || number.kind !== 'mapped') throw new Error('expected mapped');
+      expect(text.listing.mlsNumber).toBe('VAAX2065936');
+      expect(number.listing.mlsNumber).toBe('805334387444');
+    });
+
+    it('has no MLS number when the feed omits ListingId', () => {
+      const result = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.mlsNumber).toBeNull();
+    });
+
+    it('maps ModificationTimestamp to the source modification instant', () => {
+      const result = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.sourceModifiedAt).toBe('2026-09-18T00:00:00.000Z');
+    });
+
+    it('has no source modification instant when the feed omits ModificationTimestamp', () => {
+      const { ModificationTimestamp: _omitted, ...payload } = BASE_PAYLOAD;
+      const result = mapBrightPropertyRecord(payload, ctx());
+
+      if (result.kind !== 'mapped') throw new Error('expected mapped');
+      expect(result.listing.sourceModifiedAt).toBeNull();
     });
   });
 

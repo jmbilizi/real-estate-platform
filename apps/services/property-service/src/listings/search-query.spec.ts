@@ -1,8 +1,15 @@
 import { searchRequestSchema } from '@cribstop/property-contracts';
+import { collapseCondition } from './collapse';
 import { buildSearchQuery, SORT_ORDERS } from './search-query';
 
-const build = (query: Record<string, unknown> = {}): ReturnType<typeof buildSearchQuery> =>
-  buildSearchQuery(searchRequestSchema.parse(query));
+/**
+ * The filters only. The collapse (#716) is a fixed clause of its own, tested in collapse.spec.ts. It
+ * holds COALESCE for its ordering, which the filter assertions below must not see.
+ */
+const build = (query: Record<string, unknown> = {}): ReturnType<typeof buildSearchQuery> => {
+  const plan = buildSearchQuery(searchRequestSchema.parse(query));
+  return { ...plan, where: plan.where.replace(collapseCondition(), 'TRUE') };
+};
 
 describe('buildSearchQuery', () => {
   it('matches any of the requested property types', () => {
@@ -156,6 +163,16 @@ describe('buildSearchQuery', () => {
     expect(where).toContain('v.listed_at >= now() - make_interval(days => ');
     expect(params).toContainEqual(7);
     expect(build().where).not.toContain('listed_at');
+  });
+
+  it('sorts and filters price on the view column, which is null for a suppressed price (#146)', () => {
+    const { where } = build({ minPrice: '100000', maxPrice: '900000' });
+    expect(where).toContain('v.price >=');
+    expect(where).toContain('v.price <=');
+    expect(SORT_ORDERS['price-asc']).toContain('v.price ASC NULLS LAST');
+    expect(SORT_ORDERS['price-desc']).toContain('v.price DESC NULLS LAST');
+    const all = [where, ...Object.values(SORT_ORDERS)].join(' ');
+    expect(all).not.toContain('list_price');
   });
 
   it('restricts to price cuts only when priceReduced is true (#391)', () => {

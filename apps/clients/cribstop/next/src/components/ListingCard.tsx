@@ -10,6 +10,7 @@ import { copyToClipboard } from '@/lib/clipboard';
 import { formatNewListingBadge, formatTimeOnMarket } from '@/lib/format';
 import { useMinuteClock } from '@/lib/useMinuteClock';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
+import { shareOrigin } from '@/lib/site-origin';
 import {
   formatCardAddress,
   formatClosePrice,
@@ -31,7 +32,7 @@ import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges'
 export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
-  const saved = isSaved(listing.id);
+  const saved = isSaved(listing.propertyId);
 
   /**
    * Opens the detail panel on this row, on the click, with no network in the way.
@@ -86,7 +87,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   async function handleShare(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    const url = listingShareUrl(listing.propertyPath, shareOrigin());
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share(buildListingShare(listing, url));
@@ -106,7 +107,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   async function handleCopyLink(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
-    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    const url = listingShareUrl(listing.propertyPath, shareOrigin());
     if (await copyToClipboard(url)) toast('Link copied');
     else toast('We could not copy the link.', 'error');
   }
@@ -396,7 +397,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                toggleSave(listing.id);
+                toggleSave(listing);
               }}
               className="relative flex h-4 w-4 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               aria-label={saved ? 'Unsave' : 'Save'}

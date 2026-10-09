@@ -836,8 +836,8 @@ export async function replaceFeedListingMedia(
   }
 
   // `retained_when_suppressed` is bound false above and is deliberately NOT in the DO UPDATE list.
-  // It is #146's marker for the one photo a media-suppressed listing keeps, set by a rule that
-  // still waits on #33 item 8(f). A feed pass must neither set it nor clear one already set.
+  // It marks the one photo a media-suppressed listing keeps. The feed pass skips a suppressed photo
+  // per record (#146), so it must neither set the marker nor clear one already set.
   await client.query(
     `DELETE FROM listing_media
       WHERE listing_id = $1
