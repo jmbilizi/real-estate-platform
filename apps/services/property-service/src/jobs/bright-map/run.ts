@@ -309,6 +309,7 @@ export async function mapBrightPayloads(
       broker_phone: listing.attribution.brokerPhone,
       broker_email: listing.attribution.brokerEmail,
       office_name: listing.attribution.officeName,
+      office_key: listing.attribution.officeKey,
       office_broker_lead_phone: listing.attribution.officeBrokerLeadPhone,
       office_broker_lead_email: listing.attribution.officeBrokerLeadEmail,
       listing_agent_name: listing.attribution.listingAgentName,

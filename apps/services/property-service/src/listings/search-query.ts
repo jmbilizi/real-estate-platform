@@ -1,4 +1,8 @@
-import { isDefaultStatusFilter, type SearchRequest } from '@cribstop/property-contracts';
+import {
+  isDefaultStatusFilter,
+  OFFICE_KEY_UNLISTED,
+  type SearchRequest,
+} from '@cribstop/property-contracts';
 import { collapseCondition } from './collapse';
 import { visibleListingTypesFor } from './sold-gate';
 
@@ -270,6 +274,16 @@ export function buildSearchQuery(request: SearchRequest): {
   // No COALESCE(neighborhood, city): that would make the filter match on city names.
   if (request.neighborhood) {
     conditions.push(`lower(v.neighborhood) = lower(${bind(request.neighborhood)})`);
+  }
+
+  // #722. A drill-down from a broker group. `office_key` is on `listings`, not on the view. The
+  // primary key probe is cheap. `unlisted` matches the rows that carry no key.
+  if (request.officeKey) {
+    const keyCondition =
+      request.officeKey === OFFICE_KEY_UNLISTED
+        ? 'lo.office_key IS NULL'
+        : `lo.office_key = ${bind(request.officeKey)}`;
+    conditions.push(`EXISTS (SELECT 1 FROM listings lo WHERE lo.id = v.id AND ${keyCondition})`);
   }
 
   // #339. Exact match against the FIPS county code. `county_fips` is not yet populated by the

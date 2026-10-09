@@ -52,6 +52,7 @@ export const BRIGHT_SYNC_SELECT: readonly string[] = Object.freeze([
   'InternetAddressDisplayYN',
   'ListAgentFullName',
   'ListAgentOfficePhone',
+  'ListOfficeKey',
   'ListOfficeName',
   'ListOfficePhone',
   'ListOfficeEmail',

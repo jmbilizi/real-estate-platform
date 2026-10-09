@@ -6,7 +6,12 @@ import { propertyLookupResponseSchema, propertyPageSchema } from './property-pag
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
 import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
-import { zipsRequestSchema, zipsResponseSchema } from './listing-groups';
+import {
+  brokersRequestSchema,
+  brokersResponseSchema,
+  zipsRequestSchema,
+  zipsResponseSchema,
+} from './listing-groups';
 import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
@@ -106,6 +111,7 @@ function componentSchemas() {
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
   registry.add(neighborhoodsResponseSchema, { id: 'NeighborhoodsResponse' });
   registry.add(zipsResponseSchema, { id: 'ZipsResponse' });
+  registry.add(brokersResponseSchema, { id: 'BrokersResponse' });
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -383,6 +389,36 @@ export function toOpenApiDocument() {
               description: 'ZIP code groups with a listing count at or above minCount.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ZipsResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/brokers': {
+        get: {
+          operationId: 'getBrokerGroups',
+          summary: 'Listing office groups',
+          description:
+            'The listings of a search, grouped by listing office. The request takes the ' +
+            '`GET /listings` filters. Each group counts the listing cards that search returns, so ' +
+            'the group counts add up to the search total. The group key is the MLS office key. ' +
+            'The name is the office name of the most recently updated listing in the group. ' +
+            'Listings with no office key form one group with the key `unlisted`. Order by `count` ' +
+            '(default) or `name`. Ties break by `key`. No office is ranked, featured or left out. ' +
+            '`minCount` defaults to 1. Page with `limit` and `offset`.',
+          parameters: searchParameters(brokersRequestSchema),
+          responses: {
+            '200': {
+              description: 'Listing office groups with a listing count at or above minCount.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/BrokersResponse' } },
               },
             },
             '400': {

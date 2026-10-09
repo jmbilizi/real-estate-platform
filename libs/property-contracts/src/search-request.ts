@@ -40,6 +40,10 @@ export const PAGE_SIZE_MAX = 100;
  */
 export const MAX_RESULT_OFFSET = 10_000;
 
+/** #722. The `officeKey` value that matches listings with no office key. Real keys are digits. */
+export const OFFICE_KEY_UNLISTED = 'unlisted';
+const OFFICE_KEY_PATTERN = new RegExp(`^(\\d{1,19}|${OFFICE_KEY_UNLISTED})$`);
+
 /** The offset a `(page, pageSize)` pair asks the database for. One definition, so the bound the
  *  route enforces and the offset the repository issues cannot drift apart. */
 export function resultOffsetFor(page: number, pageSize: number): number {
@@ -363,6 +367,15 @@ export const searchRequestSchema = z.strictObject({
   baths: queryBathCount.optional(),
   minSqft: queryInt.optional(),
   neighborhood: z.string().optional(),
+  officeKey: z
+    .string()
+    .regex(OFFICE_KEY_PATTERN, 'must be a numeric office key or `unlisted`')
+    .optional()
+    .describe(
+      'The listing office, by its MLS office key. A drill-down from a broker group, not a ' +
+        'search box. `unlisted` matches the listings that carry no office key. It is an exact ' +
+        'match, ANDed with every other filter.',
+    ),
   // #339. Matched against `county_fips` (case-insensitive exact), which the Bright ingest does not
   // populate yet (tracked separately) — a plain `county` search returns zero rows rather than an
   // unfiltered one until that ships. This is a FIPS CODE column, not a name, so the web client

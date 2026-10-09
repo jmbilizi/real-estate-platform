@@ -19,7 +19,7 @@ import {
 } from '@cribstop/property-contracts';
 import { PRIVATE_CACHE_CONTROL, type SavedStateReader, withSavedFlags } from '../saved/identity';
 import type { GalleryLoader } from './gallery-loader';
-import { getZipGroups } from './group-counts';
+import { getBrokerGroups, getZipGroups } from './group-counts';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
 import {
@@ -284,6 +284,19 @@ export function createListingsRouter(
   );
 
   // #722. Registered before `/listings/:id` for the same reason as the routes above.
+  router.get(
+    '/listings/brokers',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(listingGroupsRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const envelope = await getBrokerGroups(pool, parsed.value);
+      res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
+    }),
+  );
+
   router.get(
     '/listings/zips',
     asyncRoute(async (req: Request, res: Response) => {

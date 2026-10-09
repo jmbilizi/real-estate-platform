@@ -16,6 +16,7 @@ describe('mapAttribution', () => {
         brokerPhone: '2025551234',
         brokerEmail: 'office@acme.example',
         officeName: 'Acme Realty',
+        officeKey: null,
         officeBrokerLeadPhone: '2025555678',
         officeBrokerLeadEmail: null,
         listingAgentName: 'Jane Agent',
@@ -35,6 +36,7 @@ describe('mapAttribution', () => {
         brokerPhone: '2025551234',
         brokerEmail: null,
         officeName: 'Acme Realty',
+        officeKey: null,
         officeBrokerLeadPhone: null,
         officeBrokerLeadEmail: null,
         listingAgentName: null,
@@ -55,6 +57,7 @@ describe('mapAttribution', () => {
         brokerPhone: '',
         brokerEmail: 'office@acme.example',
         officeName: 'Acme Realty',
+        officeKey: null,
         officeBrokerLeadPhone: null,
         officeBrokerLeadEmail: null,
         listingAgentName: null,
@@ -89,6 +92,7 @@ describe('mapAttribution', () => {
         brokerPhone: '2025555678',
         brokerEmail: 'office@acme.example',
         officeName: 'Acme Realty',
+        officeKey: null,
         officeBrokerLeadPhone: '2025555678',
         officeBrokerLeadEmail: null,
         listingAgentName: null,
@@ -115,6 +119,30 @@ describe('mapAttribution', () => {
     expect(result).toEqual({ ok: false, reason: 'missing_required_attribution' });
   });
 
+  describe('office key (#722)', () => {
+    const base = { ListOfficeName: 'Acme Realty', ListOfficePhone: '2025551234' };
+    const keyOf = (ListOfficeKey: unknown) => {
+      const result = mapAttribution({ ...base, ListOfficeKey });
+      return result.ok ? result.fields.officeKey : 'rejected';
+    };
+
+    it('reads an Int64 sent as a number or as a string', () => {
+      expect(keyOf(1234567)).toBe('1234567');
+      expect(keyOf(' 1234567 ')).toBe('1234567');
+      expect(keyOf('9223372036854775807')).toBe('9223372036854775807');
+    });
+
+    it('reads a missing, blank or malformed key as null and never rejects the record', () => {
+      expect(keyOf(undefined)).toBeNull();
+      expect(keyOf(null)).toBeNull();
+      expect(keyOf('')).toBeNull();
+      expect(keyOf('abc')).toBeNull();
+      expect(keyOf(0)).toBeNull();
+      expect(keyOf(-5)).toBeNull();
+      expect(keyOf(1.5)).toBeNull();
+    });
+  });
+
   it('leaves the optional agent fields null when Bright omits them', () => {
     const result = mapAttribution({
       ListOfficeName: 'Acme Realty',
@@ -128,6 +156,7 @@ describe('mapAttribution', () => {
         brokerPhone: '2025551234',
         brokerEmail: 'office@acme.example',
         officeName: 'Acme Realty',
+        officeKey: null,
         officeBrokerLeadPhone: null,
         officeBrokerLeadEmail: null,
         listingAgentName: null,
