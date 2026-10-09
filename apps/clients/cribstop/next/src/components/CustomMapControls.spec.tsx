@@ -260,8 +260,8 @@ describe('filter and group buttons on the expanded map (#576)', () => {
     fireEvent.click(button);
 
     expect(vc.onOpenFilters).toHaveBeenCalledTimes(1);
-    expect(button.style.width).toBe('44px');
-    expect(button.style.height).toBe('44px');
+    expect(button.className).toContain('w-11');
+    expect(button.className).toContain('h-11');
     expect(button.textContent).toBe('');
     expect(button.getAttribute('title')).toBeNull();
   });
@@ -281,8 +281,8 @@ describe('filter and group buttons on the expanded map (#576)', () => {
     const button = screen.getByRole('button', { name: 'Group by neighborhood' });
 
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.style.width).toBe('44px');
-    expect(button.style.height).toBe('44px');
+    expect(button.className).toContain('w-11');
+    expect(button.className).toContain('h-11');
     expect(button.textContent).toBe('');
     fireEvent.click(button);
     expect(vc.onToggleGroup).toHaveBeenCalledTimes(1);

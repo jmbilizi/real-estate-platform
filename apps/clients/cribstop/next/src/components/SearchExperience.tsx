@@ -10,11 +10,8 @@ import { listingIdFromPath } from '@/lib/listing-panel';
 
 import type { SearchFilters } from '@/lib/types';
 import type { SearchSuggestionValue } from '@/lib/store/types';
-import ToolbarSelect, {
-  TOOLBAR_BUTTON_CLASS,
-  TOOLBAR_LABEL_CLASS,
-  type ToolbarOption,
-} from '@/components/ToolbarSelect';
+import ToolbarIconButton, { FILTERS_ICON, GROUP_ICON } from '@/components/ToolbarIconButton';
+import ToolbarSelect, { type ToolbarOption } from '@/components/ToolbarSelect';
 import ResultsPager from '@/components/ResultsPager';
 import {
   RESULTS_GRID_COLUMNS_CLASS,
@@ -1041,44 +1038,26 @@ export default function SearchExperience({
                 </button>
               )}
             </div>
-            <div className="relative flex shrink-0 items-center justify-end gap-x-0.5 sm:gap-x-1">
-              <button
+            <div className="relative flex shrink-0 items-center justify-end gap-x-1.5">
+              <ToolbarIconButton
+                data-testid="list-filters"
+                label={
+                  countActiveFilters(filters) > 0
+                    ? `Open filters, ${countActiveFilters(filters)} active`
+                    : 'Open filters'
+                }
+                icon={FILTERS_ICON}
+                count={countActiveFilters(filters)}
                 onClick={() => setFilterOpen(true)}
-                className={TOOLBAR_BUTTON_CLASS}
-                aria-label="Open filters"
-              >
-                <svg
-                  width="18"
-                  height="20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  viewBox="0 0 24 24"
-                  className="shrink-0 text-ink-muted self-center"
-                  aria-hidden="true"
-                >
-                  <circle cx="17" cy="5" r="2" />
-                  <circle cx="7" cy="12" r="2" />
-                  <circle cx="17" cy="19" r="2" />
-                  <line x1="3" y1="5" x2="15" y2="5" />
-                  <line x1="9" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="19" x2="15" y2="19" />
-                </svg>
-                <span className={TOOLBAR_LABEL_CLASS}>Filters</span>
-                {countActiveFilters(filters) > 0 && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[11px] font-bold text-white">
-                    {countActiveFilters(filters)}
-                  </span>
-                )}
-              </button>
+              />
               <ToolbarSelect<GroupBy | 'none'>
                 label="Group"
                 testId="group-by-control"
                 value={groupBy ?? 'none'}
                 options={zipOffered || zipGrouped ? GROUP_BY_OPTIONS_WITH_ZIP : GROUP_BY_OPTIONS}
                 icon={GROUP_ICON}
+                iconOnly
+                active={grouped}
                 onChange={changeGroupBy}
               />
               {grouped ? (
@@ -1308,15 +1287,6 @@ const ICON_PROPS = {
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
 } as const;
-
-const GROUP_ICON = (
-  <svg {...ICON_PROPS}>
-    <rect x="3" y="3" width="7" height="7" />
-    <rect x="14" y="3" width="7" height="7" />
-    <rect x="3" y="14" width="7" height="7" />
-    <rect x="14" y="14" width="7" height="7" />
-  </svg>
-);
 
 const SORT_ICON = (
   <svg {...ICON_PROPS}>
