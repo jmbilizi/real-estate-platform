@@ -2,7 +2,8 @@
 
 export type MapConfig =
   | { provider: 'openfreemap'; styleUrl: string; attribution: string }
-  | { provider: 'maptiler'; tileUrl: string; attribution: string };
+  | { provider: 'maptiler'; tileUrl: string; attribution: string }
+  | { provider: 'osm'; tileUrl: string; attribution: string };
 
 export const OPENFREEMAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
 
@@ -36,4 +37,25 @@ export function resolveMapConfig(maptilerKey: string | undefined): MapConfig {
     };
   }
   return OPENFREEMAP_CONFIG;
+}
+
+// Raster fallback for a browser that cannot run the vector map (no WebGL2, #762). The OSM
+// Foundation tile policy allows interactive viewing of the current viewport with visible
+// attribution, the exact HTTPS URL, no bulk prefetch, and no stripped Referer. It gives no SLA,
+// so MapTiler stays first when a key exists (see `resolveRasterFallback`).
+// Policy: https://operations.osmfoundation.org/policies/tiles/
+export const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+export const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
+
+export const OSM_CONFIG: MapConfig = {
+  provider: 'osm',
+  tileUrl: OSM_TILE_URL,
+  attribution: OSM_ATTRIBUTION,
+};
+
+/** A MapTiler config is already raster and stays. A vector config gets the OSM raster tiles. */
+export function resolveRasterFallback(config: MapConfig): MapConfig {
+  return config.provider === 'openfreemap' ? OSM_CONFIG : config;
 }

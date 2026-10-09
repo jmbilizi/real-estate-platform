@@ -22,6 +22,7 @@ import {
 } from '@/lib/user-move-gate';
 import PricePinLayer from '@/components/PricePinLayer';
 import BasemapLayer from '@/components/BasemapLayer';
+import MapErrorBoundary from '@/components/MapErrorBoundary';
 import { useMapConfig, useTileFailure } from '@/components/map-tiles';
 
 /**
@@ -565,62 +566,64 @@ export default function ListingsMapInner({
   // loading placeholder wears it too. This fills that frame and positions the overlays below.
   return (
     <div className="relative h-full w-full">
-      <MapContainer
-        center={center}
-        zoom={11}
-        // Set on the map, not only on `<TileLayer>`: the tile URL arrives asynchronously from
-        // `/api/map-config` (#291), so the map has no tile layer to supply a max zoom at first.
-        maxZoom={19}
-        scrollWheelZoom={false}
-        zoomControl={false}
-        className="h-full w-full"
-        style={{ background: '#f2ede6' }}
-      >
-        <BasemapLayer config={mapConfig} onTileError={onTileError} />
-        <InvalidateOnMount />
-        <CustomMapControls viewControls={viewControls} draw={drawControls} />
-        <ClickToActivateScroll onChange={setScrollActive} />
-        {/* Fit view to boundary, then pinned listings, then center — in priority order */}
-        <FitView
-          geojson={searchPolygon ?? null}
-          coords={grouped ? groupCoords : pinCoords}
-          center={searchCenter ?? null}
-          bounds={grouped ? null : focusBounds}
-          viewBounds={areaView ?? viewBounds}
-          emitted={emittedView}
-        />
-        {onUserMove && !drawing && !area && (
-          <UserMoveReporter
-            onUserMove={onUserMove}
+      <MapErrorBoundary>
+        <MapContainer
+          center={center}
+          zoom={11}
+          // Set on the map, not only on `<TileLayer>`: the tile URL arrives asynchronously from
+          // `/api/map-config` (#291), so the map has no tile layer to supply a max zoom at first.
+          maxZoom={19}
+          scrollWheelZoom={false}
+          zoomControl={false}
+          className="h-full w-full"
+          style={{ background: '#f2ede6' }}
+        >
+          <BasemapLayer config={mapConfig} onTileError={onTileError} />
+          <InvalidateOnMount />
+          <CustomMapControls viewControls={viewControls} draw={drawControls} />
+          <ClickToActivateScroll onChange={setScrollActive} />
+          {/* Fit view to boundary, then pinned listings, then center — in priority order */}
+          <FitView
+            geojson={searchPolygon ?? null}
+            coords={grouped ? groupCoords : pinCoords}
+            center={searchCenter ?? null}
+            bounds={grouped ? null : focusBounds}
+            viewBounds={areaView ?? viewBounds}
             emitted={emittedView}
-            points={grouped ? groupCoords : pinPoints}
           />
-        )}
-        {/* Searched area boundary outline */}
-        <BoundaryLayer geojson={searchPolygon ?? null} />
-        {areaGeoJson && <BoundaryLayer geojson={areaGeoJson} style={AREA_STYLE} />}
-        {drawing && <MapDrawLayer onFinish={finishDrawing} onCancel={() => setDrawing(false)} />}
-        {grouped ? (
-          <NeighborhoodMapLayer
-            rows={groupMarkers}
-            activeKey={neighborhoods.activeKey}
-            onActive={neighborhoods.onActive}
-            onSelect={neighborhoods.onSelect}
-            onTapPreview={neighborhoods.onTapPreview}
-          />
-        ) : (
-          <>
-            {filters && <ViewportQuery filters={filters} onResult={setViewport} />}
-            <PricePinLayer
-              pins={mapPins}
-              rowsById={rowsById}
-              activeId={activeId ?? null}
-              savedIds={savedIds}
-              onMarkerHover={onMarkerHover}
+          {onUserMove && !drawing && !area && (
+            <UserMoveReporter
+              onUserMove={onUserMove}
+              emitted={emittedView}
+              points={grouped ? groupCoords : pinPoints}
             />
-          </>
-        )}
-      </MapContainer>
+          )}
+          {/* Searched area boundary outline */}
+          <BoundaryLayer geojson={searchPolygon ?? null} />
+          {areaGeoJson && <BoundaryLayer geojson={areaGeoJson} style={AREA_STYLE} />}
+          {drawing && <MapDrawLayer onFinish={finishDrawing} onCancel={() => setDrawing(false)} />}
+          {grouped ? (
+            <NeighborhoodMapLayer
+              rows={groupMarkers}
+              activeKey={neighborhoods.activeKey}
+              onActive={neighborhoods.onActive}
+              onSelect={neighborhoods.onSelect}
+              onTapPreview={neighborhoods.onTapPreview}
+            />
+          ) : (
+            <>
+              {filters && <ViewportQuery filters={filters} onResult={setViewport} />}
+              <PricePinLayer
+                pins={mapPins}
+                rowsById={rowsById}
+                activeId={activeId ?? null}
+                savedIds={savedIds}
+                onMarkerHover={onMarkerHover}
+              />
+            </>
+          )}
+        </MapContainer>
+      </MapErrorBoundary>
       {/*
        * The map itself is a listing display surface: a price pin is the row
        * being shown, before anyone clicks. So the sample label cannot live only in the popup —
