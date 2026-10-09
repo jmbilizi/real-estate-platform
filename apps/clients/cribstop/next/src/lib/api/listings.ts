@@ -298,6 +298,9 @@ export interface ListingDetailView {
   featured: boolean;
   sponsored: boolean;
   priceReduced: boolean;
+  /** #717. Two stored MLS prices. `toListingDetailView` reads an absent key as null. */
+  previousPrice: number | null;
+  priceChangedAt: string | null;
   newConstruction: boolean;
   isSample: boolean;
   closePrice: number | null;
@@ -322,6 +325,8 @@ export interface ListingDetailView {
   alsoListedAs: ListingDetail['listing']['alsoListedAs'];
   /** #716. The oldest list date of the home. Shown as "Listed since" when `daysOnMarket` is null. */
   listedSince: string | null;
+  /** #717. Stored MLS prices, oldest first. Empty from an older service. */
+  priceHistory: ListingDetail['listing']['priceHistory'];
 
   // --- NAR 7.58 attribution ------------------------------------------------------------------
   listingAgentName: string | null;
@@ -398,6 +403,8 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     featured: listing.featured,
     sponsored: listing.sponsored,
     priceReduced: listing.priceReduced,
+    previousPrice: listing.previousPrice ?? null,
+    priceChangedAt: listing.priceChangedAt ?? null,
     newConstruction: listing.newConstruction,
     isSample: listing.isSample,
     closePrice: listing.closePrice,
@@ -420,6 +427,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     facts: listing.facts,
     alsoListedAs: listing.alsoListedAs ?? [],
     listedSince: listing.listedSince ?? null,
+    priceHistory: listing.priceHistory ?? [],
 
     listingAgentName: listing.listingAgentName,
     listAgentPhone: listing.listAgentPhone,

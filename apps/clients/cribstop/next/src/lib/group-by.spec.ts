@@ -66,25 +66,18 @@ describe('ZIP code grouping in the URL (#722)', () => {
     expect(grouped.toString()).toBe('q=x&groupBy=broker');
     expect(parseGroupState(grouped).groupBy).toBe('broker');
 
-    const drilled = writeGroupState(new URLSearchParams('officeKey=1001'), {
+    const drilled = writeGroupState(new URLSearchParams('officeKey=1001&groupLabel=Other'), {
       groupBy: undefined,
       order: 'count',
       drill: 'broker',
-      drillLabel: 'Acme Realty',
     });
-    expect(drilled.toString()).toBe('officeKey=1001&groupDrill=broker&groupLabel=Acme+Realty');
-    expect(parseGroupState(drilled)).toMatchObject({ drill: 'broker', drillLabel: 'Acme Realty' });
+    // The URL never carries a brokerage name. An old `groupLabel` is dropped and never read.
+    expect(drilled.toString()).toBe('officeKey=1001&groupDrill=broker');
+    expect(parseGroupState(new URLSearchParams('groupLabel=Other'))).not.toHaveProperty(
+      'drillLabel',
+    );
 
     expect(parseGroupState(new URLSearchParams('')).groupBy).toBeUndefined();
-    // A ZIP drill carries no label.
-    expect(
-      writeGroupState(new URLSearchParams(), {
-        groupBy: undefined,
-        order: 'count',
-        drill: 'zip',
-        drillLabel: 'x',
-      }).toString(),
-    ).toBe('groupDrill=zip');
   });
 
   it('never groups by default', () => {

@@ -26,6 +26,13 @@ import {
   officeInitial,
 } from '@/lib/listing-format';
 import { useToast } from '@/lib/useToast';
+import {
+  describeCardPriceChange,
+  describePriceChange,
+  formatCardPriceChange,
+  formatCardPriceChangeAmount,
+  formatCardPriceChangeDate,
+} from '@/lib/price-change';
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 
@@ -150,13 +157,16 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
    * below the image, because a marketing badge must never be able to displace a label that has to
    * be shown.
    */
-  const marketingBadge = listing.priceReduced
-    ? 'Price reduced'
-    : listing.newConstruction
-      ? 'New construction'
-      : listing.featured
-        ? 'Featured'
-        : null;
+  // #717. A visible increase and the "Price reduced" pill never show together.
+  const priceChange = describePriceChange(listing, now);
+  const marketingBadge =
+    listing.priceReduced && priceChange?.direction !== 'up'
+      ? 'Price reduced'
+      : listing.newConstruction
+        ? 'New construction'
+        : listing.featured
+          ? 'Featured'
+          : null;
 
   return (
     /*
@@ -386,6 +396,20 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
                 <span className={price.isWithheld ? 'text-ink-body' : 'font-semibold'}>
                   {price.text}
                 </span>
+                {/* #717. Wide cards: the change follows the price. Narrow cards: see the line below. */}
+                {priceChange && (
+                  <span className="listing-card-change-inline text-ink-body">
+                    {' '}
+                    <span aria-hidden="true">
+                      ({formatCardPriceChangeAmount(priceChange)}
+                      <span className="listing-card-change-date">
+                        {formatCardPriceChangeDate(priceChange)}
+                      </span>
+                      )
+                    </span>
+                    <span className="sr-only">{describeCardPriceChange(priceChange)}</span>
+                  </span>
+                )}
               </>
             )}
           </p>
@@ -433,6 +457,19 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
             />
           </div>
         </div>
+
+        {/*
+         * #717. Narrow cards (every card below 640px, and any card under 260px) show the change on
+         * a line of its own. The arrow and the amount carry the meaning. The color is the neutral
+         * body color for a cut and an increase alike. The two change classes in globals.css show
+         * one of the two renders.
+         */}
+        {priceChange && (
+          <p className="listing-card-change-line mt-0.5 truncate text-[13px] leading-[18px] text-ink-body">
+            <span aria-hidden="true">{formatCardPriceChange(priceChange)}</span>
+            <span className="sr-only">{describeCardPriceChange(priceChange)}</span>
+          </p>
+        )}
 
         {/* Reserved whether or not there are stats to show, so the address never shifts up a row. */}
         <p className="mt-0.5 h-[18px] truncate text-[13px] leading-[18px] text-ink-muted">

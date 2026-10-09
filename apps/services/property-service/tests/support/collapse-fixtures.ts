@@ -46,6 +46,14 @@ export interface RecordInput {
   mlsNumber?: string | null;
   broker?: string;
   addressHidden?: boolean;
+  /** #717. When the feed last changed the record. Defaults to now. */
+  lastUpdated?: string;
+  /** #717. When the record changed status. A taken-down record ends here. */
+  statusChangedAt?: string | null;
+  /** #717. The seller allows the price history. Defaults to true. */
+  priceHistoryAllowed?: boolean;
+  /** #717. The seller allows the price. Defaults to true. */
+  priceAllowed?: boolean;
 }
 
 export interface HomeInput {
@@ -61,6 +69,8 @@ export interface HomeInput {
 export interface SeededHome {
   propertyId: string;
   ids: string[];
+  /** The rows as written, so a test can write the same record again with a new price. */
+  rows: ListingRow[];
 }
 
 function row(
@@ -110,8 +120,8 @@ function row(
     new_construction: false,
     internet_display_allowed: true,
     address_display_allowed: !input.addressHidden,
-    price_display_allowed: true,
-    price_history_display_allowed: true,
+    price_display_allowed: input.priceAllowed ?? true,
+    price_history_display_allowed: input.priceHistoryAllowed ?? true,
     media_display_allowed: true,
     days_on_market_display_allowed: true,
     days_on_market: input.daysOnMarket ?? null,
@@ -124,10 +134,10 @@ function row(
     office_broker_lead_email: null,
     listing_agent_name: 'E2E Fixture Agent',
     is_sample: true,
-    last_updated: new Date().toISOString(),
+    last_updated: input.lastUpdated ?? new Date().toISOString(),
     listed_at: input.listedAt === undefined ? '2026-09-18T00:00:00.000Z' : input.listedAt,
     coming_soon_date: null,
-    status_changed_at: null,
+    status_changed_at: input.statusChangedAt ?? null,
   };
 }
 
@@ -187,22 +197,51 @@ export async function seedHomes(
         );
       }
       const ids: string[] = [];
+      const rows: ListingRow[] = [];
       for (const [index, record] of home.records.entries()) {
         const unitId = record.unit === undefined ? null : (unitIds[record.unit] ?? null);
-        ids.push(
-          await upsertListing(
-            client,
-            row(propertyId, unitId, record, index, home.street, home.zip ?? COLLAPSE_ZIP),
-          ),
+        const written = row(
+          propertyId,
+          unitId,
+          record,
+          index,
+          home.street,
+          home.zip ?? COLLAPSE_ZIP,
         );
+        ids.push(await upsertListing(client, written));
+        rows.push(written);
       }
-      seeded[home.street] = { propertyId, ids };
+      seeded[home.street] = { propertyId, ids, rows };
     }
     await client.query('COMMIT');
     return seeded;
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Test-only. Writes one record again with a new list price, as a later sync does. The write path
+ * appends the `price_change` row.
+ */
+export async function repriceRecord(
+  pool: CollapsePool,
+  home: SeededHome,
+  index: number,
+  listPrice: number,
+  lastUpdated: string,
+): Promise<void> {
+  assertFixturesEnabled();
+  const written = home.rows[index];
+  if (!written) {
+    throw new Error(`No record ${index}`);
+  }
+  const client = await pool.connect();
+  try {
+    await upsertListing(client, { ...written, list_price: listPrice, last_updated: lastUpdated });
   } finally {
     client.release();
   }
