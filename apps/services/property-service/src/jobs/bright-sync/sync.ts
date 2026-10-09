@@ -17,6 +17,7 @@ import {
   type SliceBounds,
   type SliceScope,
 } from '../bright-ingest/odata-query';
+import { SUPPRESSION_FIELDS_BY_SOURCE } from '../bright-map/suppression';
 import { BRIGHT_SYNC_SELECT } from './select';
 
 /**
@@ -109,6 +110,8 @@ export interface SyncDeps {
   readonly writeState: (stream: string, state: unknown) => Promise<void>;
   readonly progress: (counts: Record<string, unknown>, cursor: unknown) => Promise<void>;
   readonly now: () => Date;
+  /** The `$select` list the worker requests. Defaults to `BRIGHT_SYNC_SELECT`. Tests override it. */
+  readonly select?: readonly string[];
   readonly log: (message: string) => void;
 }
 
@@ -181,7 +184,19 @@ class Tally {
   }
 }
 
+/**
+ * True when the select list requests every election field of the source system. The warning means
+ * "the feed stopped sending the fields". It is meaningless while the fields are not requested.
+ */
+export function electionFieldsRequested(select: readonly string[] = BRIGHT_SYNC_SELECT): boolean {
+  const { price, priceHistory, daysOnMarket } = SUPPRESSION_FIELDS_BY_SOURCE.BrightMLS;
+  return [price, priceHistory, daysOnMarket].every((field) => select.includes(field));
+}
+
 function logSuppressionWarning(deps: SyncDeps, tally: Tally): void {
+  if (!electionFieldsRequested(deps.select)) {
+    return;
+  }
   const warning = tally.suppressionWarning();
   if (warning !== null) {
     deps.log(warning);

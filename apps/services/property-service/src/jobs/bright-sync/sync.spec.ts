@@ -2,6 +2,7 @@ import type { BrightPage } from '../bright-ingest/bright-client';
 import { BRIGHT_STATUS_FILTER_LABELS } from '../bright-map/status';
 import {
   backfillStream,
+  electionFieldsRequested,
   INCREMENTAL_STREAM,
   PAGE_SIZE,
   type PageResult,
@@ -393,6 +394,11 @@ describe('runIncremental', () => {
         ...h.deps,
         applyPage: () => Promise.resolve({ ...RESULT, ...page }),
         log: (message) => log.push(message),
+        select: [
+          'InternetListingDisplayPricesYN',
+          'InternetListingDisplayHistoricalPricesYN',
+          'InternetListingDisplayDaysOnSiteYN',
+        ],
       };
       return runIncremental(deps, { overlapMs: 0 });
     }
@@ -410,6 +416,22 @@ describe('runIncremental', () => {
       const log: string[] = [];
       await run({ mapped: 1001 }, log);
       expect(log.filter((m) => m.startsWith('WARNING'))).toHaveLength(1);
+    });
+
+    it('does not warn while the election fields are not in the select list', async () => {
+      expect(electionFieldsRequested()).toBe(false);
+      const h = harness(WINDOW);
+      h.state.set(INCREMENTAL_STREAM, { watermark: '2026-09-26T11:58:00Z' });
+      const log: string[] = [];
+      await runIncremental(
+        {
+          ...h.deps,
+          applyPage: () => Promise.resolve({ ...RESULT, mapped: 5000 }),
+          log: (message) => log.push(message),
+        },
+        { overlapMs: 0 },
+      );
+      expect(log).toEqual([]);
     });
 
     it('does not warn at 1,000 records or fewer', async () => {
