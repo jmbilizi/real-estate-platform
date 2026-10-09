@@ -130,7 +130,7 @@ describe('Group by neighborhood (#502)', () => {
     render(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     expect(mockedGroups).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Open filters').textContent).toContain('1');
+    expect(screen.getByLabelText('Open filters, 1 active').textContent).toBe('1');
   });
 
   it('shows neighborhood cards, writes groupBy to the URL and sends the search filters', async () => {
@@ -150,10 +150,10 @@ describe('Group by neighborhood (#502)', () => {
       order: 'count',
     });
     expect(lastGroupQuery()).not.toHaveProperty('sort');
-    expect(screen.getByLabelText('Open filters').textContent).toContain('1');
+    expect(screen.getByLabelText('Open filters, 1 active').textContent).toBe('1');
   });
 
-  it('shows fixed labels and names the current choice in the aria-label', async () => {
+  it('shows an icon-only Group button, a fixed Sort label, and names the current choice in the aria-label', async () => {
     render(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const groupBy = screen.getByTestId('group-by-control');
@@ -161,12 +161,12 @@ describe('Group by neighborhood (#502)', () => {
     expect(groupBy.getAttribute('aria-label')).toBe('Group, current: None');
     expect(sort.getAttribute('aria-label')).toBe('Sort, current: Recommended');
     // The button text is the fixed label, never the choice.
-    expect(groupBy.textContent).toBe('Group');
+    expect(groupBy.textContent).toBe('');
     expect(sort.textContent).toBe('Sort');
 
     choose('group-by-control', 'Neighborhood');
     await screen.findByTestId('neighborhood-group-grid');
-    expect(screen.getByTestId('group-by-control').textContent).toBe('Group');
+    expect(screen.getByTestId('group-by-control').textContent).toBe('');
     expect(screen.getByTestId('group-by-control').getAttribute('aria-label')).toBe(
       'Group, current: Neighborhood',
     );
@@ -205,20 +205,23 @@ describe('Group by neighborhood (#502)', () => {
     expect(screen.getByRole('option', { name: 'Newest' }).querySelector('svg')).toBeNull();
   });
 
-  it('shows only the icon below sm, with a 44px tap target, on all three buttons', async () => {
+  it('shows Filters and Group as icon-only 44px buttons, and Sort as an icon below sm', async () => {
     render(<SearchExperience initialQuery="q=Bethesda" />);
     for (const button of [
       screen.getByLabelText('Open filters'),
       screen.getByTestId('group-by-control'),
-      screen.getByTestId('sort-control'),
     ]) {
-      const label = [...button.querySelectorAll('span')].find((s) => s.textContent);
-      expect(label?.className).toContain('hidden');
-      expect(label?.className).toContain('sm:inline');
-      expect(button.className).toContain('min-h-11');
-      expect(button.className).toContain('min-w-11');
+      expect(button.textContent).toBe('');
+      expect(button.className).toContain('h-11');
+      expect(button.className).toContain('w-11');
       expect(button.querySelector('svg')).not.toBeNull();
     }
+    const sort = screen.getByTestId('sort-control');
+    const label = [...sort.querySelectorAll('span')].find((s) => s.textContent);
+    expect(label?.className).toContain('hidden');
+    expect(label?.className).toContain('sm:inline');
+    expect(sort.className).toContain('min-h-11');
+    expect(sort.className).toContain('min-w-11');
   });
 
   it('orders by name and keeps the order in the URL', async () => {
@@ -343,7 +346,7 @@ describe('Group by neighborhood (#502)', () => {
       );
       expect(mockedSearch.mock.calls.at(-1)?.[0]).not.toHaveProperty('boundary');
       expect(screen.getByTestId('drilled-neighborhood-name').textContent).toBe('Chevy Chase');
-      expect(screen.getByLabelText('Open filters').textContent).toBe('Filters');
+      expect(screen.getByLabelText('Open filters').textContent).toBe('');
     });
 
     it('survives a reload: the same props give the same view', async () => {
@@ -423,19 +426,13 @@ describe('Group by neighborhood (#502)', () => {
     expect(screen.queryByTestId('drilled-neighborhood-name')).toBeNull();
   });
 
-  it('gives Filters, Group and Sort one shared button class (#523)', async () => {
+  it('gives Filters and Group the one shared icon button class (#748)', async () => {
     render(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
-    const classes = [
-      screen.getByLabelText('Open filters'),
-      screen.getByTestId('group-by-control'),
-      screen.getByTestId('sort-control'),
-    ].map((el) => el.className);
-    expect(classes[1]).toBe(classes[0]);
-    expect(classes[2]).toBe(classes[0]);
-    expect(classes[0]).toContain('hover:bg-surface-soft');
-    expect(classes[0]).toContain('rounded-lg');
-    expect(classes[0]).toContain('focus-visible:ring-2');
+    const filters = screen.getByLabelText('Open filters').className;
+    expect(screen.getByTestId('group-by-control').className).toBe(filters);
+    expect(filters).toContain('rounded-full');
+    expect(filters).toContain('focus-visible:ring-2');
   });
 
   it('follows Back and Forward', async () => {

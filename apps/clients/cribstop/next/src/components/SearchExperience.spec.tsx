@@ -190,6 +190,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
   const pageButtonLabels = () =>
     screen
       .getAllByRole('button')
+      .filter((button) => !button.getAttribute('aria-label')?.startsWith('Open filters'))
       .map((button) => button.textContent?.trim())
       .filter((label) => label !== undefined && /^\d+$/.test(label));
 
@@ -270,7 +271,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
     expect(screen.getByText(/Narrow your filters or zoom the map/)).toBeInTheDocument();
 
     mockedSearchListings.mockResolvedValue(withResults(60, 3));
-    fireEvent.click(screen.getByLabelText('Open filters'));
+    fireEvent.click(screen.getByLabelText(/^Open filters/));
     fireEvent.click(screen.getByLabelText('More bedrooms'));
     fireEvent.click(screen.getByRole('button', { name: /^Show (homes|[\d,]+ home)/ }));
 
@@ -350,7 +351,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
  * was never the broken part.
  */
 describe('the filter modal actually filters', () => {
-  const openFilters = () => fireEvent.click(screen.getByLabelText('Open filters'));
+  const openFilters = () => fireEvent.click(screen.getByLabelText(/^Open filters/));
   const showHomes = () =>
     fireEvent.click(screen.getByRole('button', { name: /^Show (homes|[\d,]+ home)/ }));
 
