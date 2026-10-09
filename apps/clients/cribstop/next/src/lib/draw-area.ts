@@ -1,4 +1,4 @@
-import { isSimpleRing, MAX_AREA_VERTICES, type MapBounds } from '@cribstop/property-contracts';
+import { isSimpleRing, type MapBounds, MAX_AREA_VERTICES } from '@cribstop/property-contracts';
 
 /**
  * The drawn area as a filter (#747). Pure helpers, so the draw gesture, the URL and the request

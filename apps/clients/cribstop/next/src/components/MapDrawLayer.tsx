@@ -5,9 +5,9 @@ import { useMap } from 'react-leaflet';
 import type { LngLat } from '@/lib/draw-area';
 import {
   createDrawGesture,
-  lockMapInteraction,
   type DrawPointer,
   type LockableMap,
+  lockMapInteraction,
 } from '@/lib/draw-gesture';
 
 /** What the parent made of a finished line. Anything but `ok` keeps draw mode on. */

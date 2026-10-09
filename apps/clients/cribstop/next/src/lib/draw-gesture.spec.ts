@@ -1,4 +1,4 @@
-import { createDrawGesture, lockMapInteraction, type LockableMap } from './draw-gesture';
+import { createDrawGesture, type LockableMap, lockMapInteraction } from './draw-gesture';
 
 const handler = (enabled: boolean) => {
   const state = { on: enabled };
