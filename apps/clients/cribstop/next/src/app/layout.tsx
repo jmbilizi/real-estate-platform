@@ -10,6 +10,7 @@ import ListingPanelHost from '@/components/listing/ListingPanelHost';
 import OnboardingListener from '@/components/OnboardingListener';
 import Toast from '@/components/Toast';
 import { BRAND } from '@/lib/brand';
+import SiteOriginWarmer from '@/components/SiteOriginWarmer';
 
 export const metadata: Metadata = {
   title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`,
@@ -36,6 +37,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="flex min-h-screen flex-col">
         <NextTopLoader color="#FF385C" showSpinner={false} height={3} />
+        <SiteOriginWarmer />
         <AppProvider>
           <SiteHeader />
           <main className="flex-1">{children}</main>

@@ -30,3 +30,6 @@ spec:
           env:
             - name: NODE_ENV
               value: "development"
+            # Public origin of the web app. The deploy action substitutes the placeholder (#172).
+            - name: SITE_ORIGIN
+              value: "https://CRIBSTOP_DOMAIN_PLACEHOLDER"

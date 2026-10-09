@@ -285,6 +285,19 @@ runs:
           fi
         fi
 
+        # cribstop-web reads SITE_ORIGIN for its canonical link, og:url and share links (#172).
+        WEB_PATCH="${{ inputs.kustomizePath }}/patches/deployments/cribstop-web.deployment.yaml"
+        if [ -f "$WEB_PATCH" ] && grep -q "CRIBSTOP_DOMAIN_PLACEHOLDER" "$WEB_PATCH"; then
+          if [ -n "$CRIBSTOP_DOMAIN" ]; then
+            sed -i "s/CRIBSTOP_DOMAIN_PLACEHOLDER/${CRIBSTOP_DOMAIN}/g" "$WEB_PATCH"
+            echo "   ✅ cribstop-web SITE_ORIGIN substituted"
+          else
+            # A placeholder origin would publish canonical URLs on a host that does not resolve.
+            echo "   ❌ CRIBSTOP_DOMAIN is not set: cribstop-web would publish canonical URLs on the placeholder host"
+            exit 1
+          fi
+        fi
+
     - name: Build manifests
       shell: bash
       run: |

@@ -10,6 +10,7 @@ import { copyToClipboard } from '@/lib/clipboard';
 import { formatNewListingBadge, formatTimeOnMarket } from '@/lib/format';
 import { useMinuteClock } from '@/lib/useMinuteClock';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
+import { shareOrigin } from '@/lib/site-origin';
 import {
   formatCardAddress,
   formatClosePrice,
@@ -86,7 +87,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   async function handleShare(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    const url = listingShareUrl(listing.propertyPath, shareOrigin());
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share(buildListingShare(listing, url));
@@ -106,7 +107,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
   async function handleCopyLink(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault();
     e.stopPropagation();
-    const url = listingShareUrl(listing.propertyPath, window.location.origin);
+    const url = listingShareUrl(listing.propertyPath, shareOrigin());
     if (await copyToClipboard(url)) toast('Link copied');
     else toast('We could not copy the link.', 'error');
   }
