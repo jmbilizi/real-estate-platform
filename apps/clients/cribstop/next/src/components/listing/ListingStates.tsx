@@ -90,8 +90,10 @@ export function ListingCardSkeleton() {
         {/* Price line, with the save/share/more dots beside it — the loaded row never wraps to a
             second line, so neither does this. */}
         <div className="flex items-center gap-1">
-          <p className="min-w-0 flex-1 text-base">
+          <p className="flex min-w-0 flex-1 items-center gap-2 text-base">
             <Bar className="w-2/5" />
+            {/* #717. A loaded wide card can carry a change after the price. */}
+            <Bar className="listing-card-change-inline w-1/5" />
           </p>
           <div className="listing-card-actions flex shrink-0 items-center">
             <span className={`h-4 w-4 rounded-full ${FILL}`} />

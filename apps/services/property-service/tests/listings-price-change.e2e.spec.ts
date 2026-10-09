@@ -143,7 +143,7 @@ describe('price change on the card (#717)', () => {
     const card = await cardOf('1 Same Cut Ln');
     expect(card.price).toBe(2197500);
     expect(card.previousPrice).toBe(2297500);
-    expect(card.priceChangedAt).toBe(CHANGED);
+    expect(card.priceChangedAt).toBe('2026-10-02T00:00:00.000Z');
   });
 
   it('same key, increase', async () => {

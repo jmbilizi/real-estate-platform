@@ -16,6 +16,14 @@ import { LIVE_STATUSES, sameHomeConditions, VIEW_SUBJECT, type SubjectColumns } 
  */
 export const RELIST_WINDOW_DAYS = 60;
 
+/**
+ * A feed instant as the calendar day in the property time zone, at midnight UTC. A relist date
+ * (`listed_at`) is already a date at midnight UTC, so the client reads every date of this module the
+ * same way. The zone repeats `PROPERTY_TIME_ZONE` in the web app (#79).
+ */
+const PROPERTY_DAY = (instant: string): string =>
+  `(date_trunc('day', ${instant} AT TIME ZONE 'America/New_York') AT TIME ZONE 'UTC')`;
+
 const LIVE_STATUS_SQL = `(${LIVE_STATUSES.map((status) => `'${status}'`).join(', ')})`;
 
 /** The relist predecessor of the shown record: the most recent earlier record of the same home. */
@@ -68,7 +76,7 @@ export function priceChangeLateral(
            ORDER BY e.occurred_at, e.id
            LIMIT 1)
           UNION ALL
-          (SELECT e.occurred_at, e.new_price, 1,
+          (SELECT ${PROPERTY_DAY('e.occurred_at')}, e.new_price, 1,
                   NULLIF(rec.source_listing_id, rec.source_listing_key)
            FROM listing_events e
            WHERE e.listing_id = rec.id AND e.event_type = 'price_change'
@@ -80,7 +88,7 @@ export function priceChangeLateral(
     SELECT
       CASE WHEN sk.id IS NOT NULL THEN sk.old_price::float8
            WHEN pr.list_price <> l.list_price THEN pr.list_price::float8 END AS previous_price,
-      CASE WHEN sk.id IS NOT NULL THEN sk.occurred_at
+      CASE WHEN sk.id IS NOT NULL THEN ${PROPERTY_DAY('sk.occurred_at')}
            WHEN pr.list_price <> l.list_price THEN ${subject.listedAt} END AS price_changed_at${history}
     FROM listings l
     LEFT JOIN LATERAL (

@@ -749,6 +749,28 @@ html[data-map-expanded] {
 }
 
 /*
+ * #717. The price change sits after the price on a wide card (a viewport of 640px or more and a card
+ * of 300px or more) and on its own line under the price everywhere else. Exactly one of the two
+ * renders, so a screen reader reads the change once.
+ */
+.listing-card-change-inline {
+  display: none;
+}
+.listing-card-change-line {
+  display: block;
+}
+@media (min-width: 640px) {
+  @container (min-width: 300px) {
+    .listing-card-change-inline {
+      display: inline;
+    }
+    .listing-card-change-line {
+      display: none;
+    }
+  }
+}
+
+/*
  * #467. One gap between save, share and more, scaled to the card width: 8px on a 154px phone
  * carousel card, up to 14px on a wide grid card. `cqi` reads `.listing-card-root`.
  */
