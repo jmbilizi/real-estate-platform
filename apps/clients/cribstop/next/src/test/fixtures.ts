@@ -120,6 +120,8 @@ export function aListingDetail(
       virtualTourUrl: null,
       listAgentPhone: null,
       listAgentEmail: null,
+      alsoListedAs: [],
+      listedSince: null,
       facts: {
         parking: null,
         heating: null,

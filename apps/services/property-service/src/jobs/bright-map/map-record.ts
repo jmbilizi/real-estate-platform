@@ -82,6 +82,10 @@ export interface MappedListingInput {
   readonly statusChangedAt: string | null;
   /** #391. `DaysOnMarket` — the current marketing period, not the lifetime total. */
   readonly daysOnMarket: number | null;
+  /** #716. `ListingId`, the MLS number a consumer knows. Null when the feed omits it. */
+  readonly mlsNumber: string | null;
+  /** #716. `ModificationTimestamp` as an ISO instant. Null when absent or unparseable. */
+  readonly sourceModifiedAt: string | null;
   /** #564. Tax, HOA, tour, agent contact and grouped facts. Detail endpoint only. */
   readonly detail: MappedListingDetailFacts;
 }
@@ -366,6 +370,8 @@ export function mapBrightPropertyRecord(
       comingSoonDate: toDateInstant(payload.ExpectedOnMarketDate),
       statusChangedAt: toTimestampInstant(payload.StatusChangeTimestamp),
       daysOnMarket: daysOnMarket.value,
+      mlsNumber: keyString(payload.ListingId),
+      sourceModifiedAt: toTimestampInstant(payload.ModificationTimestamp),
       detail: mapListingDetailFacts(payload),
     },
   };

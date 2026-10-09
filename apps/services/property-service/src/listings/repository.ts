@@ -24,6 +24,12 @@ import {
   LISTING_VISIBILITY_SQL,
   PROPERTY_RECORD_SELECT,
 } from './columns';
+import {
+  collapseCondition,
+  DISABLE_JIT_SQL,
+  LISTINGS_SUBJECT,
+  mergedRecordsLateral,
+} from './collapse';
 import { resolvedSearchRequest } from './on-demand';
 import {
   buildSearchQuery,
@@ -138,6 +144,7 @@ export async function searchListings(
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    await client.query(DISABLE_JIT_SQL);
 
     const countResult = await client.query<{ total: number }>(
       `SELECT count(*)::int AS total FROM listing_search_v v WHERE ${where}`,
@@ -209,12 +216,15 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
             l.hoa_fee::float8 AS hoa_fee, l.hoa_fee_frequency, l.virtual_tour_url,
             l.list_agent_phone, l.list_agent_email,
             facts.facts,
+            merged.also_listed_as, merged.listed_since,
             media.media,
             open_houses.open_houses
      FROM listing_search_v v
      JOIN listings l ON l.id = v.id
      JOIN properties p ON p.id = v.property_id
      LEFT JOIN units u ON u.id = v.unit_id
+     -- #716. The other live records of this home. A record hidden from search still opens here.
+     LEFT JOIN LATERAL ${mergedRecordsLateral()} merged ON true
      LEFT JOIN LATERAL (
        -- #53. Same MEDIA_VISIBLE rule as PRIMARY_MEDIA_JOIN, applied to the full gallery: when
        -- media is suppressed only the marked row can match, so the detail response degrades to at
@@ -409,6 +419,8 @@ export async function getNeighborhoods(
     filterSql = [
       LISTING_VISIBILITY_SQL.replace(/\bl\./g, 'v.'),
       ...scopeConditions(matched, bind, LISTINGS_SCOPE_COLUMNS),
+      // #716. The same one-card-per-home rule as search, so the counts equal the cards.
+      collapseCondition(LISTINGS_SUBJECT),
     ].join('\n         AND ');
     geoSql = `v.address_display_allowed AND ${VALID_COORDINATE_SQL}`;
   } else {
