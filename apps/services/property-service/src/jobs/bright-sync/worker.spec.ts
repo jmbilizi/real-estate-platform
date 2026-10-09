@@ -184,6 +184,16 @@ describe('worker settings', () => {
     ).toContain('Closed');
   });
 
+  it('reads the sold display delay as 0, 30 or unset (#228)', () => {
+    const delay = (value?: string) =>
+      resolveWorkerSettings(value === undefined ? {} : { BRIGHT_SOLD_DISPLAY_DELAY_DAYS: value })
+        .soldDisplayDelayDays;
+    expect(delay('0')).toBe(0);
+    expect(delay('30')).toBe(30);
+    expect(delay()).toBeNull();
+    expect(delay('')).toBeNull();
+  });
+
   it('computes the CloseDate lower bound from the lookback', () => {
     expect(soldCloseDateFrom(new Date('2026-09-26T12:00:00Z'), 365)).toBe('2025-09-26');
   });

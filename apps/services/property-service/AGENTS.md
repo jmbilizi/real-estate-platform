@@ -292,7 +292,9 @@ that empties `listings` while the checkpoint still reads complete still refills.
   re-applied slice a no-op. The worker resumes an incomplete backfill before any other task.
 - **Sold.** `Closed` runs only with `CloseDate ge today - BRIGHT_SOLD_LOOKBACK_DAYS` (default 365),
   and only when `BRIGHT_SOLD_DISPLAY_DELAY_DAYS` is set. Unset, every sold fails closed in the
-  mapper, so the pass would stage about 315,000 records to publish none. It is skipped.
+  mapper, so the pass would stage about 315,000 records to publish none. It is skipped. Both base
+  Deployments (`bright-sync-worker`, `property-service`) set it to `0` (#228, ruling 2026-10-08): a
+  sold displays from its close date. A change of the window is one edit in each Deployment.
 - **Incremental**, every `BRIGHT_SYNC_INCREMENTAL_INTERVAL_MS` (5 min): the window
   `(watermark - 2 min, now]`, every status, ordered `ModificationTimestamp asc,ListingKey asc`. The
   watermark moves only after every page commits. A follow-on page starts at the last instant,
