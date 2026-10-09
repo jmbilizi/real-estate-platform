@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * The `$select` list for every page the sync worker reads (#338).
  *
@@ -74,3 +76,15 @@ export const BRIGHT_SYNC_SELECT: readonly string[] = Object.freeze([
   'InteriorFeatures',
   'ExteriorFeatures',
 ]);
+
+/**
+ * A short hash of the `$select` list. The worker stores it after it plans a backfill. A new value
+ * means the feed now carries a field the stored rows lack, so the worker backfills again (#722).
+ * Field order does not matter.
+ */
+export function selectFingerprint(fields: readonly string[] = BRIGHT_SYNC_SELECT): string {
+  return createHash('sha256')
+    .update([...fields].sort().join(','))
+    .digest('hex')
+    .slice(0, 16);
+}

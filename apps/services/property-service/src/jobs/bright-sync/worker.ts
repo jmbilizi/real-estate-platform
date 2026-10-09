@@ -43,6 +43,7 @@ import {
   tryAcquireSyncLock,
   writeState,
 } from './store';
+import { selectFingerprint } from './select';
 import {
   type BackfillState,
   backfillStream,
@@ -580,6 +581,38 @@ export async function resetBackfillIfEmpty(
   );
 }
 
+/** The state stream that holds the `$select` fingerprint of the last backfill plan. */
+export const SELECT_FINGERPRINT_STREAM = 'select-fingerprint';
+
+/**
+ * A change to `BRIGHT_SYNC_SELECT` adds a field that rows written earlier lack (#722: `office_key`).
+ * When the stored fingerprint differs, reset the backfill checkpoints. The backfill resume then
+ * rewrites every listing on its own, with no manual step. The fingerprint is stored after the reset,
+ * so a restart mid-backfill leaves the checkpoints to resume, and a repeat start is a no-op. This
+ * is the one case where a deploy starts a full backfill (the 2026-09-27 ruling covers restarts).
+ */
+export async function resetBackfillOnSelectChange(
+  pool: WorkerPool,
+  feed: string,
+  statuses: readonly string[],
+  log: (message: string) => void,
+): Promise<void> {
+  const current = selectFingerprint();
+  const stored = await readState<{ fingerprint?: string }>(pool, feed, SELECT_FINGERPRINT_STREAM);
+  if (stored?.fingerprint === current) return;
+  for (const status of statuses) {
+    await writeState(pool, feed, backfillStream(status), {
+      through: null,
+      complete: false,
+    } satisfies BackfillState);
+  }
+  await writeState(pool, feed, SELECT_FINGERPRINT_STREAM, { fingerprint: current });
+  log(
+    `Bright sync: the field list changed (${stored?.fingerprint ?? 'none'} to ${current}). ` +
+      `Reset ${statuses.length} backfill checkpoint(s) for a full backfill.`,
+  );
+}
+
 /** Starts and runs a worker-scheduled run. Returns whether it succeeded. */
 async function scheduled(
   ctx: WorkerContext,
@@ -660,6 +693,7 @@ export async function prepareWorker(
   }
 
   await resetBackfillIfEmpty(pool, feed, isSampleFeed(feed), backfillStatuses(settings), log);
+  await resetBackfillOnSelectChange(pool, feed, backfillStatuses(settings), log);
 }
 
 /**

@@ -2,6 +2,7 @@ import {
   AMENITIES,
   isDefaultStatusFilter,
   LISTING_TYPES,
+  OFFICE_KEY_PATTERN,
   PROPERTY_TYPES,
   searchBoundsSchema,
   SORT_VALUES,
@@ -98,7 +99,7 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   // #722. A broker group card writes it. A value the contract rejects is dropped, not sent.
   const officeKey = str('officeKey');
   filters.officeKey =
-    officeKey !== undefined && /^(\d{1,19}|unlisted)$/.test(officeKey) ? officeKey : undefined;
+    officeKey !== undefined && OFFICE_KEY_PATTERN.test(officeKey) ? officeKey : undefined;
 
   // Exact two-letter code only — anything else is not a value the search bar or the contract's
   // own `state` filter would ever produce, so it is dropped rather than forwarded to a 400.

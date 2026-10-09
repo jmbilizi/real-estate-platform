@@ -42,7 +42,7 @@ export const MAX_RESULT_OFFSET = 10_000;
 
 /** #722. The `officeKey` value that matches listings with no office key. Real keys are digits. */
 export const OFFICE_KEY_UNLISTED = 'unlisted';
-const OFFICE_KEY_PATTERN = new RegExp(`^(\\d{1,19}|${OFFICE_KEY_UNLISTED})$`);
+export const OFFICE_KEY_PATTERN = new RegExp(`^(\\d{1,19}|${OFFICE_KEY_UNLISTED})$`);
 
 /** The offset a `(page, pageSize)` pair asks the database for. One definition, so the bound the
  *  route enforces and the offset the repository issues cannot drift apart. */
