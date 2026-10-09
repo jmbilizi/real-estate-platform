@@ -29,6 +29,7 @@ const OWNED_KEYS = [
   'page',
   'groupBy',
   'groupDrill',
+  'groupLabel',
   FROM_PARAM,
   'groupFrom',
   'type',

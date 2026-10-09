@@ -1,6 +1,7 @@
 import { GATEWAY_ERROR_CODES, type GatewayErrorCode } from '@cribstop/gateway-contracts';
 import { errorBodySchema } from '@cribstop/property-contracts';
 import type {
+  BrokersResponse,
   DetailMedia,
   ErrorBody,
   ListingCardRow,
@@ -216,6 +217,19 @@ export async function getNeighborhoodGroups(
     `/api/listings/neighborhoods${params ? `?${params}` : ''}`,
     signal,
   );
+}
+
+/**
+ * One page of listing office groups for a search (#722). Same request as `getZipGroups`. A group
+ * has an office key, a name and a count.
+ */
+export async function getBrokerGroups(
+  query: ListingSearchQuery &
+    Partial<Pick<ListingGroupsRequest, 'minCount' | 'limit' | 'offset' | 'order'>>,
+  signal?: AbortSignal,
+): Promise<BrokersResponse> {
+  const params = toSearchParams(query).toString();
+  return getJson<BrokersResponse>(`/api/listings/brokers${params ? `?${params}` : ''}`, signal);
 }
 
 /**

@@ -35,14 +35,17 @@ import {
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
 import {
+  BROKER_UNLISTED_NAME,
   type MapBounds,
   maxReachablePage,
   type NeighborhoodRow,
+  OFFICE_KEY_UNLISTED,
   type SearchPlace,
 } from '@cribstop/property-contracts';
 import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
+import { useBrokerGroups } from '@/lib/useBrokerGroups';
 import { useZipGroups, useZipTotal } from '@/lib/useZipGroups';
 import {
   GROUP_PAGE_SIZE,
@@ -508,6 +511,7 @@ export default function SearchExperience({
   const grouped = groupBy !== undefined;
   const neighborhoodGrouped = groupBy === 'neighborhood';
   const zipGrouped = groupBy === 'zip';
+  const brokerGrouped = groupBy === 'broker';
 
   // In the grouped view `page` pages the group cards. The listing search still runs, on page
   // 1, because the filter modal reads its total. The map shows one marker per neighborhood card
@@ -534,8 +538,14 @@ export default function SearchExperience({
     neighborhoodGrouped && !deferred,
   );
   const zipGroups = useZipGroups(requestFilters, page, group.order, zipGrouped && !deferred);
+  const brokerGroups = useBrokerGroups(
+    requestFilters,
+    page,
+    group.order,
+    brokerGrouped && !deferred,
+  );
   /** The paging, status and total of whichever grouping is on. */
-  const activeGroups = zipGrouped ? zipGroups : groups;
+  const activeGroups = zipGrouped ? zipGroups : brokerGrouped ? brokerGroups : groups;
 
   const isLoading = status === 'loading';
   const isError = status === 'error';
@@ -640,8 +650,20 @@ export default function SearchExperience({
    * nothing at all.
    */
   const clearFilters = () => {
-    const { query, zip, street, city, state, neighborhood, boundary, bounds, sort } = filters;
-    applyFilters({ query, zip, street, city, state, neighborhood, boundary, bounds, sort });
+    const { query, zip, street, city, state, neighborhood, officeKey, boundary, bounds, sort } =
+      filters;
+    applyFilters({
+      query,
+      zip,
+      street,
+      city,
+      state,
+      neighborhood,
+      officeKey,
+      boundary,
+      bounds,
+      sort,
+    });
   };
 
   /** Commits a filter set and a group state together: state, URL and paging (#502). */
@@ -719,15 +741,21 @@ export default function SearchExperience({
   };
 
   /**
-   * A ZIP code card opens the search filtered to that ZIP code (#722). The `zip` filter is a real
-   * filter. `groupDrill` records the grouping, so the chip can return to it.
+   * A ZIP code or broker card opens the search filtered to that group (#722): the `zip` filter or
+   * the `officeKey` filter. Both are real filters. `groupDrill` records the grouping, so the chip
+   * can return to it. A broker chip shows `groupLabel`, because the filter holds only the key.
    */
-  const zipDrillTarget = (card: ListingGroupCard) => ({
-    filters: { ...filters, zip: card.key },
-    group: { ...group, groupBy: undefined, drill: 'zip' } as GroupState,
+  const drillTarget = (kind: 'zip' | 'broker', card: ListingGroupCard) => ({
+    filters: kind === 'zip' ? { ...filters, zip: card.key } : { ...filters, officeKey: card.key },
+    group: {
+      ...group,
+      groupBy: undefined,
+      drill: kind,
+      drillLabel: kind === 'broker' ? card.title : undefined,
+    } as GroupState,
   });
-  const zipDrillHref = (card: ListingGroupCard) => {
-    const target = zipDrillTarget(card);
+  const drillCardHref = (card: ListingGroupCard) => {
+    const target = drillTarget(zipGrouped ? 'zip' : 'broker', card);
     const params = writeGroupState(
       filtersToSearchParams(target.filters, currentQuery()),
       target.group,
@@ -738,17 +766,52 @@ export default function SearchExperience({
     const path = typeof window === 'undefined' ? '' : window.location.pathname;
     return `${path}${qs ? `?${qs}` : ''}`;
   };
-  const drillIntoZip = (card: ListingGroupCard) => {
-    const target = zipDrillTarget(card);
+  const drillIntoCard = (card: ListingGroupCard) => {
+    const target = drillTarget(zipGrouped ? 'zip' : 'broker', card);
     setActiveGroupKey(null);
     commitView(target.filters, target.group);
   };
 
-  /** The chip of a drilled group: removing the filter returns to the grouped view it came from. */
-  const removeDrillFilter = () => {
+  /**
+   * The chips of the drill-down filters. The `officeKey` filter has no control in the filter bar, so
+   * it always has a chip. A ZIP chip shows only for a ZIP that a group card opened: any other `zip`
+   * is the search bar's. Removing a chip returns to the grouped view the card came from.
+   */
+  const drillChips = (() => {
+    if (grouped) return [];
+    const chips: { kind: 'zip' | 'broker'; label: string; aria: string }[] = [];
+    if (group.drill === 'zip' && filters.zip) {
+      chips.push({
+        kind: 'zip',
+        label: `ZIP ${filters.zip}`,
+        aria: `ZIP code ${filters.zip} filter on. Remove it to return to the ZIP code groups.`,
+      });
+    }
+    if (filters.officeKey) {
+      const name =
+        group.drillLabel ?? (filters.officeKey === OFFICE_KEY_UNLISTED ? BROKER_UNLISTED_NAME : '');
+      chips.push({
+        kind: 'broker',
+        label: name || 'Broker',
+        aria: `${name ? `Broker ${name}` : 'Broker'} filter on. Remove it to show every broker.`,
+      });
+    }
+    return chips;
+  })();
+  const removeDrillFilter = (kind: 'zip' | 'broker') => {
+    const returns = group.drill === kind;
     commitView(
-      { ...filters, zip: undefined },
-      { ...group, groupBy: group.drill, drill: undefined },
+      {
+        ...filters,
+        zip: kind === 'zip' ? undefined : filters.zip,
+        officeKey: kind === 'broker' ? undefined : filters.officeKey,
+      },
+      {
+        ...group,
+        groupBy: returns ? kind : group.groupBy,
+        drill: returns ? undefined : group.drill,
+        drillLabel: kind === 'broker' ? undefined : group.drillLabel,
+      },
     );
   };
 
@@ -928,15 +991,17 @@ export default function SearchExperience({
                   </span>
                 </span>
               )}
-              {!grouped && group.drill === 'zip' && filters.zip && (
+              {drillChips.map((chip) => (
                 <button
+                  key={chip.kind}
                   type="button"
                   data-testid="clear-group-drill"
-                  aria-label={`ZIP code ${filters.zip} filter on. Remove it to return to the ZIP code groups.`}
-                  onClick={removeDrillFilter}
+                  title={chip.label}
+                  aria-label={chip.aria}
+                  onClick={() => removeDrillFilter(chip.kind)}
                   className="ml-1 inline-flex h-8 min-w-0 shrink cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
                 >
-                  <span className="min-w-0 truncate">ZIP {filters.zip}</span>
+                  <span className="min-w-0 truncate">{chip.label}</span>
                   <svg
                     width="12"
                     height="12"
@@ -951,7 +1016,7 @@ export default function SearchExperience({
                     <path d="M6 6l12 12M18 6L6 18" />
                   </svg>
                 </button>
-              )}
+              ))}
               {filters.bounds && (
                 <button
                   type="button"
@@ -1056,8 +1121,10 @@ export default function SearchExperience({
           <div className="px-5 pb-10 md:px-0 md:pb-0">
             {grouped ? (
               isGroupsLoading ? (
-                zipGrouped ? (
-                  <ListingGroupGridSkeleton testId="zip-group-skeleton" />
+                zipGrouped || brokerGrouped ? (
+                  <ListingGroupGridSkeleton
+                    testId={zipGrouped ? 'zip-group-skeleton' : 'broker-group-skeleton'}
+                  />
                 ) : (
                   <NeighborhoodGroupGridSkeleton />
                 )
@@ -1072,7 +1139,13 @@ export default function SearchExperience({
               ) : activeGroups.rows.length === 0 ? (
                 <div
                   role="status"
-                  data-testid={zipGrouped ? 'zip-group-empty' : 'neighborhood-group-empty'}
+                  data-testid={
+                    zipGrouped
+                      ? 'zip-group-empty'
+                      : brokerGrouped
+                        ? 'broker-group-empty'
+                        : 'neighborhood-group-empty'
+                  }
                   className="rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-16 text-center"
                 >
                   <p className="font-display text-xl font-bold">No {groupNoun.manyLower} match</p>
@@ -1083,18 +1156,26 @@ export default function SearchExperience({
                 </div>
               ) : (
                 <>
-                  {zipGrouped ? (
+                  {zipGrouped || brokerGrouped ? (
                     <ListingGroupGrid
-                      testId="zip-group-grid"
-                      cards={zipGroups.rows.map((zip) => ({
-                        key: zip.key,
-                        title: zip.key,
-                        count: zip.count,
-                      }))}
-                      hrefFor={zipDrillHref}
-                      onSelect={drillIntoZip}
+                      testId={zipGrouped ? 'zip-group-grid' : 'broker-group-grid'}
+                      cards={
+                        zipGrouped
+                          ? zipGroups.rows.map((zip) => ({
+                              key: zip.key,
+                              title: zip.key,
+                              count: zip.count,
+                            }))
+                          : brokerGroups.rows.map((broker) => ({
+                              key: broker.key,
+                              title: broker.name,
+                              count: broker.count,
+                            }))
+                      }
+                      hrefFor={drillCardHref}
+                      onSelect={drillIntoCard}
                       describe={(card) =>
-                        `ZIP code ${card.title}, ${card.count.toLocaleString()} ${card.count === 1 ? 'home' : 'homes'}`
+                        `${zipGrouped ? 'ZIP code' : 'Broker'} ${card.title}, ${card.count.toLocaleString()} ${card.count === 1 ? 'home' : 'homes'}`
                       }
                     />
                   ) : (
@@ -1190,20 +1271,26 @@ const SORT_OPTIONS: ToolbarOption<SortValue>[] = [
   { value: 'newly-listed', label: 'Newest' },
 ];
 
-const GROUP_BY_OPTIONS: { value: GroupBy | 'none'; label: string }[] = [
+const GROUP_BY_BASE: { value: GroupBy | 'none'; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'neighborhood', label: 'Neighborhood' },
 ];
 
-/** #722. Offered only when the search spans more than one ZIP code. */
+/** #722. "ZIP code" needs a search that spans more than one ZIP code. "Broker" always shows. */
+const GROUP_BY_OPTIONS: { value: GroupBy | 'none'; label: string }[] = [
+  ...GROUP_BY_BASE,
+  { value: 'broker', label: 'Broker' },
+];
 const GROUP_BY_OPTIONS_WITH_ZIP: { value: GroupBy | 'none'; label: string }[] = [
-  ...GROUP_BY_OPTIONS,
+  ...GROUP_BY_BASE,
   { value: 'zip', label: 'ZIP code' },
+  { value: 'broker', label: 'Broker' },
 ];
 
 const GROUP_NOUNS: Record<GroupBy, { one: string; many: string; manyLower: string }> = {
   neighborhood: { one: 'Neighborhood', many: 'Neighborhoods', manyLower: 'neighborhoods' },
   zip: { one: 'ZIP code', many: 'ZIP codes', manyLower: 'ZIP codes' },
+  broker: { one: 'Broker', many: 'Brokers', manyLower: 'brokers' },
 };
 
 const GROUP_ORDER_OPTIONS: { value: GroupOrder; label: string }[] = [

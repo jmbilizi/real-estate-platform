@@ -39,6 +39,8 @@ export interface RecordInput {
   listedAt?: string | null;
   modifiedAt?: string | null;
   office?: string;
+  /** Bright `ListOfficeKey`. Omitted means no key. */
+  officeKey?: string | null;
   offerKind?: 'sale' | 'rent';
   daysOnMarket?: number | null;
   mlsNumber?: string | null;
@@ -127,6 +129,7 @@ function row(
     broker_phone: '555-0100',
     broker_email: 'e2e-fixture-broker@example.com',
     office_name: office,
+    office_key: input.officeKey ?? null,
     office_broker_lead_phone: null,
     office_broker_lead_email: null,
     listing_agent_name: 'E2E Fixture Agent',

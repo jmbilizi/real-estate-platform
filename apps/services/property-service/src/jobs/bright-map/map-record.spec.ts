@@ -327,6 +327,16 @@ describe('mapBrightPropertyRecord', () => {
     expect(result.listing.attribution.officeName).toBe('Acme Realty');
   });
 
+  it('maps ListOfficeKey to the office key, and maps a record without one (#722)', () => {
+    const keyed = mapBrightPropertyRecord({ ...BASE_PAYLOAD, ListOfficeKey: 1234567 }, ctx());
+    if (keyed.kind !== 'mapped') throw new Error('expected mapped');
+    expect(keyed.listing.attribution.officeKey).toBe('1234567');
+
+    const keyless = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
+    if (keyless.kind !== 'mapped') throw new Error('expected mapped');
+    expect(keyless.listing.attribution.officeKey).toBeNull();
+  });
+
   it('is idempotent: mapping the same payload twice yields identical output', () => {
     const first = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
     const second = mapBrightPropertyRecord(BASE_PAYLOAD, ctx());
