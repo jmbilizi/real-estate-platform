@@ -8,6 +8,13 @@ metadata:
 spec:
   # Patches can confirm or override this default replica count
   replicas: 1
+  # #755: same rollout rule as property-service (#388). The old pod keeps serving until the new
+  # pod is Ready.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: cribstop-web
@@ -62,6 +69,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+          # #755: keeps the pod serving while the Service endpoints drop it (see api-gateway).
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
           readinessProbe:
             httpGet:
               path: /api/health
