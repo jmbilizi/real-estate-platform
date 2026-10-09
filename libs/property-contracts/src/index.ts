@@ -1,4 +1,5 @@
 export * from './common';
+export * from './area-polygon';
 export * from './search-request';
 export * from './listing-card';
 export * from './listing-detail';

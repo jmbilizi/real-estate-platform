@@ -62,6 +62,10 @@ export interface HomeInput {
   /** Unit numbers. A record names its unit by index. */
   units?: string[];
   records: (RecordInput & { unit?: number })[];
+  /** #747. Coordinates and city. Default to 20.5, 20.5 and `COLLAPSE_CITY`. */
+  latitude?: number;
+  longitude?: number;
+  city?: string;
   /** Defaults to `COLLAPSE_ZIP`. */
   zip?: string;
 }
@@ -80,6 +84,7 @@ function row(
   index: number,
   street: string,
   zip: string,
+  place: { city: string; latitude: number; longitude: number },
 ): ListingRow {
   const status = input.status === undefined ? 'Active' : input.status;
   const office = input.office ?? 'E2E Fixture Office A';
@@ -106,11 +111,11 @@ function row(
     lot_sqft: null,
     year_built: null,
     neighborhood: 'Collapse Heights',
-    city: COLLAPSE_CITY,
+    city: place.city,
     state: COLLAPSE_STATE,
     zip5: zip,
-    latitude: 20.5,
-    longitude: 20.5,
+    latitude: place.latitude,
+    longitude: place.longitude,
     description: null,
     description_source: null,
     description_moderation: 'approved',
@@ -160,7 +165,7 @@ export async function seedHomes(
         community_id: communityId,
         address_raw: home.street,
         street_line: home.street,
-        city: COLLAPSE_CITY,
+        city: home.city ?? COLLAPSE_CITY,
         state: COLLAPSE_STATE,
         zip5: home.zip ?? COLLAPSE_ZIP,
         address_key: buildAddressKey({
@@ -168,8 +173,8 @@ export async function seedHomes(
           state: COLLAPSE_STATE,
           zip5: home.zip ?? COLLAPSE_ZIP,
         }),
-        latitude: 20.5,
-        longitude: 20.5,
+        latitude: home.latitude ?? 20.5,
+        longitude: home.longitude ?? 20.5,
         neighborhood: 'Collapse Heights',
         property_type: home.propertyType ?? 'Single Family',
         year_built: 1990,
@@ -207,6 +212,11 @@ export async function seedHomes(
           index,
           home.street,
           home.zip ?? COLLAPSE_ZIP,
+          {
+            city: home.city ?? COLLAPSE_CITY,
+            latitude: home.latitude ?? 20.5,
+            longitude: home.longitude ?? 20.5,
+          },
         );
         ids.push(await upsertListing(client, written));
         rows.push(written);

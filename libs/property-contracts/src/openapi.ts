@@ -294,6 +294,9 @@ export function toOpenApiDocument() {
             'The optional `bounds` limits the result to a viewport. It is ANDed with every other ' +
             'filter, so the result is the searched place within the viewport. A listing whose ' +
             'street address is withheld has no coordinates, so it is not in a viewport result.\n\n' +
+            'The optional `area` is a drawn GeoJSON Polygon. Only listings inside it match. It is ' +
+            'ANDed with every other filter, including `boundary` and `bounds`. A self-intersecting ' +
+            'or zero-area shape is a 400.\n\n' +
             'A signed-in request also gets `isSaved` and `isFavorited` on each result, resolved ' +
             'by home, and a `private, no-store` response. A signed-out request never gets them ' +
             'and is never rejected for lacking a credential.',

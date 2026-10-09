@@ -309,6 +309,14 @@ export function buildSearchQuery(request: SearchRequest): {
     );
   }
 
+  // #747. The user's drawn shape, an extra AND beside `boundary` and `bounds`. The contract's
+  // `area` schema rejects a self-intersecting or zero-area ring, so PostGIS never sees one. `v.geog`
+  // is NULL for a withheld address (migration 030), so a hidden listing never matches. Every read
+  // path (list, count, pins, group rows) builds its WHERE from these conditions.
+  if (request.area) {
+    conditions.push(`ST_Covers(ST_GeomFromGeoJSON(${bind(request.area)})::geography, v.geog)`);
+  }
+
   // #558. The viewport, as an extra AND on the place scope. `v.latitude` and `v.longitude` are the
   // view's masked columns (migration 030). A listing with a withheld address has NULL there, fails
   // the range test, and never matches, so a viewport cannot confirm or place a hidden address. The

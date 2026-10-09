@@ -8,6 +8,7 @@ import {
   STATUS_FILTER_VALUES,
   statusFilterSchema,
 } from './common';
+import { areaPolygon } from './area-polygon';
 
 /** Preserves the client's existing paging arithmetic in
  *  `apps/clients/cribstop/next/src/app/(with-search)/search/page.tsx`. */
@@ -389,6 +390,8 @@ export const searchRequestSchema = z.strictObject({
         'instead — this and `boundary` should not both be sent for the same conceptual place.',
     ),
   boundary: boundaryPolygon.optional(),
+  // #747. The user's drawn shape. `boundary` is the place outline, `area` is the user's shape.
+  area: areaPolygon.optional(),
   bounds: searchBoundsSchema.optional(),
   openHouse: queryBoolean.optional(),
   newConstruction: queryBoolean.optional(),
