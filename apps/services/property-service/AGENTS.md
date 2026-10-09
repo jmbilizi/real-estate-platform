@@ -290,6 +290,12 @@ that empties `listings` while the checkpoint still reads complete still refills.
   landed. So a restart always resumes right after the last slice that is actually, contiguously, in
   the database — never past one still in flight or one that failed — and the upserts make any
   re-applied slice a no-op. The worker resumes an incomplete backfill before any other task.
+- **Write pacing (#755).** `applyPage` writes a slice in transactions of
+  `BRIGHT_SYNC_APPLY_CHUNK_SIZE` records (default 250), not one transaction per slice. After each
+  chunk the worker rests for `BRIGHT_SYNC_APPLY_PACE_RATIO` (default 1) times the chunk's duration.
+  A ratio of 1 keeps one apply lane to half of one connection. Set 0 to turn the rest off. A
+  `$select` change resets every backfill checkpoint (#743) and rewrites every listing, so this is
+  what keeps that full re-sync from starving API reads on the shared database.
 - **Sold.** `Closed` runs only with `CloseDate ge today - BRIGHT_SOLD_LOOKBACK_DAYS` (default 365),
   and only when `BRIGHT_SOLD_DISPLAY_DELAY_DAYS` is set. Unset, every sold fails closed in the
   mapper, so the pass would stage about 315,000 records to publish none. It is skipped. Both base
@@ -461,6 +467,12 @@ a size variant. A record must be identifiably a photo by `MediaType` or URL exte
   — every other table passes `{ function: 'set_updated_at' }` and no definition. The trigger covers
   `updated_at` only: `listings.last_updated` is MLS feed freshness and must never be advanced by a
   local write.
+- **Build an index on a sync table with `CONCURRENTLY`, in a migration with `pgm.noTransaction()`**
+  (#755). A plain `CREATE INDEX` blocks every write for the whole build. The sync stalls and API
+  reads time out behind it. `src/db/migration-index-guard.spec.ts` fails a migration after 058 that
+  breaks the rule. Migration 055 predates the guard. A migration that adds a column needs only a
+  short lock, so the sync's transactions must stay short (see "Write pacing" under the Bright sync
+  worker).
 - **Always pass an explicit `{ name: 'idx_...' }`** for any expression, opclass, or partial index,
   or node-pg-migrate generates identifiers like `"properties_(lower(neighborhood))_index"`.
 - `NULLS NOT DISTINCT` is only expressible via
@@ -844,6 +856,18 @@ the Property API document. Never publish a second document.
   `closed` and `lost` end the assignment, so the lead leaves the agent list.
 - Every change goes through `changeLeadStatus` with `actorRole = 'Agent'`. Every detail read writes
   a `lead_access_audit` row with role `Agent`.
+
+## Cheap home page reads (#755)
+
+- `GET /listings?skipTotal=true` skips the exact `COUNT(*)`, which scans every matching listing and
+  was the larger half of a home row's cost. `total` then holds the size of the page and `pageCount`
+  is 1 for a non-empty page. Only a short list that never pages may send it. The map, neighborhoods
+  and group endpoints do not accept it.
+- `createSingleFlight` (`single-flight.ts`) shares one query between identical reads that are in
+  flight together: `/listings`, `/listings/meta` and `/listings/neighborhoods`. It keeps no result
+  after the query ends, so it adds no staleness.
+- `src/main.ts` finishes in-flight requests on SIGTERM. The Deployments wait 10 s in `preStop`
+  first, so the Service has dropped the pod before the process stops.
 
 ## One card per home (#716)
 

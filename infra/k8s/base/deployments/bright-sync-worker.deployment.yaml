@@ -103,3 +103,10 @@ spec:
             # ── Slice apply (#359) ───────────────────────────────────────────────────────
             - name: BRIGHT_SYNC_APPLY_CONCURRENCY
               value: "4" # pages applied at once, on separate pool connections — the write-path ceiling
+            # ── Write pacing (#755) ──────────────────────────────────────────────────────
+            # A slice is written in short transactions, with a rest after each. The rest keeps a
+            # full backfill (a $select change resets every checkpoint) from starving API reads.
+            - name: BRIGHT_SYNC_APPLY_CHUNK_SIZE
+              value: "250" # records per write transaction
+            - name: BRIGHT_SYNC_APPLY_PACE_RATIO
+              value: "1" # rest after each chunk = this x the chunk's time; 0 turns the rest off

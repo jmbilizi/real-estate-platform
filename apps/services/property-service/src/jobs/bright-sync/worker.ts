@@ -27,6 +27,7 @@ import { loadListingStatuses, mapBrightPayloads } from '../bright-map/run';
 import { isSampleFeed } from '../bright-map/sample';
 import type { ListingStatusLookup } from '../bright-map/status';
 import { sweepOtherFeedTiers } from '../bright-map/sweep';
+import { applyInChunks } from './apply-chunks';
 import { PROBE_DEFAULT_MAX_TAKEDOWN, runProbeSweep } from './probe';
 import {
   claimRequestedRun,
@@ -87,6 +88,10 @@ export interface WorkerSettings {
   readonly pageSize: number;
   /** Pages applied at once, on separate pool connections (#359). The write path's own ceiling. */
   readonly applyConcurrency: number;
+  /** Records per write transaction (#755). A slice is applied in chunks this size. */
+  readonly applyChunkSize: number;
+  /** Rest after each chunk, as a multiple of the chunk's duration (#755). 0 turns the rest off. */
+  readonly applyPaceRatio: number;
 }
 
 function numberFrom(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -134,6 +139,8 @@ export function resolveWorkerSettings(env: NodeJS.ProcessEnv = process.env): Wor
     concurrency: positiveIntFrom(env, 'BRIGHT_SYNC_CONCURRENCY', 6),
     pageSize,
     applyConcurrency: positiveIntFrom(env, 'BRIGHT_SYNC_APPLY_CONCURRENCY', 4),
+    applyChunkSize: positiveIntFrom(env, 'BRIGHT_SYNC_APPLY_CHUNK_SIZE', 250),
+    applyPaceRatio: numberFrom(env, 'BRIGHT_SYNC_APPLY_PACE_RATIO', 1),
   };
 }
 
@@ -292,6 +299,64 @@ function createDeps(
   // Each run starts at the configured concurrency, whatever an earlier run halved it to (#348).
   limiter.resetConcurrency();
 
+  /** Stages and maps one chunk of a slice in its own transaction. */
+  const applyChunk = async (records: readonly Record<string, unknown>[]): Promise<PageResult> => {
+    const staged = records
+      .map((record) => toStaged(record))
+      .filter((record): record is StagedRecord => record !== null);
+    if (staged.length > 0) {
+      await staging.stageRecords({
+        resource: 'BrightProperties',
+        feedTier: feed,
+        runId: run.id,
+        records: staged,
+      });
+    }
+    const client = await pool.connect();
+    try {
+      return await inTransaction(client, async () => {
+        const { report, rejected } = await mapBrightPayloads(client, [...records], {
+          feed,
+          soldDisplayDelayDays: settings.soldDisplayDelayDays,
+          statuses,
+        });
+        // A held listing whose current record no longer maps must not stay advertised with the
+        // old data. It becomes Off market (#349): its page keeps the address and the property
+        // record only. It comes back when the record maps again.
+        const keyed = rejected.filter(
+          (r): r is { listingKey: string; reason: string } => r.listingKey !== null,
+        );
+        const held = await heldListingIds(
+          client,
+          keyed.map((r) => r.listingKey),
+        );
+        let takenDown = report.takenDown;
+        for (const { listingKey, reason } of keyed) {
+          const id = held.get(listingKey);
+          if (id !== undefined) {
+            takenDown += await markListingsOffMarket(
+              client,
+              [id],
+              `Bright sync: record now rejected (${reason})`,
+            );
+          }
+        }
+        return {
+          staged: report.staged,
+          mapped: report.mapped,
+          published: report.published,
+          withheld: report.withheld,
+          takenDown,
+          withheldByReason: report.withheldByReason,
+          suppressedByFlag: report.suppressedByFlag,
+          suppressionAnomalies: report.suppressionAnomalies,
+        };
+      });
+    } finally {
+      client.release();
+    }
+  };
+
   return {
     serviceRoot: config.endpoint.serviceRoot,
     pageSize: settings.pageSize,
@@ -317,62 +382,13 @@ function createDeps(
         },
       }),
 
-    async applyPage(records): Promise<PageResult> {
-      const staged = records
-        .map((record) => toStaged(record as Record<string, unknown>))
-        .filter((record): record is StagedRecord => record !== null);
-      if (staged.length > 0) {
-        await staging.stageRecords({
-          resource: 'BrightProperties',
-          feedTier: feed,
-          runId: run.id,
-          records: staged,
-        });
-      }
-      const client = await pool.connect();
-      try {
-        return await inTransaction(client, async () => {
-          const { report, rejected } = await mapBrightPayloads(
-            client,
-            records as Record<string, unknown>[],
-            { feed, soldDisplayDelayDays: settings.soldDisplayDelayDays, statuses },
-          );
-          // A held listing whose current record no longer maps must not stay advertised with the
-          // old data. It becomes Off market (#349): its page keeps the address and the property
-          // record only. It comes back when the record maps again.
-          const keyed = rejected.filter(
-            (r): r is { listingKey: string; reason: string } => r.listingKey !== null,
-          );
-          const held = await heldListingIds(
-            client,
-            keyed.map((r) => r.listingKey),
-          );
-          let takenDown = report.takenDown;
-          for (const { listingKey, reason } of keyed) {
-            const id = held.get(listingKey);
-            if (id !== undefined) {
-              takenDown += await markListingsOffMarket(
-                client,
-                [id],
-                `Bright sync: record now rejected (${reason})`,
-              );
-            }
-          }
-          return {
-            staged: report.staged,
-            mapped: report.mapped,
-            published: report.published,
-            withheld: report.withheld,
-            takenDown,
-            withheldByReason: report.withheldByReason,
-            suppressedByFlag: report.suppressedByFlag,
-            suppressionAnomalies: report.suppressionAnomalies,
-          };
-        });
-      } finally {
-        client.release();
-      }
-    },
+    // #755. A slice is applied in short transactions with a rest after each, so the writer never
+    // holds the database long enough to starve the API reads that share it.
+    applyPage: (records): Promise<PageResult> =>
+      applyInChunks(records, applyChunk, {
+        chunkSize: settings.applyChunkSize,
+        paceRatio: settings.applyPaceRatio,
+      }),
 
     readState: <T>(stream: string) => readState<T>(pool, feed, stream),
     writeState: (stream, state) => writeState(pool, feed, stream, state),
