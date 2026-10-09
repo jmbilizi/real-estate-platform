@@ -1,4 +1,9 @@
-import { isSimpleRing, type MapBounds, MAX_AREA_VERTICES } from '@cribstop/property-contracts';
+import {
+  isSimpleRing,
+  MAX_AREA_SPAN_DEGREES,
+  MAX_AREA_VERTICES,
+  type MapBounds,
+} from '@cribstop/property-contracts';
 
 /**
  * The drawn area as a filter (#747). Pure helpers, so the draw gesture, the URL and the request
@@ -89,7 +94,9 @@ const TOLERANCE_STEPS = [0, 0.0005, 0.001, 0.002, 0.004, 0.008, 0.016, 0.03];
 export type DrawResult =
   | { status: 'ok'; ring: LngLat[] }
   | { status: 'too-small' }
-  | { status: 'crossed' };
+  | { status: 'crossed' }
+  | { status: 'too-complex' }
+  | { status: 'too-large' };
 
 /**
  * A finger or mouse path as an area. The path closes when it ends. Fewer than three distinct
@@ -109,14 +116,22 @@ export function drawnPathToRing(path: readonly LngLat[]): DrawResult {
     Math.max(...lats) - Math.min(...lats),
   );
 
+  const span = Math.max(Math.max(...lngs) - Math.min(...lngs), Math.max(...lats) - Math.min(...lats));
+  if (span > MAX_AREA_SPAN_DEGREES) return { status: 'too-large' };
+
+  let simpleButLong = false;
   for (const step of TOLERANCE_STEPS) {
     const simplified = normalize(step === 0 ? points : simplifyLine(points, diagonal * step));
-    if (simplified.length < 3 || simplified.length > MAX_DRAWN_VERTICES) continue;
+    if (simplified.length < 3) continue;
+    if (simplified.length > MAX_DRAWN_VERTICES) {
+      simpleButLong ||= isSimpleRing(close(simplified));
+      continue;
+    }
     if (signedArea(simplified) === 0) continue;
     const ring = close(simplified);
     if (isSimpleRing(ring)) return { status: 'ok', ring };
   }
-  return { status: 'crossed' };
+  return { status: simpleButLong ? 'too-complex' : 'crossed' };
 }
 
 /** The ring as a GeoJSON Polygon string, the form the contract's `area` takes. */

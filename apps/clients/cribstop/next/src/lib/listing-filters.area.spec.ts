@@ -48,10 +48,12 @@ describe('area in the page URL', () => {
     expect(written.get('tracking')).toBe('1');
   });
 
-  it('is dropped when a drill-down moves to another place', () => {
-    expect(withoutOwnedKeys(new URLSearchParams({ area: PARAM, beds: '2' })).has('area')).toBe(
-      false,
+  it('is carried into a drill-down, because it is a filter and the card counts used it', () => {
+    const carried = withoutOwnedKeys(
+      new URLSearchParams({ area: PARAM, viewport: '-77.06,38.79,-77.03,38.81' }),
     );
+    expect(carried.get('area')).toBe(PARAM);
+    expect(carried.has('viewport')).toBe(false);
   });
 });
 

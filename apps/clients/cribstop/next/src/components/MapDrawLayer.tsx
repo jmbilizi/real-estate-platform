@@ -11,12 +11,13 @@ import {
 } from '@/lib/draw-gesture';
 
 /** What the parent made of a finished line. Anything but `ok` keeps draw mode on. */
-export type DrawOutcome = 'ok' | 'too-small' | 'crossed';
+export type DrawOutcome = 'ok' | 'too-small' | 'crossed' | 'too-complex';
 
 const HINT = 'Press and drag to draw a loop around the homes you want. Lift to finish.';
 const NOTICES: Record<Exclude<DrawOutcome, 'ok'>, string> = {
   'too-small': 'That shape is too small. Draw a loop around the homes you want.',
   crossed: 'That line crosses itself. Draw the loop again without crossing it.',
+  'too-complex': 'That shape is too detailed. Draw a simpler loop.',
 };
 
 /**
@@ -90,16 +91,26 @@ export default function MapDrawLayer({
         style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
         onPointerDown={(event) => {
           event.stopPropagation();
+          // The primary button or a touch only. A right click opens a menu and never sends a release.
+          if (event.button !== 0) return;
+          const earlier = px.current;
           px.current = [];
-          setNotice(null);
           if (gesture.down(toPointer(event))) {
+            setNotice(null);
             // A capture keeps the drag on this surface when the finger leaves the map.
             surface.current?.setPointerCapture?.(event.pointerId);
+          } else {
+            // A second finger. The first finger's line stays.
+            px.current = earlier;
           }
         }}
         onPointerMove={(event) => gesture.move(toPointer(event))}
         onPointerUp={(event) => gesture.up(toPointer(event))}
         onPointerCancel={() => {
+          px.current = [];
+          gesture.cancel();
+        }}
+        onLostPointerCapture={() => {
           px.current = [];
           gesture.cancel();
         }}

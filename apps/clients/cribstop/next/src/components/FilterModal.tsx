@@ -29,6 +29,7 @@ const PRESERVED_ON_CLEAR = [
   'officeKey',
   'boundary',
   'bounds',
+  'area',
   'sort',
 ] as const;
 
