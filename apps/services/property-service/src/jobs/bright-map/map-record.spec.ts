@@ -232,6 +232,24 @@ describe('mapBrightPropertyRecord', () => {
     expect(result.kind).toBe('mapped');
   });
 
+  it('drops the sold price when the seller withheld the price (#146)', () => {
+    const sold = {
+      ...BASE_PAYLOAD,
+      StandardStatus: 'Closed',
+      ClosePrice: 495000,
+      CloseDate: '2000-01-01',
+    };
+    const shown = mapBrightPropertyRecord(sold, ctx({ soldDisplayDelayDays: 0 }));
+    const withheld = mapBrightPropertyRecord(
+      { ...sold, InternetListingDisplayPricesYN: false },
+      ctx({ soldDisplayDelayDays: 0 }),
+    );
+    if (shown.kind !== 'mapped' || withheld.kind !== 'mapped') throw new Error('expected mapped');
+    expect(shown.listing.closePrice).toBe(495000);
+    expect(withheld.listing.closePrice).toBeNull();
+    expect(withheld.listing.closeDate).toBe('2000-01-01');
+  });
+
   it('rounds a fractional LotSizeSquareFeet to fit the integer lot_sqft column (#207)', () => {
     const result = mapBrightPropertyRecord({ ...BASE_PAYLOAD, LotSizeSquareFeet: 127195.2 }, ctx());
     if (result.kind !== 'mapped') throw new Error('expected mapped');

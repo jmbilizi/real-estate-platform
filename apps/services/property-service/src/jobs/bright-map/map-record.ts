@@ -355,7 +355,9 @@ export function mapBrightPropertyRecord(
       status: statusMap.code,
       consumerStatus: statusMap.consumerStatus,
       listPrice,
-      closePrice: toNumber(payload.ClosePrice),
+      // A seller who withheld the price withholds the sold price too (#146, #228). The view does
+      // not mask `close_price`, so the mapper does.
+      closePrice: suppression.priceDisplayAllowed ? toNumber(payload.ClosePrice) : null,
       closeDate,
       description: nonBlank(payload.PublicRemarks),
       attribution: attribution.fields,
