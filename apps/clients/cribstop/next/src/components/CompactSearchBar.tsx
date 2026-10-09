@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react';
+import DismissButton from '@/components/DismissButton';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
@@ -1780,21 +1781,7 @@ export default function CompactSearchBar({
           {/* Title row */}
           <div className="flex items-center justify-between px-4 pt-4 pb-3">
             <p className="text-[15px] font-bold text-ink tracking-tight">Search homes</p>
-            <button
-              onClick={onClose}
-              className="h-11 w-11 flex items-center justify-center rounded-full hover:bg-surface-alt transition-colors"
-              aria-label="Close search"
-            >
-              <svg
-                className="h-[16px] w-[16px] text-ink"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <DismissButton onClick={() => onClose?.()} label="Close search" />
           </div>
           {/* Listing type now lives only in the "What" card below (#243) — this bar used to show
               it twice, with no guarantee the two stayed in sync. */}

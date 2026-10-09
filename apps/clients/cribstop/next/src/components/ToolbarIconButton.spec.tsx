@@ -35,12 +35,68 @@ describe('ToolbarIconButton (#748)', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
     rerender(<ToolbarIconButton label="Group" icon={GROUP_ICON} pressed />);
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    expect(button.className).toContain('bg-ink');
+    expect(button.className).toContain('text-ink');
+  });
+
+  it('shows the active state with a darker, filled icon and no filled background', () => {
+    const { rerender } = render(<ToolbarIconButton label="Group" icon={GROUP_ICON} />);
+    const idle = screen.getByRole('button', { name: 'Group' });
+    expect(idle.className).toContain('text-ink-muted');
+    expect(idle.querySelector('svg')?.getAttribute('fill')).toBe('none');
+    rerender(<ToolbarIconButton label="Group" icon={GROUP_ICON} pressed />);
+    const on = screen.getByRole('button', { name: 'Group' });
+    expect(on.className).not.toContain('text-ink-muted');
+    expect(on.className).toContain('bg-transparent');
+    expect(on.className).toContain('border-gray-300');
+    expect(on.className).not.toContain('bg-ink');
+    expect(on.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');
+    expect(on.getAttribute('aria-pressed')).toBe('true');
+    rerender(<ToolbarIconButton label="Group" icon={GROUP_ICON} active />);
+    expect(
+      screen.getByRole('button', { name: 'Group' }).querySelector('svg')?.getAttribute('fill'),
+    ).toBe('currentColor');
   });
 
   it('leaves aria-pressed off when it is not a toggle', () => {
     render(<ToolbarIconButton label="Group" icon={GROUP_ICON} active />);
     expect(screen.getByRole('button', { name: 'Group' }).hasAttribute('aria-pressed')).toBe(false);
+  });
+
+  it('sets the tooltip from the label, or from tooltip when given', () => {
+    const { rerender } = render(<ToolbarIconButton label="Draw an area" icon={GROUP_ICON} />);
+    expect(screen.getByRole('button', { name: 'Draw an area' }).getAttribute('title')).toBe(
+      'Draw an area',
+    );
+    rerender(<ToolbarIconButton label="Sort, current: Newest" tooltip="Sort" icon={GROUP_ICON} />);
+    const button = screen.getByRole('button', { name: 'Sort, current: Newest' });
+    expect(button.getAttribute('title')).toBe('Sort');
+  });
+
+  it('has a transparent fill and a light border, with no white fill', () => {
+    render(<ToolbarIconButton label="Group" icon={GROUP_ICON} />);
+    const cls = screen.getByRole('button', { name: 'Group' }).className;
+    expect(cls).toContain('bg-transparent');
+    expect(cls).toContain('border-gray-300');
+    expect(cls).toContain('hover:bg-surface-soft');
+    expect(cls).not.toContain('bg-white');
+  });
+
+  it('keeps a caller-set absolute position instead of forcing relative', () => {
+    const { rerender } = render(<ToolbarIconButton label="Close" icon={GROUP_ICON} />);
+    expect(screen.getByRole('button', { name: 'Close' }).className).toContain('relative');
+    rerender(
+      <ToolbarIconButton label="Close" icon={GROUP_ICON} className="absolute right-4 top-4" />,
+    );
+    const cls = screen.getByRole('button', { name: 'Close' }).className;
+    expect(cls).toContain('absolute');
+    expect(cls).not.toMatch(/(^|s)relative(s|$)/);
+  });
+
+  it('does not light up on hover while disabled', () => {
+    render(<ToolbarIconButton label="Next" icon={GROUP_ICON} disabled />);
+    expect(screen.getByRole('button', { name: 'Next' }).className).toContain(
+      'disabled:hover:bg-transparent',
+    );
   });
 
   it('is a 44 px round tap target and calls onClick', () => {
@@ -59,6 +115,9 @@ describe('ToolbarIconButton (#748)', () => {
     expect(read('SearchExperience.tsx')).toContain('<ToolbarIconButton');
     expect(read('ToolbarSelect.tsx')).toContain('<ToolbarIconButton');
     expect(read('CustomMapControls.tsx')).toContain('<ToolbarIconButton');
+    for (const f of ['DismissButton', 'CarouselShell', 'PropertyGallery', 'ListingDetailContent']) {
+      expect(read(f + '.tsx')).toContain('<ToolbarIconButton');
+    }
     expect(fs.existsSync(path.join(__dirname, 'FilterButton.tsx'))).toBe(false);
   });
 });

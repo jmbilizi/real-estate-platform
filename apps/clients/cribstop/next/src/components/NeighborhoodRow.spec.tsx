@@ -217,7 +217,7 @@ describe('NeighborhoodRow (#393)', () => {
     expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toBeInTheDocument();
   });
 
-  it('keeps the "See all" link and arrow buttons at a 44px tap target via a hit-area pseudo element, with a ~32px visual box that never shrinks beside a long heading (#423, #447)', () => {
+  it('keeps the "See all" link and arrow buttons at a 44px tap target, with a ~32px visual box on the See all chip that never shrinks beside a long heading (#423, #447)', () => {
     renderRow({ href: '/homes-for-sale', title: 'Explore neighborhoods across the region' });
 
     // The whole title + chip is one link (#423): its own box is only as tall as its content
@@ -235,10 +235,9 @@ describe('NeighborhoodRow (#393)', () => {
 
     for (const label of ['Scroll left', 'Scroll right']) {
       const button = screen.getByLabelText(label);
-      expect(button.className).toContain('flex-shrink-0');
-      expect(button.className).toContain('h-8');
-      expect(button.className).toContain('w-8');
-      expect(button.className).toContain('before:-inset-1.5');
+      expect(button.className).toContain('shrink-0');
+      expect(button.className).toContain('h-11');
+      expect(button.className).toContain('w-11');
     }
   });
 

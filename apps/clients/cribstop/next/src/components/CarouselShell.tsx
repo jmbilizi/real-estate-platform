@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import ToolbarIconButton, { BACK_ICON, FORWARD_ICON } from '@/components/ToolbarIconButton';
 
 /**
  * Chrome shared by `ListingRow` and `NeighborhoodRow` (#508). Both rows take their scroller,
@@ -78,33 +79,19 @@ export function CarouselArrows({
   /** Hides the arrows at every width, for a failed row. */
   hidden?: boolean;
 }) {
-  const button = (dir: 'left' | 'right', disabled: boolean, path: string) => (
-    <button
-      type="button"
+  const button = (dir: 'left' | 'right', disabled: boolean, icon: ReactNode) => (
+    <ToolbarIconButton
+      label={`Scroll ${dir}`}
+      icon={icon}
       onClick={() => onScroll(dir)}
-      aria-label={`Scroll ${dir}`}
       disabled={disabled}
-      className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center before:absolute before:-inset-1.5 before:content-[''] ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-    >
-      <span
-        className={`flex h-8 w-8 items-center justify-center rounded-full border border-surface-border bg-white text-ink transition ${disabled ? '' : 'hover:bg-surface-alt'}`}
-      >
-        <svg
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.5}
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d={path} />
-        </svg>
-      </span>
-    </button>
+      className="disabled:opacity-50"
+    />
   );
   return (
     <div className={`items-center gap-3 ${hidden ? 'hidden' : 'hidden sm:flex'}`}>
-      {button('left', atStart, 'M15 19l-7-7 7-7')}
-      {button('right', atEnd, 'M9 5l7 7-7 7')}
+      {button('left', atStart, BACK_ICON)}
+      {button('right', atEnd, FORWARD_ICON)}
     </div>
   );
 }
