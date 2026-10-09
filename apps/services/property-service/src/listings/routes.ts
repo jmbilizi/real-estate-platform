@@ -3,6 +3,8 @@ import {
   type ErrorBody,
   exceedsResultWindow,
   idSchema,
+  type ListingGroupsRequest,
+  listingGroupsRequestSchema,
   MAP_PIN_CAP_DEFAULT,
   type MapRequest,
   mapRequestSchema,
@@ -17,6 +19,7 @@ import {
 } from '@cribstop/property-contracts';
 import { PRIVATE_CACHE_CONTROL, type SavedStateReader, withSavedFlags } from '../saved/identity';
 import type { GalleryLoader } from './gallery-loader';
+import { getZipGroups } from './group-counts';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
 import {
@@ -94,9 +97,17 @@ function parseQuery(
   query: unknown,
 ): ParseResult<NeighborhoodsRequest>;
 function parseQuery(
-  schema: typeof searchRequestSchema | typeof mapRequestSchema | typeof neighborhoodsRequestSchema,
+  schema: typeof listingGroupsRequestSchema,
   query: unknown,
-): ParseResult<SearchRequest | MapRequest | NeighborhoodsRequest> {
+): ParseResult<ListingGroupsRequest>;
+function parseQuery(
+  schema:
+    | typeof searchRequestSchema
+    | typeof mapRequestSchema
+    | typeof neighborhoodsRequestSchema
+    | typeof listingGroupsRequestSchema,
+  query: unknown,
+): ParseResult<SearchRequest | MapRequest | NeighborhoodsRequest | ListingGroupsRequest> {
   const parsed = schema.safeParse(query);
   if (parsed.success) {
     return { ok: true as const, value: parsed.data };
@@ -268,6 +279,20 @@ export function createListingsRouter(
       const envelope = await getNeighborhoods(pool, parsed.value);
       // Same cache policy as /listings/meta: an aggregate read from an index or the search view, safe for the
       // shared cache to hold far longer than the browser does.
+      res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
+    }),
+  );
+
+  // #722. Registered before `/listings/:id` for the same reason as the routes above.
+  router.get(
+    '/listings/zips',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(listingGroupsRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const envelope = await getZipGroups(pool, parsed.value);
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
     }),
   );

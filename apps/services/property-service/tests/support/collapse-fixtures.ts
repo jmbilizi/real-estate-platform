@@ -60,6 +60,8 @@ export interface HomeInput {
   /** Unit numbers. A record names its unit by index. */
   units?: string[];
   records: (RecordInput & { unit?: number })[];
+  /** Defaults to `COLLAPSE_ZIP`. */
+  zip?: string;
 }
 
 export interface SeededHome {
@@ -75,6 +77,7 @@ function row(
   input: RecordInput,
   index: number,
   street: string,
+  zip: string,
 ): ListingRow {
   const status = input.status === undefined ? 'Active' : input.status;
   const office = input.office ?? 'E2E Fixture Office A';
@@ -103,7 +106,7 @@ function row(
     neighborhood: 'Collapse Heights',
     city: COLLAPSE_CITY,
     state: COLLAPSE_STATE,
-    zip5: COLLAPSE_ZIP,
+    zip5: zip,
     latitude: 20.5,
     longitude: 20.5,
     description: null,
@@ -156,11 +159,11 @@ export async function seedHomes(
         street_line: home.street,
         city: COLLAPSE_CITY,
         state: COLLAPSE_STATE,
-        zip5: COLLAPSE_ZIP,
+        zip5: home.zip ?? COLLAPSE_ZIP,
         address_key: buildAddressKey({
           streetLine: home.street,
           state: COLLAPSE_STATE,
-          zip5: COLLAPSE_ZIP,
+          zip5: home.zip ?? COLLAPSE_ZIP,
         }),
         latitude: 20.5,
         longitude: 20.5,
@@ -194,7 +197,14 @@ export async function seedHomes(
       const rows: ListingRow[] = [];
       for (const [index, record] of home.records.entries()) {
         const unitId = record.unit === undefined ? null : (unitIds[record.unit] ?? null);
-        const written = row(propertyId, unitId, record, index, home.street);
+        const written = row(
+          propertyId,
+          unitId,
+          record,
+          index,
+          home.street,
+          home.zip ?? COLLAPSE_ZIP,
+        );
         ids.push(await upsertListing(client, written));
         rows.push(written);
       }

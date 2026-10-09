@@ -13,6 +13,7 @@ jest.mock('@/lib/api/listings', () => ({
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
   getNeighborhoodGroups: jest.fn(),
+  getZipGroups: jest.fn(() => Promise.resolve({ groups: [], total: 0, listingTotal: 0 })),
   ListingsApiError: class extends Error {
     constructor(
       message: string,
