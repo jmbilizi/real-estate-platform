@@ -1,3 +1,4 @@
+import { AREA_PARAM } from '@/lib/draw-area';
 import { VIEWPORT_PARAM } from '@/lib/map-bounds';
 import {
   citySegment,
@@ -37,8 +38,9 @@ const OWNED_KEYS = [
   'city',
   'state',
   'neighborhood',
-  // The map view belongs to one place. A new path starts with the place's own fit.
+  // The map view and a drawn area belong to one place. A new path starts with the place's own fit.
   VIEWPORT_PARAM,
+  AREA_PARAM,
 ] as const;
 
 export function withoutOwnedKeys(params: URLSearchParams): URLSearchParams {

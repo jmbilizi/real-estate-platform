@@ -41,6 +41,10 @@ interface Props {
   active?: boolean;
   /** Filter and group buttons, shown on the map only while it is expanded (#576). */
   viewControls?: ViewControls;
+  /** The drawn area, a GeoJSON Polygon string (#747). */
+  area?: string | null;
+  onAreaDrawn?: (area: string) => void;
+  onAreaClear?: () => void;
 }
 
 /** The one placeholder, used both before mount and while the map chunk is in flight. */

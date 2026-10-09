@@ -43,6 +43,7 @@ import {
   type SearchPlace,
 } from '@cribstop/property-contracts';
 import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
+import { AREA_PARAM, areaToParam } from '@/lib/draw-area';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
 import { useBrokerGroups } from '@/lib/useBrokerGroups';
@@ -476,6 +477,8 @@ export default function SearchExperience({
    * not pushed. A new view starts at page 1.
    */
   const onMapMoved = (raw: MapBounds) => {
+    // #747. A drawn area wins. Pan and zoom then never set a viewport filter.
+    if (filters.area) return;
     const next = roundBounds(raw);
     if (!(next.west < next.east && next.south < next.north)) return;
     setFilters((prev) => (sameBounds(prev.bounds, next) ? prev : { ...prev, bounds: next }));
@@ -485,6 +488,34 @@ export default function SearchExperience({
     params.set(VIEWPORT_PARAM, formatBounds(next));
     params.delete('page');
     writeUrl(params, 'replace');
+  };
+
+  /**
+   * A shape was drawn (#747). It replaces the viewport filter and ANDs with the place and every
+   * other filter on the server. Applying pushes a history entry, so Back removes the shape.
+   */
+  const applyArea = (area: string) => {
+    const param = areaToParam(area);
+    if (!param) return;
+    setFilters((prev) => ({ ...prev, area, bounds: undefined }));
+    setPage(1);
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const params = new URLSearchParams(window.location.search);
+    params.set(AREA_PARAM, param);
+    params.delete(VIEWPORT_PARAM);
+    params.delete('page');
+    writeUrl(params);
+  };
+
+  /** Drops the drawn area. The list returns to the whole place. Clear pushes an entry too. */
+  const clearArea = () => {
+    setFilters((prev) => ({ ...prev, area: undefined }));
+    setPage(1);
+    if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
+    const params = new URLSearchParams(window.location.search);
+    params.delete(AREA_PARAM);
+    params.delete('page');
+    writeUrl(params);
   };
 
   /** Drops the viewport filter. The list returns to the whole place and the map fits it again. */
@@ -633,7 +664,7 @@ export default function SearchExperience({
    */
   const applyFilters = (next: SearchFilters) => {
     // The map view is not a modal control. A draft can hold an older view than the map now shows.
-    const committed = applyLandInterlock({ ...next, bounds: filters.bounds });
+    const committed = applyLandInterlock({ ...next, bounds: filters.bounds, area: filters.area });
     setFilters(committed);
     setPage(1);
     if (!ownsUrl) return; // not our URL to write — see `ownsUrl`
@@ -650,8 +681,19 @@ export default function SearchExperience({
    * nothing at all.
    */
   const clearFilters = () => {
-    const { query, zip, street, city, state, neighborhood, officeKey, boundary, bounds, sort } =
-      filters;
+    const {
+      query,
+      zip,
+      street,
+      city,
+      state,
+      neighborhood,
+      officeKey,
+      boundary,
+      bounds,
+      area,
+      sort,
+    } = filters;
     applyFilters({
       query,
       zip,
@@ -662,13 +704,18 @@ export default function SearchExperience({
       officeKey,
       boundary,
       bounds,
+      area,
       sort,
     });
   };
 
   /** Commits a filter set and a group state together: state, URL and paging (#502). */
   const commitView = (nextFilters: SearchFilters, nextGroup: GroupState) => {
-    const committed = applyLandInterlock({ ...nextFilters, bounds: filters.bounds });
+    const committed = applyLandInterlock({
+      ...nextFilters,
+      bounds: filters.bounds,
+      area: filters.area,
+    });
     setFilters(committed);
     setGroup(nextGroup);
     setPage(1);
@@ -878,6 +925,9 @@ export default function SearchExperience({
               filters={mapFilters}
               viewBounds={filters.bounds ?? null}
               onUserMove={onMapMoved}
+              area={filters.area ?? null}
+              onAreaDrawn={applyArea}
+              onAreaClear={clearArea}
               neighborhoods={
                 neighborhoodGrouped
                   ? {
@@ -1026,6 +1076,29 @@ export default function SearchExperience({
                   className="ml-1 inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
                 >
                   Map area
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
+              {filters.area && (
+                <button
+                  type="button"
+                  data-testid="clear-drawn-area"
+                  aria-label="Drawn area filter on. Clear it to show the whole search area."
+                  onClick={clearArea}
+                  className="ml-1 inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                >
+                  Drawn area
                   <svg
                     width="12"
                     height="12"
@@ -1226,8 +1299,9 @@ export default function SearchExperience({
               <EmptyState
                 activeFilterCount={countActiveFilters(filters)}
                 onClear={clearFilters}
-                inMapArea={Boolean(filters.bounds)}
-                onClearMapArea={clearViewport}
+                inMapArea={Boolean(filters.bounds || filters.area)}
+                drawn={Boolean(filters.area)}
+                onClearMapArea={filters.area ? clearArea : clearViewport}
                 showAllLabel={showAllLabel}
               />
             ) : (
@@ -1331,6 +1405,7 @@ function EmptyState({
   activeFilterCount,
   onClear,
   inMapArea,
+  drawn,
   onClearMapArea,
   showAllLabel,
 }: {
@@ -1338,6 +1413,8 @@ function EmptyState({
   onClear: () => void;
   /** The map view filter is on (#558). */
   inMapArea: boolean;
+  /** The filter is a drawn area (#747). It changes the copy only. */
+  drawn?: boolean;
   onClearMapArea: () => void;
   showAllLabel: string;
 }) {
@@ -1364,18 +1441,22 @@ function EmptyState({
         </svg>
       </div>
       <p className="mt-5 font-display text-xl font-bold">
-        {inMapArea
-          ? 'No homes in this map area'
-          : filtered
-            ? 'No homes match your filters'
-            : 'No homes to show here'}
+        {drawn
+          ? 'No homes in your drawn area'
+          : inMapArea
+            ? 'No homes in this map area'
+            : filtered
+              ? 'No homes match your filters'
+              : 'No homes to show here'}
       </p>
       <p className="mt-1 text-sm text-ink-muted">
-        {inMapArea
-          ? 'Your search ran and found no homes with a visible address in this part of the map. Zoom out, move the map, or clear the map area.'
-          : filtered
-            ? `Your search ran, and ${activeFilterCount === 1 ? 'the filter you applied matches' : `the ${activeFilterCount} filters you applied match`} no listings. Try widening your price range or removing a filter.`
-            : 'Your search ran and found no listings in this area. Try searching a nearby city or ZIP code.'}
+        {drawn
+          ? 'Your search ran and found no homes with a visible address inside your shape. Draw a different shape or clear the drawn area.'
+          : inMapArea
+            ? 'Your search ran and found no homes with a visible address in this part of the map. Zoom out, move the map, or clear the map area.'
+            : filtered
+              ? `Your search ran, and ${activeFilterCount === 1 ? 'the filter you applied matches' : `the ${activeFilterCount} filters you applied match`} no listings. Try widening your price range or removing a filter.`
+              : 'Your search ran and found no listings in this area. Try searching a nearby city or ZIP code.'}
       </p>
       {inMapArea && (
         <button onClick={onClearMapArea} className="btn-primary mt-5 text-sm">

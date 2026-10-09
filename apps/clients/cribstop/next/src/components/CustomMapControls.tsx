@@ -54,8 +54,23 @@ export interface ViewControls {
   onToggleGroup: () => void;
 }
 
+/** The draw-an-area controls (#747). */
+export interface DrawControls {
+  drawing: boolean;
+  hasArea: boolean;
+  /** Starts draw mode, or ends it with no shape while it is on. */
+  onToggle: () => void;
+  onClear: () => void;
+}
+
 // Custom zoom and expand controls styled for top right
-export function CustomMapControls({ viewControls }: { viewControls?: ViewControls }) {
+export function CustomMapControls({
+  viewControls,
+  draw,
+}: {
+  viewControls?: ViewControls;
+  draw?: DrawControls;
+}) {
   const map = useMap();
   const { expanded, enter, exit } = useMapExpand(map.getContainer());
   // Leaflet learns about window resizes by itself, but not about the container growing or
@@ -72,7 +87,7 @@ export function CustomMapControls({ viewControls }: { viewControls?: ViewControl
         zIndex: 1000,
         display: 'flex',
         flexDirection: 'column',
-        gap: 18,
+        gap: draw ? 12 : 18,
         alignItems: 'start',
       }}
     >
@@ -95,6 +110,43 @@ export function CustomMapControls({ viewControls }: { viewControls?: ViewControl
             <path d="M19 15v4h-4" />
           </svg>
         </button>
+      )}
+      {draw && (
+        <>
+          <button
+            type="button"
+            data-testid="map-draw"
+            aria-label={
+              draw.drawing ? 'Cancel drawing' : draw.hasArea ? 'Redraw area' : 'Draw an area'
+            }
+            aria-pressed={draw.drawing}
+            onClick={draw.onToggle}
+            style={draw.drawing ? { ...BUTTON_STYLE, ...PRESSED_STYLE } : BUTTON_STYLE}
+          >
+            <svg
+              {...ICON_PROPS}
+              viewBox="0 0 24 24"
+              strokeWidth={1.8}
+              stroke={draw.drawing ? '#fff' : '#222'}
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </button>
+          {draw.hasArea && !draw.drawing && (
+            <button
+              type="button"
+              data-testid="map-draw-clear"
+              aria-label="Clear drawn area"
+              onClick={draw.onClear}
+              style={BUTTON_STYLE}
+            >
+              <svg {...ICON_PROPS} viewBox="0 0 24 24" strokeWidth={2}>
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          )}
+        </>
       )}
       {/* The toolbar is hidden behind the expanded map, so its filter and group controls move here. */}
       {expanded && viewControls && (
