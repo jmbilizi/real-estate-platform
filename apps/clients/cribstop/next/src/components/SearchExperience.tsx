@@ -23,6 +23,10 @@ import {
 import NeighborhoodGroupGrid, {
   NeighborhoodGroupGridSkeleton,
 } from '@/components/NeighborhoodGroupGrid';
+import ListingGroupGrid, {
+  type ListingGroupCard,
+  ListingGroupGridSkeleton,
+} from '@/components/ListingGroupGrid';
 import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
   applyLandInterlock,
@@ -39,6 +43,7 @@ import {
 import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { useListingSearch } from '@/lib/useListingSearch';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
+import { useZipGroups, useZipTotal } from '@/lib/useZipGroups';
 import {
   GROUP_PAGE_SIZE,
   type GroupBy,
@@ -46,6 +51,7 @@ import {
   type GroupState,
   parseGroupState,
   writeGroupState,
+  zipOptionAvailable,
 } from '@/lib/group-by';
 import { usableFitBounds } from '@/lib/neighborhoods';
 import {
@@ -489,10 +495,23 @@ export default function SearchExperience({
     writeUrl(params);
   };
 
-  const grouped = group.groupBy === 'neighborhood';
+  /**
+   * How many ZIP codes the search spans (#722). `null` while unknown. The "ZIP code" option needs
+   * more than one. A URL with `groupBy=zip` on a single-ZIP search reads as no grouping.
+   */
+  const zipTotal = useZipTotal(requestFilters, !deferred);
+  const zipOffered = zipOptionAvailable(zipTotal);
+  const groupBy: GroupBy | undefined =
+    group.groupBy === 'zip' && (requestFilters.zip || (zipTotal !== null && zipTotal <= 1))
+      ? undefined
+      : group.groupBy;
+  const grouped = groupBy !== undefined;
+  const neighborhoodGrouped = groupBy === 'neighborhood';
+  const zipGrouped = groupBy === 'zip';
 
-  // In the grouped view `page` pages the neighborhood cards. The listing search still runs, on page
-  // 1, because the filter modal reads its total. The map shows one marker per card (#503).
+  // In the grouped view `page` pages the group cards. The listing search still runs, on page
+  // 1, because the filter modal reads its total. The map shows one marker per neighborhood card
+  // (#503). A ZIP code grouping leaves the map on its listing pins.
   const { results, total, pageCount, pageSize, status, error, errorCode, retry } = useListingSearch(
     requestFilters,
     grouped ? 1 : page,
@@ -508,7 +527,15 @@ export default function SearchExperience({
     return ids;
   }, [results, savedPropertyIds, savedHomes]);
 
-  const groups = useNeighborhoodGroups(requestFilters, page, group.order, grouped && !deferred);
+  const groups = useNeighborhoodGroups(
+    requestFilters,
+    page,
+    group.order,
+    neighborhoodGrouped && !deferred,
+  );
+  const zipGroups = useZipGroups(requestFilters, page, group.order, zipGrouped && !deferred);
+  /** The paging, status and total of whichever grouping is on. */
+  const activeGroups = zipGrouped ? zipGroups : groups;
 
   const isLoading = status === 'loading';
   const isError = status === 'error';
@@ -691,6 +718,40 @@ export default function SearchExperience({
       });
   };
 
+  /**
+   * A ZIP code card opens the search filtered to that ZIP code (#722). The `zip` filter is a real
+   * filter. `groupDrill` records the grouping, so the chip can return to it.
+   */
+  const zipDrillTarget = (card: ListingGroupCard) => ({
+    filters: { ...filters, zip: card.key },
+    group: { ...group, groupBy: undefined, drill: 'zip' } as GroupState,
+  });
+  const zipDrillHref = (card: ListingGroupCard) => {
+    const target = zipDrillTarget(card);
+    const params = writeGroupState(
+      filtersToSearchParams(target.filters, currentQuery()),
+      target.group,
+    );
+    params.delete('page');
+    new URLSearchParams(place?.query).forEach((value, key) => params.set(key, value));
+    const qs = params.toString();
+    const path = typeof window === 'undefined' ? '' : window.location.pathname;
+    return `${path}${qs ? `?${qs}` : ''}`;
+  };
+  const drillIntoZip = (card: ListingGroupCard) => {
+    const target = zipDrillTarget(card);
+    setActiveGroupKey(null);
+    commitView(target.filters, target.group);
+  };
+
+  /** The chip of a drilled group: removing the filter returns to the grouped view it came from. */
+  const removeDrillFilter = () => {
+    commitView(
+      { ...filters, zip: undefined },
+      { ...group, groupBy: group.drill, drill: undefined },
+    );
+  };
+
   /** Touch: a first tap on a marker brings its card into view. */
   const scrollToGroupCard = (key: string) => {
     const card = Array.from(document.querySelectorAll<HTMLElement>('[data-neighborhood-key]')).find(
@@ -706,10 +767,11 @@ export default function SearchExperience({
   const placeLabel = place?.label || filters.query || '';
   const showAllLabel = placeLabel ? `Show all in ${placeLabel}` : 'Show all homes';
 
-  const groupPageCount = Math.ceil(groups.total / GROUP_PAGE_SIZE);
+  const groupPageCount = Math.ceil(activeGroups.total / GROUP_PAGE_SIZE);
   const reachableGroupPages = Math.min(groupPageCount, maxReachablePage(GROUP_PAGE_SIZE));
-  const isGroupsLoading = groups.status === 'loading';
-  const isGroupsError = groups.status === 'error';
+  const isGroupsLoading = activeGroups.status === 'loading';
+  const isGroupsError = activeGroups.status === 'error';
+  const groupNoun = GROUP_NOUNS[groupBy ?? 'neighborhood'];
 
   return (
     <div className="flex flex-col">
@@ -754,7 +816,7 @@ export default function SearchExperience({
               viewBounds={filters.bounds ?? null}
               onUserMove={onMapMoved}
               neighborhoods={
-                grouped
+                neighborhoodGrouped
                   ? {
                       rows: groups.rows,
                       activeKey: activeGroupKey,
@@ -833,8 +895,10 @@ export default function SearchExperience({
                   <span className="text-ink">Results unavailable</span>
                 ) : grouped ? (
                   <>
-                    <span className="font-semibold text-ink">{groups.total.toLocaleString()}</span>{' '}
-                    {groups.total === 1 ? 'Neighborhood' : 'Neighborhoods'}
+                    <span className="font-semibold text-ink">
+                      {activeGroups.total.toLocaleString()}
+                    </span>{' '}
+                    {activeGroups.total === 1 ? groupNoun.one : groupNoun.many}
                   </>
                 ) : (
                   <>
@@ -863,6 +927,30 @@ export default function SearchExperience({
                     )
                   </span>
                 </span>
+              )}
+              {!grouped && group.drill === 'zip' && filters.zip && (
+                <button
+                  type="button"
+                  data-testid="clear-group-drill"
+                  aria-label={`ZIP code ${filters.zip} filter on. Remove it to return to the ZIP code groups.`}
+                  onClick={removeDrillFilter}
+                  className="ml-1 inline-flex h-8 min-w-0 shrink cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-surface-border bg-surface-soft px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+                >
+                  <span className="min-w-0 truncate">ZIP {filters.zip}</span>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    className="shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
               )}
               {filters.bounds && (
                 <button
@@ -923,8 +1011,8 @@ export default function SearchExperience({
               <ToolbarSelect<GroupBy | 'none'>
                 label="Group"
                 testId="group-by-control"
-                value={group.groupBy ?? 'none'}
-                options={GROUP_BY_OPTIONS}
+                value={groupBy ?? 'none'}
+                options={zipOffered || zipGrouped ? GROUP_BY_OPTIONS_WITH_ZIP : GROUP_BY_OPTIONS}
                 icon={GROUP_ICON}
                 onChange={changeGroupBy}
               />
@@ -968,42 +1056,63 @@ export default function SearchExperience({
           <div className="px-5 pb-10 md:px-0 md:pb-0">
             {grouped ? (
               isGroupsLoading ? (
-                <NeighborhoodGroupGridSkeleton />
+                zipGrouped ? (
+                  <ListingGroupGridSkeleton testId="zip-group-skeleton" />
+                ) : (
+                  <NeighborhoodGroupGridSkeleton />
+                )
               ) : isGroupsError ? (
                 <ListingErrorState
                   message={
-                    groups.error ?? 'We could not load neighborhoods just now. Please try again.'
+                    activeGroups.error ??
+                    `We could not load ${groupNoun.manyLower} just now. Please try again.`
                   }
-                  onRetry={groups.retry}
+                  onRetry={activeGroups.retry}
                 />
-              ) : groups.rows.length === 0 ? (
+              ) : activeGroups.rows.length === 0 ? (
                 <div
                   role="status"
-                  data-testid="neighborhood-group-empty"
+                  data-testid={zipGrouped ? 'zip-group-empty' : 'neighborhood-group-empty'}
                   className="rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 px-4 py-16 text-center"
                 >
-                  <p className="font-display text-xl font-bold">No neighborhoods match</p>
+                  <p className="font-display text-xl font-bold">No {groupNoun.manyLower} match</p>
                   <p className="mt-1 text-sm text-ink-muted">
-                    Your search ran and found no neighborhoods for these filters. Try removing a
-                    filter or set Group to None to see the homes.
+                    Your search ran and found no {groupNoun.manyLower} for these filters. Try
+                    removing a filter or set Group to None to see the homes.
                   </p>
                 </div>
               ) : (
                 <>
-                  <NeighborhoodGroupGrid
-                    rows={groups.rows}
-                    hrefFor={drillHref}
-                    onSelect={drillInto}
-                    activeKey={activeGroupKey}
-                    activeSource={activeGroupSource}
-                    onActive={activateFromCard}
-                  />
+                  {zipGrouped ? (
+                    <ListingGroupGrid
+                      testId="zip-group-grid"
+                      cards={zipGroups.rows.map((zip) => ({
+                        key: zip.key,
+                        title: zip.key,
+                        count: zip.count,
+                      }))}
+                      hrefFor={zipDrillHref}
+                      onSelect={drillIntoZip}
+                      describe={(card) =>
+                        `ZIP code ${card.title}, ${card.count.toLocaleString()} ${card.count === 1 ? 'home' : 'homes'}`
+                      }
+                    />
+                  ) : (
+                    <NeighborhoodGroupGrid
+                      rows={groups.rows}
+                      hrefFor={drillHref}
+                      onSelect={drillInto}
+                      activeKey={activeGroupKey}
+                      activeSource={activeGroupSource}
+                      onActive={activateFromCard}
+                    />
+                  )}
                   <ResultsPager page={page} pageCount={reachableGroupPages} onPage={pushPage} />
                   {groupPageCount > reachableGroupPages && (
                     <p className="mt-4 text-center text-xs text-ink-muted" role="status">
                       Showing the first {(reachableGroupPages * GROUP_PAGE_SIZE).toLocaleString()}{' '}
-                      of {groups.total.toLocaleString()} neighborhoods. Narrow your filters to see
-                      more.
+                      of {activeGroups.total.toLocaleString()} {groupNoun.manyLower}. Narrow your
+                      filters to see more.
                     </p>
                   )}
                 </>
@@ -1085,6 +1194,17 @@ const GROUP_BY_OPTIONS: { value: GroupBy | 'none'; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'neighborhood', label: 'Neighborhood' },
 ];
+
+/** #722. Offered only when the search spans more than one ZIP code. */
+const GROUP_BY_OPTIONS_WITH_ZIP: { value: GroupBy | 'none'; label: string }[] = [
+  ...GROUP_BY_OPTIONS,
+  { value: 'zip', label: 'ZIP code' },
+];
+
+const GROUP_NOUNS: Record<GroupBy, { one: string; many: string; manyLower: string }> = {
+  neighborhood: { one: 'Neighborhood', many: 'Neighborhoods', manyLower: 'neighborhoods' },
+  zip: { one: 'ZIP code', many: 'ZIP codes', manyLower: 'ZIP codes' },
+};
 
 const GROUP_ORDER_OPTIONS: { value: GroupOrder; label: string }[] = [
   { value: 'count', label: 'Most homes' },

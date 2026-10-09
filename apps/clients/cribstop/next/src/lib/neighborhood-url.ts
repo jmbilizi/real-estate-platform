@@ -28,6 +28,7 @@ const VIEW_TYPES: readonly string[] = ['sale', 'rent', 'sold', 'all'];
 const OWNED_KEYS = [
   'page',
   'groupBy',
+  'groupDrill',
   FROM_PARAM,
   'groupFrom',
   'type',

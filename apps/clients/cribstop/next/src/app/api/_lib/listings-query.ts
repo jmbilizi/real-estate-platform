@@ -1,4 +1,5 @@
 import {
+  listingGroupsRequestSchema,
   mapRequestSchema,
   neighborhoodsRequestSchema,
   searchRequestSchema,
@@ -37,6 +38,11 @@ export const FORWARDABLE_MAP_PARAMS: readonly string[] = Object.freeze(
 /** The neighborhoods endpoint's allowlist (#393), derived the same way. */
 export const FORWARDABLE_NEIGHBORHOODS_PARAMS: readonly string[] = Object.freeze(
   Object.keys(neighborhoodsRequestSchema.shape),
+);
+
+/** The ZIP and broker group endpoints' allowlist (#722), derived the same way. */
+export const FORWARDABLE_GROUPS_PARAMS: readonly string[] = Object.freeze(
+  Object.keys(listingGroupsRequestSchema.shape),
 );
 
 /**

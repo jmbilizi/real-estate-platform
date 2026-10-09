@@ -1,5 +1,6 @@
 import {
   buildListingsQuery,
+  FORWARDABLE_GROUPS_PARAMS,
   FORWARDABLE_LISTING_PARAMS,
   FORWARDABLE_MAP_PARAMS,
   FORWARDABLE_NEIGHBORHOODS_PARAMS,
@@ -270,6 +271,33 @@ describe('neighborhoods query allowlist (#393)', () => {
       'minCount',
       'minPrice',
       'neighborhood',
+      'offset',
+      'order',
+      'state',
+    ]);
+  });
+});
+
+describe('group query allowlist (#722)', () => {
+  it('forwards the search filters and group paging, never listing paging, sort or slug', () => {
+    const incoming = new URLSearchParams({
+      city: 'Bethesda',
+      state: 'MD',
+      beds: '2',
+      minCount: '1',
+      limit: '1',
+      offset: '24',
+      order: 'name',
+      page: '2',
+      sort: 'newest',
+      slug: 'x',
+    });
+    const forwarded = new URLSearchParams(buildListingsQuery(incoming, FORWARDABLE_GROUPS_PARAMS));
+    expect([...forwarded.keys()].sort()).toEqual([
+      'beds',
+      'city',
+      'limit',
+      'minCount',
       'offset',
       'order',
       'state',
