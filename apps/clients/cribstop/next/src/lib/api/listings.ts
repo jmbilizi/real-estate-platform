@@ -5,6 +5,7 @@ import type {
   ErrorBody,
   ListingCardRow,
   ListingDetail,
+  ListingGroupsRequest,
   ListingsEnvelope,
   ListingsMeta,
   MapBounds,
@@ -13,6 +14,7 @@ import type {
   NeighborhoodsResponse,
   OpenHouse,
   SearchRequest,
+  ZipsResponse,
 } from '@cribstop/property-contracts';
 import { formatBounds } from '@/lib/map-bounds';
 import { photoCaption } from '@/lib/photo-caption';
@@ -214,6 +216,19 @@ export async function getNeighborhoodGroups(
     `/api/listings/neighborhoods${params ? `?${params}` : ''}`,
     signal,
   );
+}
+
+/**
+ * One page of ZIP code groups for a search (#722). Takes the search filters. The caller sets
+ * `minCount`, `limit`, `offset` and `order`.
+ */
+export async function getZipGroups(
+  query: ListingSearchQuery &
+    Partial<Pick<ListingGroupsRequest, 'minCount' | 'limit' | 'offset' | 'order'>>,
+  signal?: AbortSignal,
+): Promise<ZipsResponse> {
+  const params = toSearchParams(query).toString();
+  return getJson<ZipsResponse>(`/api/listings/zips${params ? `?${params}` : ''}`, signal);
 }
 
 // ---------------------------------------------------------------------------------------------
