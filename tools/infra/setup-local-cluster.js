@@ -23,6 +23,7 @@ const CLUSTER_CONFIG_PATH = path.join(
 const SHOULD_APPLY = process.argv.includes('--apply');
 const CONTAINERD_CA_PATH = '/etc/containerd/certs.d/_workspace-ca/workspace-enterprise-roots.pem';
 const { getLocalRegistryConfig } = require('./registry-settings');
+const { rewriteNodeResolvConf } = require('./node-resolv-conf');
 
 const localRegistryConfig = getLocalRegistryConfig();
 const LOCAL_REGISTRY_NAME = localRegistryConfig.name;
@@ -708,12 +709,12 @@ function configureNodeContainerdTrust(nodeName, caBuffer) {
 // unaffected either way — CoreDNS's `kubernetes` plugin resolves those from the pod's own
 // namespace, never through this forward/search path at all. A workstation with no search domains
 // on its node has nothing to remove — a true no-op.
-function stripSearchDomains(resolvConf) {
-  return resolvConf
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('search '))
-    .join('\n');
-}
+//
+// The same rewrite drops IPv6 nameservers when an IPv4 nameserver remains (#735). Podman's IPv6
+// network DNS refuses every query, and CoreDNS spreads lookups across all nameservers. The IPv4
+// nameserver still answers `kind-registry`. The node image has no dig or nslookup, so the rule is
+// fixed, not probed. CoreDNS reads the node file at pod start, so `restartCoreDns` restarts it.
+// The pure rewrite lives in `node-resolv-conf.js`.
 
 function configureNodeMinimalSearchDomains(nodeName) {
   const readResult = run(`podman exec ${nodeName} cat /etc/resolv.conf`, { silent: true });
@@ -722,7 +723,7 @@ function configureNodeMinimalSearchDomains(nodeName) {
     return false;
   }
 
-  const resolvConf = stripSearchDomains(readResult.output);
+  const resolvConf = rewriteNodeResolvConf(readResult.output);
   // containerd bind-mounts /etc/resolv.conf into the node, so `podman cp` (copyBufferToNode's
   // mechanism) fails with a 500 rather than overwriting it. Writing through a shell redirection
   // inside the container, the same way installCABundleInPodmanMachine streams to the podman
@@ -739,6 +740,18 @@ function configureNodeMinimalSearchDomains(nodeName) {
   }
 }
 
+function restartCoreDns() {
+  const base = `kubectl --context ${KIND_CONTEXT} -n kube-system`;
+  const restart = `${base} rollout restart deploy/coredns`;
+  const result = run(restart, { silent: true, env: KIND_ENV });
+  if (!result.success) {
+    logWarning(`Could not restart CoreDNS (#735). Run: ${restart}`);
+    return;
+  }
+  run(`${base} rollout status deploy/coredns --timeout=120s`, { silent: true, env: KIND_ENV });
+  logSuccess('Restarted CoreDNS to read the new node resolv.conf');
+}
+
 // CoreDNS's Corefile forwards external queries to the NODE's own /etc/resolv.conf (its `forward .
 // /etc/resolv.conf` stanza), and kubelet seeds every pod's resolv.conf from that same file by
 // default. Rewriting it here therefore changes every pod's search domains, with no CoreDNS or
@@ -750,13 +763,18 @@ function propagateDnsFixToKindNodes() {
     return;
   }
 
+  let rewritten = false;
   nodes.forEach((node) => {
     if (configureNodeMinimalSearchDomains(node)) {
-      logSuccess(`Removed enterprise search domains from ${node}'s resolv.conf`);
+      rewritten = true;
+      logSuccess(`Rewrote ${node}'s resolv.conf (search domains, IPv6 nameservers)`);
     } else {
       logWarning(`Could not update ${node}'s resolv.conf; external TLS may still fail (#180).`);
     }
   });
+  if (rewritten) {
+    restartCoreDns();
+  }
 }
 
 function propagateTrustToKindNodes() {
