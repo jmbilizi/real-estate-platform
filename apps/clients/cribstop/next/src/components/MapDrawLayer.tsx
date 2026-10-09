@@ -11,13 +11,14 @@ import {
 } from '@/lib/draw-gesture';
 
 /** What the parent made of a finished line. Anything but `ok` keeps draw mode on. */
-export type DrawOutcome = 'ok' | 'too-small' | 'crossed' | 'too-complex';
+export type DrawOutcome = 'ok' | 'too-small' | 'crossed' | 'too-complex' | 'too-large';
 
 const HINT = 'Press and drag to draw a loop around the homes you want. Lift to finish.';
 const NOTICES: Record<Exclude<DrawOutcome, 'ok'>, string> = {
   'too-small': 'That shape is too small. Draw a loop around the homes you want.',
   crossed: 'That line crosses itself. Draw the loop again without crossing it.',
   'too-complex': 'That shape is too detailed. Draw a simpler loop.',
+  'too-large': 'That shape is too large. Zoom in and draw a smaller loop.',
 };
 
 /**

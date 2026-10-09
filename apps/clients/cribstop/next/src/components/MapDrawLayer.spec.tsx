@@ -45,7 +45,13 @@ if (typeof window.PointerEvent === 'undefined') {
   window.PointerEvent = PointerEventStandIn as unknown as typeof PointerEvent;
 }
 
-type Pointer = { pointerId?: number; clientX: number; clientY: number; isPrimary?: boolean };
+type Pointer = {
+  pointerId?: number;
+  clientX: number;
+  clientY: number;
+  isPrimary?: boolean;
+  button?: number;
+};
 const pointer = (init: Pointer) => ({ pointerId: 1, isPrimary: true, ...init });
 
 /** A press, a drag through `points` and a release, as a finger makes them. */
@@ -139,6 +145,18 @@ describe('MapDrawLayer', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a right click, which opens a menu and never sends a release', () => {
+    const onFinish = jest.fn<DrawOutcome, [readonly LngLat[]]>(() => 'ok');
+    render(<MapDrawLayer onFinish={onFinish} onCancel={jest.fn()} />);
+    const surface = screen.getByTestId('draw-surface');
+
+    fireEvent.pointerDown(surface, pointer({ clientX: 20, clientY: 20, button: 2 }));
+    fireEvent.pointerUp(surface, pointer({ clientX: 20, clientY: 20, button: 2 }));
+    drag(SQUARE);
+
+    expect(onFinish).toHaveBeenCalledTimes(1);
   });
 
   it('draws nothing from a second finger', () => {

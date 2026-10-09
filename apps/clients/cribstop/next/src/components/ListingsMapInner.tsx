@@ -481,6 +481,8 @@ export default function ListingsMapInner({
   }, [searchCenter, pinCoords, grouped, groupCoords]);
 
   const [drawing, setDrawing] = useState(false);
+  // Back, a shared link or a new search changes the area under an open draw surface. Draw mode ends.
+  useEffect(() => setDrawing(false), [area]);
   const areaGeoJson = useMemo(() => {
     if (!area) return null;
     try {

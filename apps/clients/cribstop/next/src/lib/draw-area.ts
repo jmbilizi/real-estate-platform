@@ -1,8 +1,8 @@
 import {
   isSimpleRing,
+  type MapBounds,
   MAX_AREA_SPAN_DEGREES,
   MAX_AREA_VERTICES,
-  type MapBounds,
 } from '@cribstop/property-contracts';
 
 /**
@@ -116,7 +116,10 @@ export function drawnPathToRing(path: readonly LngLat[]): DrawResult {
     Math.max(...lats) - Math.min(...lats),
   );
 
-  const span = Math.max(Math.max(...lngs) - Math.min(...lngs), Math.max(...lats) - Math.min(...lats));
+  const span = Math.max(
+    Math.max(...lngs) - Math.min(...lngs),
+    Math.max(...lats) - Math.min(...lats),
+  );
   if (span > MAX_AREA_SPAN_DEGREES) return { status: 'too-large' };
 
   let simpleButLong = false;

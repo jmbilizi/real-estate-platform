@@ -86,6 +86,18 @@ describe('drawnPathToRing', () => {
     expect(drawnPathToRing(eight)).toEqual({ status: 'crossed' });
   });
 
+  it('refuses a shape wider than the service accepts', () => {
+    expect(drawnPathToRing(circle(60, 12))).toEqual({ status: 'too-large' });
+  });
+
+  it('names a shape that is too detailed, not crossed, when no tolerance fits it in 100 vertices', () => {
+    // A zigzag with 400 teeth does not cross itself, and no tolerance up to 3% of its size merges them.
+    const teeth: LngLat[] = [];
+    for (let i = 0; i < 400; i++) teeth.push([i * 0.0001, i % 2 === 0 ? 0 : 0.05]);
+    teeth.push([0.04, 0.2], [0, 0.2]);
+    expect(drawnPathToRing(teeth)).toEqual({ status: 'too-complex' });
+  });
+
   it('repairs a small overlap where the line meets its start', () => {
     const loop = circle(80);
     const overshoot: LngLat[] = [
