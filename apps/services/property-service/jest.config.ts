@@ -26,6 +26,11 @@ export default {
   //
   // Note the absence of `<rootDir>`, for the same Windows reason as testPathIgnorePatterns above.
   // The `/node_modules/` entry restates the Jest default, which is replaced rather than merged.
-  transformIgnorePatterns: ['/node_modules/', '/migrations/', 'migrate-self-heal'],
+  transformIgnorePatterns: [
+    '/node_modules/',
+    '/migrations/',
+    'migrate-self-heal',
+    'support/e2e-serve-defaults',
+  ],
   coverageDirectory: '../../../coverage/apps/services/property-service',
 };

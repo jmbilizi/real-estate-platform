@@ -125,6 +125,12 @@ async function cloneSampleListing(sourceKey: string): Promise<string> {
      RETURNING id`,
     [fixtures.sampleListingId, sourceKey, property.rows[0].id],
   );
+  // Clones of one home collapse into a single card (#716). A distinct office per clone keeps
+  // each one a card of its own.
+  await pool.query('UPDATE listings SET office_name = $2 WHERE id = $1', [
+    inserted.rows[0].id,
+    `E2E Probe Office ${sourceKey}`,
+  ]);
   return String(inserted.rows[0].id);
 }
 

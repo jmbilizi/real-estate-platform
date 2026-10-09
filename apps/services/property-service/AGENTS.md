@@ -636,13 +636,28 @@ The e2e suite **throws rather than skipping** when the fixtures are absent. A su
 skips reproduces the vacuous-assertion problem with extra steps. CI does not run `nx e2e`, so this
 cannot break CI:
 
+Run the suite against an empty, disposable Postgres. Do not use the shared cluster database.
+
 ```bash
-pnpm run infra:local:property-db:url                       # once, while the stack is up
+# 1. A disposable database. Use the repo Postgres image (PostGIS + pgvector).
+podman run -d --name e2e-pg -p 55432:5432 -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=property_db \
+  localhost:5001/postgres-postgis-pgvector:<tag>
+# 2. Create the extensions, then migrate.
+podman exec e2e-pg psql -U postgres -d property_db -c 'CREATE EXTENSION "uuid-ossp"; CREATE EXTENSION postgis; CREATE EXTENSION pg_trgm; CREATE EXTENSION btree_gist; CREATE EXTENSION vector;'
+export DATABASE_URL=postgres://postgres:pw@localhost:55432/property_db
+pnpm exec nx run property-service:migrate
+# 3. The one command.
 PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
 ```
 
-Note the e2e harness and the in-cluster port-forward both use **3002**; pass `PORT=3003` (honoured
-by `main.ts` and the harness alike) to run the suite while `skaffold` holds that port.
+Expected result: **25 suites, 319 tests, all passing.** The count grows with the suite. The run
+needs no other env: `tests/support/e2e-serve-defaults.js` points every account-service URL at the
+introspection stub. `src/e2e-serve-defaults.spec.ts` fails if the app reads an
+`ACCOUNT_SERVICE_*_URL` variable that the defaults omit. Remove the container when done. The
+fixtures load with `DATABASE_URL` pointing at a database you own, so never point it at a shared one.
+
+The e2e harness and the in-cluster port-forward both use **3002**. Pass `PORT=3003` (honoured by
+`main.ts` and the harness alike) to run the suite while `skaffold` holds that port.
 
 ### The writer carries the suppression flags — keep it that way
 
@@ -772,7 +787,7 @@ the Property API document. Never publish a second document.
 - Masking is unchanged: staff lists mask, staff detail is full, an agent sees the contact only after
   accept.
 - The e2e stub (`tests/support/introspection-stub.ts`) also serves the contacts endpoint.
-  `e2e-serve-defaults.js` points `ACCOUNT_SERVICE_CONTACTS_URL` at it.
+  `e2e-serve-defaults.js` points every account-service URL at it.
 
 ## Staff lead desk (#632)
 
