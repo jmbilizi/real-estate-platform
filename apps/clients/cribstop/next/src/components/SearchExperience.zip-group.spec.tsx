@@ -100,7 +100,7 @@ describe('Group by ZIP code (#722)', () => {
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
-    expect(openGroupOptions()).toEqual(['None', 'Neighborhood']);
+    expect(openGroupOptions()).toEqual(['None', 'Neighborhood', 'Broker']);
   });
 
   it('hides the option with no request when the search has a zip filter', async () => {
@@ -108,7 +108,7 @@ describe('Group by ZIP code (#722)', () => {
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(mockedZips).not.toHaveBeenCalled();
-    expect(openGroupOptions()).toEqual(['None', 'Neighborhood']);
+    expect(openGroupOptions()).toEqual(['None', 'Neighborhood', 'Broker']);
   });
 
   it('hides the option when the ZIP request fails', async () => {
@@ -116,7 +116,7 @@ describe('Group by ZIP code (#722)', () => {
     render(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
 
-    expect(openGroupOptions()).toEqual(['None', 'Neighborhood']);
+    expect(openGroupOptions()).toEqual(['None', 'Neighborhood', 'Broker']);
   });
 
   it('reads groupBy=zip on a single-ZIP search as no grouping', async () => {

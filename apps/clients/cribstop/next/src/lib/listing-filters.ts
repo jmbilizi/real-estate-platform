@@ -95,6 +95,10 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): SearchFil
   filters.street = str('street');
   filters.city = str('city');
   filters.neighborhood = str('neighborhood');
+  // #722. A broker group card writes it. A value the contract rejects is dropped, not sent.
+  const officeKey = str('officeKey');
+  filters.officeKey =
+    officeKey !== undefined && /^(\d{1,19}|unlisted)$/.test(officeKey) ? officeKey : undefined;
 
   // Exact two-letter code only — anything else is not a value the search bar or the contract's
   // own `state` filter would ever produce, so it is dropped rather than forwarded to a 400.
@@ -248,6 +252,7 @@ const FILTER_PARAM_KEYS = [
   'city',
   'state',
   'neighborhood',
+  'officeKey',
   'boundary',
   VIEWPORT_PARAM,
   'type',
@@ -306,6 +311,7 @@ export function filtersToSearchParams(
   set('city', filters.city);
   set('state', filters.state);
   set('neighborhood', filters.neighborhood);
+  set('officeKey', filters.officeKey);
   set('boundary', filters.boundary);
   set(VIEWPORT_PARAM, filters.bounds ? formatBounds(filters.bounds) : undefined);
   if (filters.listingType && filters.listingType !== 'all') set('type', filters.listingType);

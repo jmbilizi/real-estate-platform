@@ -26,6 +26,7 @@ const PRESERVED_ON_CLEAR = [
   'city',
   'state',
   'neighborhood',
+  'officeKey',
   'boundary',
   'bounds',
   'sort',
