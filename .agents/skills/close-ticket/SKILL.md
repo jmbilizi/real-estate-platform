@@ -32,6 +32,9 @@ Standard"): the outcome, then the evidence, nothing else.
    pnpm run gh:ticket:update-status -- --issue <number> --status "Done" --comment "Shipped in PR #<pr-number>"
    ```
 
+   Then remove the merged worktrees and branches: `pnpm run dev:worktree:cleanup`. It keeps any
+   worktree that has uncommitted changes, unpushed commits, or a live agent.
+
 3. If the ticket number isn't already known from context, ask the user rather than guessing — do not
    move an unrelated ticket's status.
 
