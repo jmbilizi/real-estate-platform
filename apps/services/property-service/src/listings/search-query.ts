@@ -112,18 +112,30 @@ export function scopeConditions(
   ];
 }
 
-const AREA_BOX_PADDING_DEGREES = 0.01;
-
-/** The bounding box of a validated `area` ring, padded. The contract has already checked the shape. */
-function areaBox(area: string): { south: number; north: number; west: number; east: number } {
+/**
+ * The bounding box of a validated `area` ring. The padding is a fixed margin plus a share of the
+ * shape's size, because a geodesic edge bows poleward by an amount that grows with its length. The
+ * contract caps the shape at 20 degrees across, where a quarter of the size covers the bow.
+ */
+export function areaBox(area: string): {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+} {
   const ring = (JSON.parse(area) as { coordinates: [number, number][][] }).coordinates[0] ?? [];
   const lngs = ring.map((point) => point[0]);
   const lats = ring.map((point) => point[1]);
+  const west = Math.min(...lngs);
+  const east = Math.max(...lngs);
+  const south = Math.min(...lats);
+  const north = Math.max(...lats);
+  const pad = 0.01 + 0.25 * Math.max(east - west, north - south);
   return {
-    west: Math.max(-180, Math.min(...lngs) - AREA_BOX_PADDING_DEGREES),
-    east: Math.min(180, Math.max(...lngs) + AREA_BOX_PADDING_DEGREES),
-    south: Math.max(-90, Math.min(...lats) - AREA_BOX_PADDING_DEGREES),
-    north: Math.min(90, Math.max(...lats) + AREA_BOX_PADDING_DEGREES),
+    west: Math.max(-180, west - pad),
+    east: Math.min(180, east + pad),
+    south: Math.max(-90, south - pad),
+    north: Math.min(90, north + pad),
   };
 }
 

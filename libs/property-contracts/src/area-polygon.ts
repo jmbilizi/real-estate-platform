@@ -3,6 +3,8 @@ import { z } from 'zod';
 /** #747. Caps for a user-drawn `area`. The web simplifies to 100 vertices, so 200 is headroom. */
 export const MAX_AREA_VERTICES = 200;
 export const MAX_AREA_CHARS = 8000;
+/** The widest a drawn shape may be, in degrees of longitude or latitude. A city is under 1. */
+export const MAX_AREA_SPAN_DEGREES = 20;
 
 type Point = readonly [number, number];
 
@@ -120,6 +122,21 @@ export const areaPolygon = z
       });
       return;
     }
+    // The ring test is planar and the service reads edges as geodesics. They agree for a shape of
+    // city or county size, so a continental shape is refused rather than guessed at.
+    const lngs = ring.map((point) => point[0]);
+    const lats = ring.map((point) => point[1]);
+    const span = Math.max(
+      Math.max(...lngs) - Math.min(...lngs),
+      Math.max(...lats) - Math.min(...lats),
+    );
+    if (span > MAX_AREA_SPAN_DEGREES) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `must not span more than ${MAX_AREA_SPAN_DEGREES} degrees`,
+      });
+      return;
+    }
     if (!isSimpleRing(ring)) {
       ctx.addIssue({
         code: 'custom',
@@ -131,6 +148,6 @@ export const areaPolygon = z
     'A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it ' +
       'match. ANDed with every other filter, including `boundary` and `bounds`. A listing whose ' +
       'street address is withheld has no coordinates and never matches. Capped at ' +
-      `${MAX_AREA_VERTICES} points and ${MAX_AREA_CHARS} characters. A self-intersecting or ` +
-      'zero-area shape is a 400.',
+      `${MAX_AREA_VERTICES} points, ${MAX_AREA_CHARS} characters and ${MAX_AREA_SPAN_DEGREES} ` +
+      'degrees across. A self-intersecting or zero-area shape is a 400.',
   );
