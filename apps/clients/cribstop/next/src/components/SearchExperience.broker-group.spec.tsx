@@ -148,26 +148,49 @@ describe('Group by broker (#722)', () => {
     await waitFor(() => expect(currentParams().get('officeKey')).toBe('1001'));
     expect(currentParams().get('groupBy')).toBeNull();
     expect(currentParams().get('groupDrill')).toBe('broker');
-    expect(currentParams().get('groupLabel')).toBe('Acme Realty');
-    const chip = await screen.findByTestId('clear-group-drill');
-    expect(chip.textContent).toBe('Acme Realty');
+    expect(currentParams().get('groupLabel')).toBeNull();
+    // The chip name comes from the server for the key.
+    await waitFor(() =>
+      expect(screen.getByTestId('clear-group-drill').textContent).toBe('Acme Realty'),
+    );
+    const chip = screen.getByTestId('clear-group-drill');
 
     fireEvent.click(chip);
     await waitFor(() => expect(currentParams().get('groupBy')).toBe('broker'));
     expect(currentParams().get('officeKey')).toBeNull();
-    expect(currentParams().get('groupLabel')).toBeNull();
     expect(await screen.findByTestId('broker-group-grid')).toBeTruthy();
+  });
+
+  it('ignores a label in the URL: the chip shows the name the server gives for the key', async () => {
+    render(
+      <SearchExperience initialQuery="q=Bethesda&officeKey=1001&groupLabel=Real+Broker%2C+LLC" />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('clear-group-drill').textContent).toBe('Acme Realty'),
+    );
+    expect(document.body.textContent).not.toContain('Real Broker, LLC');
+  });
+
+  it('shows a neutral name while the name loads, and the key for an unknown key', async () => {
+    let resolve: (value: unknown) => void = () => undefined;
+    mockedBrokers.mockImplementation(() => new Promise((r) => (resolve = r)));
+    render(<SearchExperience initialQuery="q=Bethesda&officeKey=999" />);
+    expect((await screen.findByTestId('clear-group-drill')).textContent).toBe('Brokerage');
+
+    resolve({ groups: [], total: 0, listingTotal: 0 });
+    await waitFor(() =>
+      expect(screen.getByTestId('clear-group-drill').textContent).toBe('Brokerage 999'),
+    );
   });
 
   it('always shows a chip for an officeKey filter, and removing it just clears the filter', async () => {
     render(<SearchExperience initialQuery="q=Bethesda&officeKey=1234567" />);
     const chip = await screen.findByTestId('clear-group-drill');
-    expect(chip.textContent).toBe('Broker');
 
     fireEvent.click(chip);
     await waitFor(() => expect(currentParams().get('officeKey')).toBeNull());
     expect(currentParams().get('groupBy')).toBeNull();
-    expect(mockedBrokers).not.toHaveBeenCalled();
     expect(screen.queryByTestId('clear-group-drill')).toBeNull();
   });
 
