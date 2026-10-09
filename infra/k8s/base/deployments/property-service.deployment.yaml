@@ -159,6 +159,11 @@ spec:
                   name: postmark-secret
                   key: INQUIRY_INTAKE_ADDRESS
                   optional: true
+          # #755: keeps the pod serving while the Service endpoints drop it (see api-gateway).
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
           livenessProbe:
             httpGet:
               path: /health

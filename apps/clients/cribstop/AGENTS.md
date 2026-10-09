@@ -68,6 +68,21 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
 - `cribstop-compliance-reviewer` (root agent) — dispatchable parallel compliance review for PR diffs
   touching user-facing content.
 
+## Home page reads (#755)
+
+- Each home row fetches its own cards with `skipTotal: true`. `total` is the number of cards the row
+  got, which is all a row reads. One failing row shows its own retry card and no other row changes.
+- `/api/listings` with `skipTotal=true` (the home rows), `/api/listings/meta` and
+  `/api/listings/neighborhoods` use the server cache in `app/api/_lib/read-cache.ts`. It holds 500
+  reads, least recently used out first, and no body over 512 KB. The lifetime of an entry is the
+  Property API's own `Cache-Control`: `s-maxage` when present, else `max-age`. That is **60 seconds
+  for listing rows** and **300 seconds for meta and neighborhoods**. A listing that goes off market
+  or is suppressed leaves a row within that time. An error and a `no-store` or `private` response
+  are never stored. Never raise a lifetime here. Change the upstream header instead.
+- The proxy retries a gateway 502, 503 or 504 once, and sends the visitor IP as `X-Forwarded-For`.
+  The gateway rate-limits on that address. Without it, every visitor shares the one bucket of this
+  pod.
+
 ## Rules
 
 - Airbnb-quality polish; mobile-first; accessible (labels, alt text, focus states, semantic HTML).

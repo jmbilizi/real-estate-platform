@@ -8,6 +8,13 @@ metadata:
 spec:
   # Patches can confirm or override this default replica count
   replicas: 1
+  # #755: same rollout rule as property-service (#388). The old pod keeps serving until the new
+  # pod is Ready.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: api-gateway
@@ -65,6 +72,13 @@ spec:
             - name: OTEL_TRACES_SAMPLER
               value: "traceidratio"
             # OTEL_TRACES_SAMPLER_ARG: Defined in patches (1.0 dev, 0.5 test, 0.05 prod)
+          # #755: keeps the pod serving while the Service endpoints drop it. Without the wait, the
+          # pod gets SIGTERM while callers still send it requests, and a rolling restart returns
+          # connection errors even with maxUnavailable: 0.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
           livenessProbe:
             httpGet:
               path: /

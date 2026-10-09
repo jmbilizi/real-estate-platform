@@ -408,6 +408,15 @@ export const searchRequestSchema = z.strictObject({
     ),
   // Restricts only when true, matching `openHouse`/`newConstruction` above.
   priceReduced: queryBoolean.optional(),
+  // #755. The exact count scans every matching listing. A caller that shows a short list and never
+  // reads `total` (a home page row) skips it.
+  skipTotal: queryBoolean
+    .optional()
+    .describe(
+      'When true, the server skips the exact match count. `total` then holds the number of ' +
+        'results on this page and `pageCount` is 1 for a non-empty page, so neither says how ' +
+        'many listings match. Use it for a short list that never pages.',
+    ),
   sort: sortSchema.default('recommended'),
   page: queryPage.default(1),
   pageSize: queryPageSize.default(PAGE_SIZE_DEFAULT),

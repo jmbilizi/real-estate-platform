@@ -27,3 +27,13 @@ server.on('error', (error) => {
   console.error(`property-service failed to listen on port ${port}:`, error);
   process.exit(1);
 });
+
+// #755. Finish the requests in flight on SIGTERM instead of cutting them. Node's default is to exit
+// at once. The Deployment's preStop wait has already removed this pod from the Service by now, so
+// only requests that started before that remain. The timer bounds a request that never ends, below
+// the pod's 30 s grace period.
+process.once('SIGTERM', () => {
+  server.close(() => process.exit(0));
+  server.closeIdleConnections();
+  setTimeout(() => process.exit(0), 10_000).unref();
+});

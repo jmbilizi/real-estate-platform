@@ -205,7 +205,21 @@ describe('worker settings', () => {
       concurrency: 6,
       pageSize: 5_000,
       applyConcurrency: 4,
+      applyChunkSize: 250,
+      applyPaceRatio: 1,
     });
+  });
+
+  it('reads the write chunk size and pace ratio, and accepts a ratio of 0 (#755)', () => {
+    expect(
+      resolveWorkerSettings({
+        BRIGHT_SYNC_APPLY_CHUNK_SIZE: '100',
+        BRIGHT_SYNC_APPLY_PACE_RATIO: '0',
+      }),
+    ).toMatchObject({ applyChunkSize: 100, applyPaceRatio: 0 });
+    expect(() => resolveWorkerSettings({ BRIGHT_SYNC_APPLY_CHUNK_SIZE: '0' })).toThrow(
+      /BRIGHT_SYNC_APPLY_CHUNK_SIZE/,
+    );
   });
 
   it('reads the sync concurrency and page size, and refuses a page size over 10,000', () => {

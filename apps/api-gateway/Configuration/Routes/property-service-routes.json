@@ -21,9 +21,9 @@
         "Limit": 120
       },
       "QoSOptions": {
-        "Timeout": 3000,
+        "Timeout": 5000,
         "MinimumThroughput": 5,
-        "SamplingDuration": 30000,
+        "SamplingDuration": 45000,
         "BreakDuration": 5000
       }
     },
@@ -46,9 +46,9 @@
         "Limit": 120
       },
       "QoSOptions": {
-        "Timeout": 3000,
+        "Timeout": 5000,
         "MinimumThroughput": 5,
-        "SamplingDuration": 30000,
+        "SamplingDuration": 45000,
         "BreakDuration": 5000
       }
     },

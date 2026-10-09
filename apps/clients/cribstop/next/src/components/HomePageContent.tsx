@@ -152,7 +152,9 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
     const controller = new AbortController();
     setState({ listings: [], total: 0, loading: true, failed: false });
 
-    searchListings(query, controller.signal)
+    // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
+    // `total` then holds the number of cards returned, which is all the rows below read.
+    searchListings({ ...query, skipTotal: true }, controller.signal)
       .then((envelope) => {
         // A superseded request (a chip pick that moved on before this one returned) must never
         // overwrite the newer one's state.

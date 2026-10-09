@@ -4136,6 +4136,19 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
           },
           {
             "in": "query",
+            "name": "skipTotal",
+            "required": false,
+            "schema": {
+              "description": "When true, the server skips the exact match count. \`total\` then holds the number of results on this page and \`pageCount\` is 1 for a non-empty page, so neither says how many listings match. Use it for a short list that never pages.",
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {

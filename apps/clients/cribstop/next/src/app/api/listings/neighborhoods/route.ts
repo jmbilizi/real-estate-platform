@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { proxyListingsRead } from '@/app/api/_lib/listings-gateway';
+import { clientIpOf, proxyListingsRead } from '@/app/api/_lib/listings-gateway';
 import {
   buildListingsQuery,
   FORWARDABLE_NEIGHBORHOODS_PARAMS,
@@ -10,5 +10,6 @@ export async function GET(req: NextRequest) {
   return proxyListingsRead(
     '/neighborhoods',
     buildListingsQuery(req.nextUrl.searchParams, FORWARDABLE_NEIGHBORHOODS_PARAMS),
+    { cache: true, clientIp: clientIpOf(req.headers) },
   );
 }

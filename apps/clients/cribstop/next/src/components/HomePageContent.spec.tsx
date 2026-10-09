@@ -105,6 +105,32 @@ describe('HomePageContent', () => {
     window.localStorage.clear();
   });
 
+  describe('cheap requests (#755)', () => {
+    it('asks every row for its cards without the exact match count', async () => {
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
+
+      for (const [query] of mockedSearchListings.mock.calls) {
+        expect(query).toMatchObject({ skipTotal: true, pageSize: 8 });
+      }
+    });
+
+    it('fails one row without failing the others', async () => {
+      mockedSearchListings.mockImplementation((query: Query) =>
+        query.priceReduced
+          ? Promise.reject(new Error('503'))
+          : Promise.resolve(envelope([aListingCardRow()])),
+      );
+
+      render(<HomePageContent />);
+
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      expect(await screen.findByText('Price drops on homes for sale')).toBeInTheDocument();
+      expect(await screen.findAllByText(/Tap to retry/i)).toHaveLength(1);
+    });
+  });
+
   describe('titles (#394, #419)', () => {
     it('renders every row title, and no subtitle text under any of them', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
