@@ -643,6 +643,12 @@ Exact pricing and packaging per category to be specified.
 - **Contact consent:** obtain explicit opt-in before calls/SMS; honor **TCPA** and **Do-Not-Call**;
   provide easy opt-out/unsubscribe on every channel (**CAN-SPAM** for email). Persist consent and
   per-channel preferences (see Sections 11 and 13).
+- **Consent wording and retention (#630):** the lead form shows the consent text beside the submit
+  button. Pressing submit is the consent, with no pre-checked box. The text carries the "not a
+  condition" statement, message frequency, the STOP keyword and links to the Terms and Privacy
+  Policy. A wording change adds a text version and never edits an old one. Keep consent records 5
+  years from the request (4-year TCPA limitation period plus 1). Keep lead PII 3 years after the
+  last activity on the lead, then anonymize.
 - **RESPA:** disclose any affiliated-business or referral relationships; no illegal kickbacks for
   settlement-service referrals; keep referral/lead fees compliant and disclosed.
 - **Payments:** no raw card data stored on-platform — delegate to a **PCI-DSS**-compliant provider

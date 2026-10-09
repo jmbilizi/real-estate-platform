@@ -1,5 +1,5 @@
 import type { ConsentChannel, ConsentTextVersion, InquiryKind } from '@cribstop/property-contracts';
-import { CONSENT_TEXTS, CURRENT_CONSENT_TEXT_VERSION } from '@cribstop/property-contracts';
+import { CONSENT_TEXTS, LEGACY_CONSENT_TEXT_VERSION } from '@cribstop/property-contracts';
 import { OUTBOX_TEMPLATE_KEYS } from './outbox';
 
 /**
@@ -20,7 +20,7 @@ export interface CreateListingInquiryInput {
   /** Resolved via account-service's credential introspection (#86). */
   accountId: string;
   consentToContact: boolean;
-  /** Ignored unless `consentToContact`. Defaults to the current version. */
+  /** Ignored unless `consentToContact`. Defaults to `v1`: a client that names no version showed `v1`. */
   consentTextVersion?: ConsentTextVersion;
   /** Ignored unless `consentToContact`. Defaults to email, plus phone call and text when a phone is given. */
   consentChannels?: readonly ConsentChannel[];
@@ -43,7 +43,7 @@ export async function createListingInquiry(
   input: CreateListingInquiryInput,
 ): Promise<string> {
   const version = input.consentToContact
-    ? (input.consentTextVersion ?? CURRENT_CONSENT_TEXT_VERSION)
+    ? (input.consentTextVersion ?? LEGACY_CONSENT_TEXT_VERSION)
     : null;
   const consentDisclosureText = version ? CONSENT_TEXTS[version] : null;
   const channels = input.consentToContact
