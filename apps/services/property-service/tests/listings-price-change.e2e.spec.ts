@@ -88,6 +88,17 @@ const HOMES: HomeInput[] = [
     ],
   },
   {
+    // The earlier record withholds its price. Its price never reaches the card.
+    street: '12 Hidden Price Ln',
+    records: [
+      {
+        ...ended('2026-06-01T00:00:00.000Z', '2026-08-20T00:00:00.000Z', 900000),
+        priceAllowed: false,
+      },
+      { listedAt: '2026-09-01T00:00:00.000Z', listPrice: 850000 },
+    ],
+  },
+  {
     // A taken-down record of another office never supplies a price.
     street: '11 Other Office Ln',
     records: [
@@ -188,6 +199,10 @@ describe('price change on the card (#717)', () => {
 
   it('shows nothing when the relist keeps the price', async () => {
     expect((await cardOf('10 Same Price Ln')).previousPrice).toBeNull();
+  });
+
+  it('ignores an earlier record that withholds its price', async () => {
+    expect((await cardOf('12 Hidden Price Ln')).previousPrice).toBeNull();
   });
 
   it('ignores an ended record of another office', async () => {

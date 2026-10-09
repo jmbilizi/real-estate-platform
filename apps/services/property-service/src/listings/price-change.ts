@@ -1,4 +1,4 @@
-import { LIVE_STATUSES, sameHomeConditions, VIEW_SUBJECT, type SubjectColumns } from './collapse';
+import { LIVE_STATUSES, sameHomeConditions, type SubjectColumns, VIEW_SUBJECT } from './collapse';
 
 /**
  * #717. The price change of a card, from two stored MLS list prices. Nothing is estimated.
@@ -10,19 +10,22 @@ import { LIVE_STATUSES, sameHomeConditions, VIEW_SUBJECT, type SubjectColumns } 
  *     same office). The earlier record must be on the market or must have ended within
  *     `RELIST_WINDOW_DAYS` before the shown record's `listed_at`.
  *
- * The result is empty when the seller withholds the price or its history, for the shown record
- * and for the earlier record. The caller decides how long a change stays visible (14 and 90 days
- * in the web app), so a cached response never carries a stale "recent" flag.
+ * The result is empty when the seller withholds the price or its history, on the shown record or
+ * on the earlier record. The web app decides how long a change stays visible (14 and 90 days).
+ * A cached response then never carries a stale "recent" flag.
  */
 export const RELIST_WINDOW_DAYS = 60;
 
 /**
- * A feed instant as the calendar day in the property time zone, at midnight UTC. A relist date
- * (`listed_at`) is already a date at midnight UTC, so the client reads every date of this module the
- * same way. The zone repeats `PROPERTY_TIME_ZONE` in the web app (#79).
+ * A feed instant as its calendar day in the property time zone, at midnight UTC. The client reads
+ * every date of this module as a UTC day. A value that is already midnight UTC stays as it is,
+ * because `listed_at` is a date without a time. The zone repeats `PROPERTY_TIME_ZONE` in the web
+ * app (#79).
  */
 const PROPERTY_DAY = (instant: string): string =>
-  `(date_trunc('day', ${instant} AT TIME ZONE 'America/New_York') AT TIME ZONE 'UTC')`;
+  `(CASE WHEN ${instant} = date_trunc('day', ${instant} AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+       THEN ${instant}
+       ELSE date_trunc('day', ${instant} AT TIME ZONE 'America/New_York') AT TIME ZONE 'UTC' END)`;
 
 const LIVE_STATUS_SQL = `(${LIVE_STATUSES.map((status) => `'${status}'`).join(', ')})`;
 
@@ -69,7 +72,7 @@ export function priceChangeLateral(
         FROM (VALUES (l.id), (pr.id)) AS r(id)
         JOIN listings rec ON rec.id = r.id
         CROSS JOIN LATERAL (
-          (SELECT e.occurred_at AS at, e.new_price AS price, 0 AS seq,
+          (SELECT ${PROPERTY_DAY('e.occurred_at')} AS at, e.new_price AS price, 0 AS seq,
                   NULLIF(rec.source_listing_id, rec.source_listing_key) AS mls_number
            FROM listing_events e
            WHERE e.listing_id = rec.id AND e.event_type = 'listed' AND e.new_price IS NOT NULL

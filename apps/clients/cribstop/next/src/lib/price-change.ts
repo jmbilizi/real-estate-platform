@@ -13,6 +13,7 @@ export interface PriceChangeInput {
   /** The day of the change, as midnight UTC. */
   priceChangedAt?: string | null;
   listingType?: string;
+  status?: string;
 }
 
 export interface PriceChange {
@@ -72,7 +73,7 @@ export function describePriceChange(
   now: number = Date.now(),
 ): PriceChange | null {
   const { price, previousPrice, priceChangedAt } = input;
-  if (input.listingType === 'sold') return null;
+  if (input.listingType === 'sold' || input.status === 'Sold') return null;
   if (price == null || price <= 0) return null;
   if (previousPrice == null || previousPrice <= 0 || previousPrice === price) return null;
   if (priceChangedAt == null) return null;
@@ -84,14 +85,15 @@ export function describePriceChange(
   const ageDays = Math.max(0, Math.floor((todayUtc - changedAt) / DAY_MS));
   if (ageDays > MAX_INDICATOR_DAYS) return null;
 
+  const kind = input.listingType === 'rent' ? 'rent' : 'sale';
   const change = price - previousPrice;
   const percent = (Math.abs(change) / previousPrice) * 100;
   return {
     direction: change < 0 ? 'down' : 'up',
     amountText: formatPriceChangeAmount(change),
-    fullAmountText: formatPrice(Math.abs(change), 'sale'),
+    fullAmountText: formatPrice(Math.abs(change), kind),
     percentText: `${percent.toFixed(1)}%`,
-    previousPriceText: formatPrice(previousPrice, 'sale'),
+    previousPriceText: formatPrice(previousPrice, kind),
     dateText: formatDay(priceChangedAt),
     ageDays,
   };

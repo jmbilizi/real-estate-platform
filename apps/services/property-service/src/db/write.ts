@@ -284,11 +284,17 @@ export async function upsertListing(
   const occurredAt =
     !row.close_date && isFreshInsert ? (row.listed_at ?? row.last_updated) : row.last_updated;
 
-  // #717. The price this record carried before this write. Read in the same statement, so two
-  // concurrent writes cannot both see the old price. Bright sends no previous price on this MLS,
-  // so this row is the only record of a change on one key.
+  // #717. The price this record carried before this write. Bright sends no previous price on this
+  // MLS, so this row is the only record of a change on one key. The `prior` CTE reads the
+  // statement snapshot. The sync worker holds a lock, so one writer updates a key at a time.
+  // `FOR UPDATE` in the CTE reads nothing: the CTE runs after the update.
   const priorPrice = writeResult[0]?.prior_price;
-  if (!isFreshInsert && priorPrice != null && Number(priorPrice) !== Number(row.list_price)) {
+  if (
+    !isFreshInsert &&
+    priorPrice != null &&
+    row.list_price != null &&
+    Number(priorPrice) !== Number(row.list_price)
+  ) {
     await appendEvent(client, {
       listing_id: row.id,
       property_id: row.property_id,

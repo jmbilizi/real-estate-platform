@@ -26,10 +26,16 @@ exports.up = (pgm) => {
       WHERE e.event_type = 'listed' AND e.new_price IS NOT NULL
     ) s
     WHERE s.previous_price IS NOT NULL AND s.previous_price <> s.new_price
+      -- The write path stores the same row with the same instant. Never add it twice.
+      AND NOT EXISTS (
+        SELECT 1 FROM listing_events x
+        WHERE x.listing_id = s.listing_id AND x.event_type = 'price_change'
+          AND x.occurred_at = s.occurred_at AND x.new_price = s.new_price
+      )
   `);
 };
 
 /** @param {import('node-pg-migrate').MigrationBuilder} pgm */
 exports.down = () => {
-  // The rows are append-only history. A later sync appends the same rows again, so none is removed.
+  // The rows are append-only history. The rows stay.
 };

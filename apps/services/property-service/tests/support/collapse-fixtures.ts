@@ -50,6 +50,8 @@ export interface RecordInput {
   statusChangedAt?: string | null;
   /** #717. The seller allows the price history. Defaults to true. */
   priceHistoryAllowed?: boolean;
+  /** #717. The seller allows the price. Defaults to true. */
+  priceAllowed?: boolean;
 }
 
 export interface HomeInput {
@@ -113,7 +115,7 @@ function row(
     new_construction: false,
     internet_display_allowed: true,
     address_display_allowed: !input.addressHidden,
-    price_display_allowed: true,
+    price_display_allowed: input.priceAllowed ?? true,
     price_history_display_allowed: input.priceHistoryAllowed ?? true,
     media_display_allowed: true,
     days_on_market_display_allowed: true,

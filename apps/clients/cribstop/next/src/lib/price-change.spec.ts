@@ -69,6 +69,15 @@ describe('describePriceChange (#717)', () => {
     expect(describePriceChange({ ...base, previousPrice: base.price }, NOW)).toBeNull();
   });
 
+  it('shows nothing for a Sold status either', () => {
+    expect(describePriceChange({ ...base, status: 'Sold' }, NOW)).toBeNull();
+  });
+
+  it('marks a rent amount per month in the full text', () => {
+    const change = describePriceChange({ ...base, listingType: 'rent' }, NOW);
+    expect(change?.previousPriceText).toBe('$2,297,500/mo');
+  });
+
   it(`shows nothing for a change older than ${MAX_INDICATOR_DAYS} days`, () => {
     expect(describePriceChange({ ...base, priceChangedAt: daysAgo(90) }, NOW)).not.toBeNull();
     expect(describePriceChange({ ...base, priceChangedAt: daysAgo(91) }, NOW)).toBeNull();

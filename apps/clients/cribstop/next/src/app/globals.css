@@ -749,10 +749,10 @@ html[data-map-expanded] {
 }
 
 /*
- * #717. The price change sits after the price on a wide card (a viewport of 640px or more and a card
- * of 260px or more) and on its own line under the price everywhere else. The inline form names the
- * day only on a card of 340px or more: the price, the change and the day do not fit a 276px grid card. Exactly one of the two
- * renders, so a screen reader reads the change once.
+ * #717. A wide card shows the price change after the price. A wide card has a viewport of 640px or
+ * more and a card width of 260px or more. Every other card shows it on a line under the price.
+ * Exactly one of the two renders, so a screen reader reads it once. The inline form names the day
+ * only on a card of 340px or more. A 276px grid card has no room for it.
  */
 .listing-card-change-inline {
   display: none;
