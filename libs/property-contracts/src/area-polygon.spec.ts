@@ -82,6 +82,23 @@ describe('area polygon (#747)', () => {
     expect(ok(JSON.stringify({ type: 'Polygon', coordinates: [outer, outer] }))).toBe(false);
   });
 
+  it('rejects a shape wider than 20 degrees, where planar and geodesic edges part', () => {
+    const wide = ringOf([
+      [-90, 30],
+      [-60, 30],
+      [-60, 40],
+      [-90, 40],
+    ]);
+    expect(ok(wide)).toBe(false);
+    const edge = ringOf([
+      [-90, 30],
+      [-70, 30],
+      [-70, 40],
+      [-90, 40],
+    ]);
+    expect(ok(edge)).toBe(true);
+  });
+
   it('rejects extra GeoJSON members such as crs and bbox', () => {
     const base = JSON.parse(square) as Record<string, unknown>;
     const crs = { type: 'name', properties: { name: 'EPSG:3857' } };

@@ -3982,7 +3982,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "area",
             "required": false,
             "schema": {
-              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points and 8000 characters. A self-intersecting or zero-area shape is a 400.",
+              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points, 8000 characters and 20 degrees across. A self-intersecting or zero-area shape is a 400.",
               "maxLength": 8000,
               "type": "string",
             },
@@ -4351,7 +4351,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "area",
             "required": false,
             "schema": {
-              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points and 8000 characters. A self-intersecting or zero-area shape is a 400.",
+              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points, 8000 characters and 20 degrees across. A self-intersecting or zero-area shape is a 400.",
               "maxLength": 8000,
               "type": "string",
             },
@@ -4727,7 +4727,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "area",
             "required": false,
             "schema": {
-              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points and 8000 characters. A self-intersecting or zero-area shape is a 400.",
+              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points, 8000 characters and 20 degrees across. A self-intersecting or zero-area shape is a 400.",
               "maxLength": 8000,
               "type": "string",
             },
@@ -5088,7 +5088,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "area",
             "required": false,
             "schema": {
-              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points and 8000 characters. A self-intersecting or zero-area shape is a 400.",
+              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points, 8000 characters and 20 degrees across. A self-intersecting or zero-area shape is a 400.",
               "maxLength": 8000,
               "type": "string",
             },
@@ -5496,7 +5496,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "area",
             "required": false,
             "schema": {
-              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points and 8000 characters. A self-intersecting or zero-area shape is a 400.",
+              "description": "A drawn shape: GeoJSON Polygon as a JSON string, one closed ring. Only listings inside it match. ANDed with every other filter, including \`boundary\` and \`bounds\`. A listing whose street address is withheld has no coordinates and never matches. Capped at 200 points, 8000 characters and 20 degrees across. A self-intersecting or zero-area shape is a 400.",
               "maxLength": 8000,
               "type": "string",
             },
