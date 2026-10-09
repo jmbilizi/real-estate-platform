@@ -3,6 +3,38 @@ import { useMap } from 'react-leaflet';
 import { useMapExpand } from '@/lib/useMapExpand';
 import ToolbarIconButton, { FILTERS_ICON, GROUP_ICON } from '@/components/ToolbarIconButton';
 
+const DRAW_ICON = (
+  <svg
+    width={22}
+    height={22}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={1.8}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+
+const CLEAR_ICON = (
+  <svg
+    width={22}
+    height={22}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    aria-hidden="true"
+  >
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
 const BUTTON_STYLE = {
   background: '#fff',
   border: 'none',
@@ -112,38 +144,20 @@ export function CustomMapControls({
       )}
       {draw && (
         <>
-          <button
-            type="button"
+          <ToolbarIconButton
             data-testid="map-draw"
-            aria-label={
-              draw.drawing ? 'Cancel drawing' : draw.hasArea ? 'Redraw area' : 'Draw an area'
-            }
-            aria-pressed={draw.drawing}
+            label={draw.drawing ? 'Cancel drawing' : draw.hasArea ? 'Redraw area' : 'Draw an area'}
+            icon={DRAW_ICON}
+            pressed={draw.drawing}
             onClick={draw.onToggle}
-            style={draw.drawing ? { ...BUTTON_STYLE, ...PRESSED_STYLE } : BUTTON_STYLE}
-          >
-            <svg
-              {...ICON_PROPS}
-              viewBox="0 0 24 24"
-              strokeWidth={1.8}
-              stroke={draw.drawing ? '#fff' : '#222'}
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-          </button>
+          />
           {draw.hasArea && !draw.drawing && (
-            <button
-              type="button"
+            <ToolbarIconButton
               data-testid="map-draw-clear"
-              aria-label="Clear drawn area"
+              label="Clear drawn area"
+              icon={CLEAR_ICON}
               onClick={draw.onClear}
-              style={BUTTON_STYLE}
-            >
-              <svg {...ICON_PROPS} viewBox="0 0 24 24" strokeWidth={2}>
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
+            />
           )}
         </>
       )}

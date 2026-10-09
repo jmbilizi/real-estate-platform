@@ -32,7 +32,7 @@ describe('draw controls', () => {
 
     const button = screen.getByRole('button', { name: 'Draw an area' });
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.style.width).toBe('44px');
+    expect(button.className).toContain('h-11 w-11');
     fireEvent.click(button);
     expect(draw.onToggle).toHaveBeenCalledTimes(1);
   });
