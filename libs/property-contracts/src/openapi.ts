@@ -6,6 +6,7 @@ import { propertyLookupResponseSchema, propertyPageSchema } from './property-pag
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
 import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
+import { zipsRequestSchema, zipsResponseSchema } from './listing-groups';
 import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
 import { mapRequestSchema, mapResponseSchema } from './listing-map';
 import { errorBodySchema } from './errors';
@@ -104,6 +105,7 @@ function componentSchemas() {
   registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
   registry.add(neighborhoodsResponseSchema, { id: 'NeighborhoodsResponse' });
+  registry.add(zipsResponseSchema, { id: 'ZipsResponse' });
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -352,6 +354,35 @@ export function toOpenApiDocument() {
                 'application/json': {
                   schema: { $ref: '#/components/schemas/NeighborhoodsResponse' },
                 },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/zips': {
+        get: {
+          operationId: 'getZipGroups',
+          summary: 'ZIP code groups',
+          description:
+            'The listings of a search, grouped by ZIP code. The request takes the `GET /listings` ' +
+            'filters. Each group counts the listing cards that search returns, so the group ' +
+            'counts add up to the search total. `minCount` defaults to 1. Page with `limit` and ' +
+            '`offset`. Order by `count` (default) or `name`. Ties break by `key`. A group has no ' +
+            'ranking and no descriptive word. `total` is the exact count of groups. ' +
+            '`listingTotal` is the exact count of listing cards.',
+          parameters: searchParameters(zipsRequestSchema),
+          responses: {
+            '200': {
+              description: 'ZIP code groups with a listing count at or above minCount.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ZipsResponse' } },
               },
             },
             '400': {
