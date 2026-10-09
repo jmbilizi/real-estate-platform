@@ -232,6 +232,29 @@ describe('mapBrightPropertyRecord', () => {
     expect(result.kind).toBe('mapped');
   });
 
+  it('publishes a Sold record closed today when the delay is 0 days, not unset (#228)', () => {
+    const closeDate = new Date().toISOString().slice(0, 10);
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, StandardStatus: 'Closed', ClosePrice: 495000, CloseDate: closeDate },
+      ctx({ soldDisplayDelayDays: 0 }),
+    );
+    if (result.kind !== 'mapped') throw new Error(`expected mapped, got ${result.reason}`);
+    expect(result.listing.consumerStatus).toBe('Sold');
+    expect(result.listing.closeDate).toBe(closeDate);
+  });
+
+  it('rejects a Sold record with no CloseDate when the delay is 0 days (#228)', () => {
+    const result = mapBrightPropertyRecord(
+      { ...BASE_PAYLOAD, StandardStatus: 'Closed', ClosePrice: 495000 },
+      ctx({ soldDisplayDelayDays: 0 }),
+    );
+    expect(result).toEqual({
+      kind: 'rejected',
+      listingKey: 'BR-1',
+      reason: 'sold_missing_close_date',
+    });
+  });
+
   it('drops the sold price when the seller withheld the price (#146)', () => {
     const sold = {
       ...BASE_PAYLOAD,

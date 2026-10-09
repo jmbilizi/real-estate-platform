@@ -115,6 +115,10 @@ spec:
                   key: BRIGHT_MLS_CLIENT_SECRET
             - name: BRIGHT_MLS_PAGE_SIZE
               value: "200"
+            # The on-demand address loader maps sold records with this delay (#228). Keep it equal
+            # to the bright-sync-worker value.
+            - name: BRIGHT_SOLD_DISPLAY_DELAY_DAYS
+              value: "0"
             # Bearer token for the admin sync endpoint (#338, POST /admin/bright/sync). The
             # endpoint refuses every request while the committed placeholder is set.
             - name: BRIGHT_ADMIN_TOKEN

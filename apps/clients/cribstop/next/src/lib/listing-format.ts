@@ -73,7 +73,10 @@ export function formatClosePrice(
   closePrice: number | null,
   closeDate: string | null,
 ): string | null {
-  if (closePrice === null) return null;
+  // No sold price (the feed sent none, or the seller withheld it): the sold date still shows.
+  if (closePrice === null) {
+    return closeDate === null ? null : `Sold on ${formatCloseDate(closeDate)}`;
+  }
   const amount = formatPrice(closePrice, 'sold');
   if (closeDate === null) return `Sold for ${amount}`;
   return `Sold for ${amount} on ${formatCloseDate(closeDate)}`;

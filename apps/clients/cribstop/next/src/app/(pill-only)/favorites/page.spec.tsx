@@ -115,6 +115,17 @@ describe('FavoritesPage, signed in', () => {
     expect(screen.getByText('2 saved homes · synced to your account')).toBeInTheDocument();
   });
 
+  it('lets every grid cell shrink, so a long address cannot scroll the page sideways', async () => {
+    mockedListAll.mockResolvedValue([savedHome({ propertyId: OFF_MARKET_HOME })]);
+    setSaved(OFF_MARKET_HOME);
+    render(<FavoritesPage />);
+
+    await screen.findByText('Not currently listed');
+    const cells = document.querySelectorAll('[data-favorite-cell]');
+    expect(cells).toHaveLength(1);
+    cells.forEach((cell) => expect(cell).toHaveClass('min-w-0'));
+  });
+
   it('shows no street and no ZIP for an off-market home whose address is masked', async () => {
     mockedListAll.mockResolvedValue([
       savedHome({

@@ -76,15 +76,17 @@ const listingExtraFieldsSchema = z.object({
   listAgentPhone: z.string().nullable(),
   listAgentEmail: z.email().nullable(),
   facts: listingFactsSchema,
+  // #716. Defaults let a response from a service that predates the field still parse.
   // #716. The other live MLS records of this home, oldest first. Each opens at its own URL. The
   // `mlsNumber` is null when the sync has not stored it yet.
-  alsoListedAs: z.array(z.object({ id: idSchema, mlsNumber: z.string().nullable() })),
+  alsoListedAs: z.array(z.object({ id: idSchema, mlsNumber: z.string().nullable() })).default([]),
   // #716. The oldest list date among this record and the other live records of the home. The
   // client shows it as "Listed since" when `daysOnMarket` is null. Null when no record has a date.
-  listedSince: z.iso.datetime().nullable(),
+  listedSince: z.iso.datetime().nullable().default(null),
   // #717. The MLS list prices we hold for this record and its relist predecessor, oldest first.
-  // Empty when the seller withheld the price history, or when we hold no price.
-  priceHistory: z.array(priceHistoryEntrySchema),
+  // Empty when the seller withheld the price history, or when we hold no price. The default lets a
+  // response from a service that predates the field still parse.
+  priceHistory: z.array(priceHistoryEntrySchema).default([]),
 });
 
 const listingDetailFieldsSchema = listingCardSchema

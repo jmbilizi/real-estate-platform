@@ -396,8 +396,8 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     hoaFee: listing.hoaFee,
     hoaFeeFrequency: listing.hoaFeeFrequency,
     facts: listing.facts,
-    alsoListedAs: listing.alsoListedAs,
-    listedSince: listing.listedSince,
+    alsoListedAs: listing.alsoListedAs ?? [],
+    listedSince: listing.listedSince ?? null,
     priceHistory: listing.priceHistory ?? [],
 
     listingAgentName: listing.listingAgentName,

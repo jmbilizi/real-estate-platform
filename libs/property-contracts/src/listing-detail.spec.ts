@@ -99,10 +99,7 @@ describe('listingDetailSchema', () => {
     'listAgentPhone',
     'listAgentEmail',
     'facts',
-    'alsoListedAs',
-    'listedSince',
-    'priceHistory',
-  ])('requires the %s key to be present (#564, #716)', (key) => {
+  ])('requires the %s key to be present (#564)', (key) => {
     const { [key]: _omitted, ...rest } = detail.listing as Record<string, unknown>;
     expect(listingDetailSchema.safeParse({ ...detail, listing: rest }).success).toBe(false);
   });
@@ -160,5 +157,15 @@ describe('listingDetailSchema', () => {
       altText: null,
       caption: null,
     });
+  });
+});
+
+describe('listingDetailSchema — a response that predates #716', () => {
+  it('defaults alsoListedAs to [] and listedSince to null', () => {
+    const { alsoListedAs: _a, listedSince: _l, ...legacy } = detail.listing;
+    const parsed = listingDetailSchema.parse({ ...detail, listing: legacy });
+
+    expect(parsed.listing.alsoListedAs).toEqual([]);
+    expect(parsed.listing.listedSince).toBeNull();
   });
 });
