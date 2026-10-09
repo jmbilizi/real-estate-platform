@@ -22,6 +22,7 @@ import type { GalleryLoader } from './gallery-loader';
 import { getBrokerGroups, getZipGroups } from './group-counts';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
+import { createSingleFlight } from './single-flight';
 import {
   type AddressFetcher,
   findHomePage,
@@ -56,10 +57,10 @@ import {
 const LISTINGS_CACHE_CONTROL = 'public, max-age=60';
 
 /**
- * `/listings/meta` is an indexed `MAX` plus a `COUNT` — cheap, and five minutes is an order of
- * magnitude tighter than any MLS refresh obligation, so the shared cache can hold it far longer than
- * the browser. The browser TTL stays short because `Footer` renders on every route, so a long session
- * must not drift.
+ * `/listings/meta` is a `MAX` plus a `COUNT` over the whole view, which costs a full scan (#755).
+ * Five minutes is an order of magnitude tighter than any MLS refresh obligation, so the shared cache
+ * can hold it far longer than the browser. The browser TTL stays short because `Footer` renders on
+ * every route, so a long session must not drift. The web proxy (`read-cache.ts`) honours `s-maxage`.
  */
 const META_CACHE_CONTROL = 'public, max-age=60, s-maxage=300, stale-while-revalidate=60';
 
@@ -178,6 +179,8 @@ export function createListingsRouter(
   savedState?: SavedStateReader,
 ): Router {
   const router = Router();
+  // #755. Identical reads in flight at the same moment share one query. No result outlives its query.
+  const shared = createSingleFlight();
 
   router.get(
     '/listings',
@@ -218,7 +221,9 @@ export function createListingsRouter(
       const effectiveRequest = resolvedSearchRequest(parsed.value);
       // Resolves the caller beside the search. A request with no credential resolves at once.
       const account = savedState?.identify(req);
-      const envelope = await searchListings(pool, effectiveRequest);
+      const envelope = await shared(`search:${JSON.stringify(effectiveRequest)}`, () =>
+        searchListings(pool, effectiveRequest),
+      );
       // #23. Saved flags only for a caller that resolves to an account. Such a response is
       // private. Every other response stays byte-identical and public.
       const accountId = (await account) ?? null;
@@ -247,7 +252,7 @@ export function createListingsRouter(
   router.get(
     '/listings/meta',
     asyncRoute(async (_req: Request, res: Response) => {
-      const meta = await getListingsMeta(pool);
+      const meta = await shared('meta', () => getListingsMeta(pool));
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(meta);
     }),
   );
@@ -276,7 +281,10 @@ export function createListingsRouter(
         res.status(400).json(parsed.body);
         return;
       }
-      const envelope = await getNeighborhoods(pool, parsed.value);
+      const request = parsed.value;
+      const envelope = await shared(`neighborhoods:${JSON.stringify(request)}`, () =>
+        getNeighborhoods(pool, request),
+      );
       // Same cache policy as /listings/meta: an aggregate read from an index or the search view, safe for the
       // shared cache to hold far longer than the browser does.
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);

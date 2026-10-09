@@ -13,7 +13,7 @@ export const MAP_PIN_CAP_DEFAULT = 1800;
  * `searchRequestSchema` so the map and the list accept the same filters. Strict, like search.
  */
 export const mapRequestSchema = searchRequestSchema
-  .omit({ sort: true, page: true, pageSize: true })
+  .omit({ sort: true, page: true, pageSize: true, skipTotal: true })
   .extend({ bounds: searchBoundsSchema });
 
 export type MapRequestInput = z.input<typeof mapRequestSchema>;

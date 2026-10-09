@@ -86,7 +86,10 @@ export const appliedFiltersSchema = z.record(z.string(), z.unknown());
 
 export const listingsEnvelopeSchema = z.object({
   results: z.array(listingCardSchema),
-  /** Exact, not an estimate — the client computes pageCount from it. */
+  /**
+   * Exact, not an estimate — the client computes pageCount from it. The one exception is a request
+   * with `skipTotal=true` (#755): `total` then holds the number of results on the page.
+   */
   total: z.number().int().nonnegative(),
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),

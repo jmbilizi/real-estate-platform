@@ -98,7 +98,7 @@ const queryOffset = z
  * row's `sale` and `rent` still count both types, and `total` counts the requested type.
  */
 export const neighborhoodsRequestSchema = searchRequestSchema
-  .omit({ sort: true, page: true, pageSize: true })
+  .omit({ sort: true, page: true, pageSize: true, skipTotal: true })
   .extend({
     place: queryPlaces.optional(),
     minCount: queryMinCount.default(NEIGHBORHOODS_MIN_COUNT_DEFAULT),

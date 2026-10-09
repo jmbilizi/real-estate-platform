@@ -52,7 +52,7 @@ const queryOffset = z
  * unknown parameter is a 400.
  */
 export const listingGroupsRequestSchema = searchRequestSchema
-  .omit({ sort: true, page: true, pageSize: true })
+  .omit({ sort: true, page: true, pageSize: true, skipTotal: true })
   .extend({
     minCount: queryMinCount.default(LISTING_GROUPS_MIN_COUNT_DEFAULT),
     limit: queryLimit.default(LISTING_GROUPS_LIMIT_DEFAULT),

@@ -151,11 +151,16 @@ export async function searchListings(
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query(DISABLE_JIT_SQL);
 
-    const countResult = await client.query<{ total: number }>(
-      `SELECT count(*)::int AS total FROM listing_search_v v WHERE ${where}`,
-      params,
-    );
-    const total = countResult.rows[0]?.total ?? 0;
+    // #755. A short list that never pages skips the exact count: it scans every matching listing.
+    const exactTotal = request.skipTotal !== true;
+    let total = 0;
+    if (exactTotal) {
+      const countResult = await client.query<{ total: number }>(
+        `SELECT count(*)::int AS total FROM listing_search_v v WHERE ${where}`,
+        params,
+      );
+      total = countResult.rows[0]?.total ?? 0;
+    }
 
     // LIMIT/OFFSET are bound, not interpolated — they are caller-influenced values like any other.
     // Their placeholder numbers continue the filter params' sequence, hence the arithmetic.
@@ -178,16 +183,21 @@ export async function searchListings(
 
     await client.query('COMMIT');
 
+    // The card's named suppression boundary, applied at the same edge and in the same shape as the
+    // detail path's below. `primaryMedia` is joined in from `listing_media` ALONGSIDE the view
+    // rather than through it, so the view cannot reach its alt text (#105) — and nothing else on
+    // the card escapes the view, which is why this path had no boundary before.
+    const results = pageResult.rows.map((row) =>
+      applyCardAddressSuppression(toListingCardRow(row)),
+    );
+
     return {
-      // The card's named suppression boundary, applied at the same edge and in the same shape as the
-      // detail path's below. `primaryMedia` is joined in from `listing_media` ALONGSIDE the view
-      // rather than through it, so the view cannot reach its alt text (#105) — and nothing else on
-      // the card escapes the view, which is why this path had no boundary before.
-      results: pageResult.rows.map((row) => applyCardAddressSuppression(toListingCardRow(row))),
-      total,
+      results,
+      // With `skipTotal`, `total` is the page's own size and `pageCount` is 1 for a non-empty page.
+      total: exactTotal ? total : results.length,
       page: request.page,
       pageSize: request.pageSize,
-      pageCount: Math.ceil(total / request.pageSize),
+      pageCount: exactTotal ? Math.ceil(total / request.pageSize) : Math.min(1, results.length),
       // The normalised set the server actually applied, echoed so the client can reconcile URL state
       // and explain an empty result. It is the parsed request verbatim — defaults included — because
       // anything else would be a second description of what was applied.
@@ -307,6 +317,9 @@ export async function findListingCardById(
 /**
  * Dataset freshness, derived from the SAME view as search so a suppressed or non-consumer-status
  * listing cannot advance the timestamp the footer shows.
+ *
+ * #755. This is a full scan of the view, not a cheap aggregate. The web proxy stores the answer for
+ * the shared-cache lifetime (`META_CACHE_CONTROL`), and `createSingleFlight` merges concurrent calls.
  *
  * `MAX(last_updated)` is MLS FEED freshness — never `updated_at`, which a local write moves, and never
  * the time ingestion ran. `last_updated` is deliberately excluded from the `set_updated_at` trigger
