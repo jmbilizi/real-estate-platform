@@ -23,6 +23,8 @@ import {
 
 const OLD = '2026-09-18T00:00:00.000Z';
 const NEW = '2026-10-03T00:00:00.000Z';
+const ZIP_CITY = 'Zipville';
+const ZIP = '00002';
 
 const HOMES: HomeInput[] = [
   // One office, two name spellings. The newer listing carries the name the group shows.
@@ -51,6 +53,26 @@ const HOMES: HomeInput[] = [
   // No office key: the listings still count, in one group.
   { street: '1 Blank Rd', records: [{ officeKey: null, office: 'Keyless One' }] },
   { street: '2 Blank Rd', records: [{ officeKey: null, office: 'Keyless Two' }] },
+  // #759. A second city and ZIP, so the ZIP-scoped search reads these four homes and no other.
+  {
+    street: '1 Zip Rd',
+    city: ZIP_CITY,
+    zip: ZIP,
+    records: [{ officeKey: '4001', office: 'Zip A' }],
+  },
+  {
+    street: '2 Zip Rd',
+    city: ZIP_CITY,
+    zip: ZIP,
+    records: [{ officeKey: '4001', office: 'Zip A' }],
+  },
+  {
+    street: '3 Zip Rd',
+    city: ZIP_CITY,
+    zip: ZIP,
+    records: [{ officeKey: '4002', office: 'Zip B' }],
+  },
+  { street: '4 Zip Rd', city: ZIP_CITY, zip: ZIP, records: [{ officeKey: null, office: 'Zip C' }] },
 ];
 
 const SEARCH = { city: COLLAPSE_CITY, state: COLLAPSE_STATE, status: 'Active,Coming Soon,Pending' };
@@ -69,7 +91,7 @@ async function searchTotal(params: Record<string, unknown> = {}): Promise<number
 const sum = (response: BrokersResponse): number =>
   response.groups.reduce((total, group) => total + group.count, 0);
 
-const ids = { real: '', blank: '', twin: '' };
+const ids = { real: '', blank: '', twin: '', zipB: '' };
 
 beforeAll(async () => {
   const seeded = await seedHomes(pool, HOMES);
@@ -77,7 +99,8 @@ beforeAll(async () => {
   ids.real = id('1 Real Rd');
   ids.blank = id('1 Blank Rd');
   ids.twin = id('2 Twin Rd');
-  for (const record of [ids.real, ids.blank, ids.twin]) await addPhoto(pool, record);
+  ids.zipB = id('3 Zip Rd');
+  for (const record of [ids.real, ids.blank, ids.twin, ids.zipB]) await addPhoto(pool, record);
   await suppressMedia(pool, ids.twin);
 });
 
@@ -147,6 +170,28 @@ describe('GET /listings/brokers (#722)', () => {
       expect(await searchTotal({ officeKey: group.key })).toBe(group.count);
     }
     expect(await searchTotal({ officeKey: '9999999' })).toBe(0);
+  });
+
+  it('groups a ZIP search by office: the counts add up and each group opens its cards (#759)', async () => {
+    const zip = { city: undefined, state: undefined, zip: ZIP };
+    const response = await brokers(zip);
+    expect(response.groups.map(({ key, name, count }) => ({ key, name, count }))).toEqual([
+      { key: '4001', name: 'Zip A', count: 2 },
+      { key: '4002', name: 'Zip B', count: 1 },
+      { key: 'unlisted', name: 'Other / unlisted', count: 1 },
+    ]);
+    expect(response.total).toBe(3);
+    expect(response.listingTotal).toBe(4);
+    expect(sum(response)).toBe(await searchTotal(zip));
+    for (const group of response.groups) {
+      expect(await searchTotal({ ...zip, officeKey: group.key })).toBe(group.count);
+    }
+    // The photo lookup reads the same filtered rows as the counts.
+    const byKey = new Map(response.groups.map((g) => [g.key, g]));
+    expect(byKey.get('4002')?.previewPhotos).toEqual([
+      { url: photoUrlOf(ids.zipB), listingId: ids.zipB },
+    ]);
+    expect(byKey.get('4001')).not.toHaveProperty('previewPhotos');
   });
 
   it('answers 400 for an office key that is not digits or `unlisted`', async () => {

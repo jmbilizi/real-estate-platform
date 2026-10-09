@@ -40,9 +40,13 @@ import {
 interface GroupSpec {
   readonly directKey: string;
   readonly viewKey: string;
-  /** The group name, or `NULL::text` for a grouping whose key is its own name. */
-  readonly directName: string;
-  readonly viewName: string;
+  /**
+   * Extra columns the group name reads, as a select-list fragment that starts with a comma, or an
+   * empty string. `r` is the alias of the `listings` row. They land in the `filtered` CTE.
+   */
+  readonly nameColumns: (r: string) => string;
+  /** The group name over the `filtered` columns, or `NULL::text` when the key is its own name. */
+  readonly name: string;
   /** The ORDER BY of the page, over `group_key`, `group_name` and `group_count`. */
   readonly order: Record<ListingGroupsRequest['order'], string>;
 }
@@ -51,26 +55,25 @@ const ZIP_SPEC: GroupSpec = {
   // Five digits. A feed ZIP+4 must not split one ZIP into several groups.
   directKey: 'left(v.zip5, 5)',
   viewKey: 'left(v.zip, 5)',
-  directName: 'NULL::text',
-  viewName: 'NULL::text',
+  nameColumns: () => '',
+  name: 'NULL::text',
   order: { count: 'group_count DESC, group_key ASC', name: 'group_key ASC' },
 };
 
 /** #722. The key is the office key, and a listing with no key joins the "unlisted" group. */
 const UNLISTED_KEY_SQL = `'${OFFICE_KEY_UNLISTED}'`;
-/** The name of the most recently updated listing of the group. `r` is the `listings` row alias. */
-const brokerName = (r: string): string =>
-  `CASE WHEN bool_and(${r}.office_key IS NULL)
-        THEN '${BROKER_UNLISTED_NAME}'
-        ELSE (array_agg(${r}.office_name
-                        ORDER BY ${r}.source_modification_timestamp DESC NULLS LAST, ${r}.id DESC))[1]
-   END`;
 
 const BROKER_SPEC: GroupSpec = {
   directKey: `COALESCE(v.office_key, ${UNLISTED_KEY_SQL})`,
   viewKey: `COALESCE(l.office_key, ${UNLISTED_KEY_SQL})`,
-  directName: brokerName('v'),
-  viewName: brokerName('l'),
+  nameColumns: (r) =>
+    `, ${r}.office_key AS office_key, ${r}.office_name AS office_name,
+       ${r}.source_modification_timestamp AS modified_at`,
+  // The name of the most recently updated listing of the group.
+  name: `CASE WHEN bool_and(office_key IS NULL)
+        THEN '${BROKER_UNLISTED_NAME}'
+        ELSE (array_agg(office_name ORDER BY modified_at DESC NULLS LAST, id DESC))[1]
+   END`,
   order: {
     count: 'group_count DESC, group_key ASC',
     name: 'lower(group_name) ASC, group_key ASC',
@@ -112,7 +115,7 @@ async function queryGroups(
   let sourceSql: string;
   let filterSql: string;
   let keySql: string;
-  let nameSql: string;
+  let nameColumnsSql: string;
   if (isScopeOnlyRequest(search)) {
     sourceSql = 'listings v';
     filterSql = [
@@ -121,14 +124,14 @@ async function queryGroups(
       collapseCondition(LISTINGS_SUBJECT),
     ].join('\n         AND ');
     keySql = spec.directKey;
-    nameSql = spec.directName;
+    nameColumnsSql = spec.nameColumns('v');
   } else {
     const built = buildSearchQuery(search);
     params.push(...built.params);
     sourceSql = 'listing_search_v v JOIN listings l ON l.id = v.id';
     filterSql = built.where;
     keySql = spec.viewKey;
-    nameSql = spec.viewName;
+    nameColumnsSql = spec.nameColumns('l');
   }
   const minCountParam = bind(minCount);
   const limitParam = bind(limit);
@@ -139,11 +142,18 @@ async function queryGroups(
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await client.query(DISABLE_JIT_SQL);
     const result = await client.query<GroupDbRow>(
-      `WITH grouped AS (
-         SELECT ${keySql} AS group_key, ${nameSql} AS group_name, count(*)::int AS group_count
+      // The filter runs once, into "filtered". The groups and the photos both read it. A photo
+      // lookup that ran the filter again for each page group scanned "listings" once per group on
+      // a ZIP search, and the gateway timed the request out (#759).
+      `WITH filtered AS MATERIALIZED (
+         SELECT v.id, v.listed_at, v.media_display_allowed, ${keySql} AS group_key${nameColumnsSql}
            FROM ${sourceSql}
           WHERE ${filterSql}
-          GROUP BY ${keySql}
+       ),
+       grouped AS (
+         SELECT group_key, ${spec.name} AS group_name, count(*)::int AS group_count
+           FROM filtered
+          GROUP BY group_key
        ),
        matching AS (SELECT * FROM grouped WHERE group_count >= ${minCountParam}),
        totals AS (
@@ -170,19 +180,18 @@ async function queryGroups(
                               ORDER BY c.listed_at DESC NULLS LAST, c.id DESC),
                     '[]'::jsonb) AS preview_photos
              FROM (
-               SELECT v.id, v.listed_at, pm.url
-                 FROM ${sourceSql}
+               SELECT f.id, f.listed_at, pm.url
+                 FROM filtered f
                  JOIN LATERAL (
                    SELECT m.source_url AS url
                      FROM listing_media m
-                    WHERE m.listing_id = v.id AND m.source_url IS NOT NULL
-                      AND ${mediaVisibleSql('v')}
+                    WHERE m.listing_id = f.id AND m.source_url IS NOT NULL
+                      AND ${mediaVisibleSql('f')}
                     ORDER BY ${PRIMARY_MEDIA_ORDER}
                     LIMIT 1
                  ) pm ON true
-                WHERE ${filterSql}
-                  AND ${keySql} = page.group_key
-                ORDER BY v.listed_at DESC NULLS LAST, v.id DESC
+                WHERE f.group_key = page.group_key
+                ORDER BY f.listed_at DESC NULLS LAST, f.id DESC
                 LIMIT ${NEIGHBORHOOD_PREVIEW_PHOTOS_MAX}
              ) c
          ) pp ON true

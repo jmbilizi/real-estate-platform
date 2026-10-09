@@ -20,6 +20,16 @@ type FetchPage<Row> = (
 ) => Promise<{ rows: Row[]; total: number }>;
 
 /**
+ * A gateway timeout on one group request says "the listings service is down", which is wrong for
+ * a page whose listings may load. That case shows the group failure text. Other API messages
+ * (rate limit, bad request) stay, because the visitor can act on them.
+ */
+function shownError(err: unknown, failure: string): string {
+  if (!(err instanceof ListingsApiError) || err.code === 'upstream_unavailable') return failure;
+  return err.message;
+}
+
+/**
  * Fetches one page of group cards for the search. Held while `enabled` is false. `fetchPage` must
  * be a stable function: the page refetches when the filters, page, order or `enabled` change.
  */
@@ -66,7 +76,7 @@ export function useGroupPage<Row>(
           ...prev,
           answers: request,
           status: 'error',
-          error: err instanceof ListingsApiError ? err.message : failure,
+          error: shownError(err, failure),
         }));
       });
     return () => controller.abort();
