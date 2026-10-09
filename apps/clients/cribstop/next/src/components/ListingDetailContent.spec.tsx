@@ -672,3 +672,17 @@ describe('ListingDetailContent — one home, several MLS records (#716)', () => 
     expect(screen.queryByText('Listed since')).toBeNull();
   });
 });
+
+describe('ListingDetailContent — response from a service without the #716 fields', () => {
+  it('renders the detail page when alsoListedAs and listedSince are absent', async () => {
+    const detail = aListingDetail({ listing: { daysOnMarket: null } });
+    const { alsoListedAs: _a, listedSince: _l, ...legacy } = detail.listing;
+    const view = toListingDetailView({ ...detail, listing: legacy } as typeof detail);
+    await renderAndSettle(<ListingDetailContent listing={view} />);
+
+    expect(view.alsoListedAs).toEqual([]);
+    expect(view.listedSince).toBeNull();
+    expect(screen.queryByText(/Also listed as/i)).toBeNull();
+    expect(screen.queryByText('Listed since')).toBeNull();
+  });
+});
