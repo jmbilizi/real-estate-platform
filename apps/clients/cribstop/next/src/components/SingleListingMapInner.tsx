@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Circle, MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
+import { Circle, MapContainer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { ListingType } from '@/lib/types';
 import { formatListingPrice } from '@/lib/listing-format';
-import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
+import BasemapLayer from '@/components/BasemapLayer';
+import { useMapConfig, useTileFailure } from '@/components/map-tiles';
 
 function InvalidateOnMount() {
   const map = useMap();
@@ -40,7 +41,7 @@ export default function SingleListingMapInner({
   const PILL_W = 80;
   const PILL_H = 32;
   const { failed: tilesFailed, onTileError } = useTileFailure();
-  const { tileUrl, attribution } = useTileLayerConfig();
+  const mapConfig = useMapConfig();
   const priceDisplay = formatListingPrice(price, listingType);
   const pinLabel = priceDisplay.isWithheld ? 'View listing' : priceDisplay.text;
   const icon = L.divIcon({
@@ -67,18 +68,7 @@ export default function SingleListingMapInner({
         className="h-full w-full"
         style={{ background: '#f2ede6' }}
       >
-        {/* Empty until `/api/map-config` answers — see `map-tiles.ts` for why this never
-            defaults to a fallback URL client-side. */}
-        {tileUrl && (
-          <TileLayer
-            attribution={attribution}
-            url={tileUrl}
-            // `L.TileLayer`'s own default `maxZoom` is 18, independent of the map's — see
-            // `ListingsMapInner` for why this must match the map's `maxZoom` above.
-            maxZoom={19}
-            eventHandlers={{ tileerror: onTileError }}
-          />
-        )}
+        <BasemapLayer config={mapConfig} onTileError={onTileError} />
         <InvalidateOnMount />
         <Circle
           center={[latitude, longitude]}

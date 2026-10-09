@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CustomMapControls, type ViewControls } from '@/components/CustomMapControls';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { MapBounds, MapPin, MapResponse, NeighborhoodRow } from '@cribstop/property-contracts';
@@ -15,7 +15,8 @@ import { hasMapCoordinates } from '@/lib/listing-format';
 import { formatBounds, roundBounds } from '@/lib/map-bounds';
 import { createUserMoveGate } from '@/lib/user-move-gate';
 import PricePinLayer from '@/components/PricePinLayer';
-import { useTileFailure, useTileLayerConfig } from '@/components/map-tiles';
+import BasemapLayer from '@/components/BasemapLayer';
+import { useMapConfig, useTileFailure } from '@/components/map-tiles';
 
 /**
  * Which rows may produce a map pin.
@@ -460,7 +461,7 @@ export default function ListingsMapInner({
 
   const [scrollActive, setScrollActive] = useState(false);
   const { failed: tilesFailed, onTileError } = useTileFailure();
-  const { tileUrl, attribution } = useTileLayerConfig();
+  const mapConfig = useMapConfig();
 
   // The frame — radius, border, shadow, fill — belongs to the wrapper in `ListingsMap`, so that the
   // loading placeholder wears it too. This fills that frame and positions the overlays below.
@@ -477,19 +478,7 @@ export default function ListingsMapInner({
         className="h-full w-full"
         style={{ background: '#f2ede6' }}
       >
-        {/* Empty until `/api/map-config` answers — see `map-tiles.ts` for why this never
-            defaults to a fallback URL client-side. */}
-        {tileUrl && (
-          <TileLayer
-            attribution={attribution}
-            url={tileUrl}
-            // `L.TileLayer`'s own default `maxZoom` is 18, independent of the map's — leaving
-            // this off would cap real tile fetches at z18 even though the map (above) allows 19,
-            // silently upscaling the z18 tile past its native resolution.
-            maxZoom={19}
-            eventHandlers={{ tileerror: onTileError }}
-          />
-        )}
+        <BasemapLayer config={mapConfig} onTileError={onTileError} />
         <InvalidateOnMount />
         <CustomMapControls viewControls={viewControls} />
         <ClickToActivateScroll onChange={setScrollActive} />
