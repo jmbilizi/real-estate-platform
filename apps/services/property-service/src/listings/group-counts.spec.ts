@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { listingGroupsRequestSchema } from '@cribstop/property-contracts';
 import { createApp } from '../app';
-import { getZipGroups } from './group-counts';
+import { getBrokerGroups, getZipGroups } from './group-counts';
 import type { ReadPool } from './repository';
 
 /** A pool that records every statement and answers the group query with `rows`. */
@@ -86,6 +86,78 @@ describe('getZipGroups', () => {
     await getZipGroups(pool, parse({ minCount: '2', limit: '10', offset: '20' }));
     const params = values.find((v) => v.length > 0) as unknown[];
     expect(params.slice(-3)).toEqual([2, 10, 20]);
+  });
+});
+
+describe('getBrokerGroups (#722)', () => {
+  it('maps the rows to groups with the office key and the name', async () => {
+    const { pool } = recordingPool([
+      { group_total: 2, listing_total: 5, key: '1001', name: 'Acme Realty', count: 3 },
+      { group_total: 2, listing_total: 5, key: 'unlisted', name: 'Other / unlisted', count: 2 },
+    ]);
+    expect(await getBrokerGroups(pool, parse({ city: 'Bethesda', state: 'MD' }))).toEqual({
+      groups: [
+        { key: '1001', name: 'Acme Realty', count: 3 },
+        { key: 'unlisted', name: 'Other / unlisted', count: 2 },
+      ],
+      total: 2,
+      listingTotal: 5,
+    });
+  });
+
+  it('groups by office key, never by name, and puts a missing key in `unlisted`', async () => {
+    const { pool, texts } = recordingPool([]);
+    await getBrokerGroups(pool, parse({ city: 'Bethesda', state: 'MD' }));
+    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    expect(sql).toContain("GROUP BY COALESCE(v.office_key, 'unlisted')");
+    expect(sql).toContain('bool_and(v.office_key IS NULL)');
+    expect(sql).toContain("'Other / unlisted'");
+    // The name comes from the most recently updated listing of the group.
+    expect(sql).toContain(
+      'array_agg(v.office_name\n                        ORDER BY v.source_modification_timestamp DESC NULLS LAST, v.id DESC)',
+    );
+  });
+
+  it('reads the office key through a join to listings on the view source', async () => {
+    const { pool, texts } = recordingPool([]);
+    await getBrokerGroups(pool, parse({ city: 'Bethesda', state: 'MD', beds: '3' }));
+    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    expect(sql).toContain('listing_search_v v JOIN listings l ON l.id = v.id');
+    expect(sql).toContain("GROUP BY COALESCE(l.office_key, 'unlisted')");
+  });
+
+  it('orders by count or by name, and breaks every tie by key', async () => {
+    const { pool, texts } = recordingPool([]);
+    await getBrokerGroups(pool, parse({ order: 'count' }));
+    await getBrokerGroups(pool, parse({ order: 'name' }));
+    const [byCount, byName] = texts.filter((text) => text.includes('WITH grouped'));
+    expect(byCount).toContain('ORDER BY group_count DESC, group_key ASC');
+    expect(byName).toContain('ORDER BY lower(group_name) ASC, group_key ASC');
+  });
+
+  it('reads no brokerage identity to rank: nothing names a brokerage in the ORDER BY', async () => {
+    const { pool, texts } = recordingPool([]);
+    await getBrokerGroups(pool, parse({}));
+    const sql = texts.find((text) => text.includes('WITH grouped')) as string;
+    expect(sql).not.toMatch(/real broker/i);
+    expect(sql).not.toMatch(/featured/i);
+  });
+});
+
+describe('GET /listings/brokers (#722)', () => {
+  it('answers 200 with the groups, and 400 for an unknown parameter', async () => {
+    const { pool } = recordingPool([
+      { group_total: 1, listing_total: 2, key: '1001', name: 'Acme Realty', count: 2 },
+    ]);
+    const app = createApp({ pool });
+    const ok = await request(app).get('/listings/brokers').query({ city: 'Bethesda' });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({
+      groups: [{ key: '1001', name: 'Acme Realty', count: 2 }],
+      total: 1,
+      listingTotal: 2,
+    });
+    expect((await request(app).get('/listings/brokers').query({ nope: '1' })).status).toBe(400);
   });
 });
 

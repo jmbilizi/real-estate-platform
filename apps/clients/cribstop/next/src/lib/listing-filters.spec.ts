@@ -182,6 +182,25 @@ describe('parseFiltersFromSearchParams', () => {
   });
 });
 
+describe('the officeKey filter (#722)', () => {
+  it('round-trips a numeric key and `unlisted`, and is not counted as a panel filter', () => {
+    for (const officeKey of ['1234567', 'unlisted']) {
+      const params = filtersToSearchParams({ officeKey });
+      expect(params.get('officeKey')).toBe(officeKey);
+      expect(parseFiltersFromSearchParams(params).officeKey).toBe(officeKey);
+    }
+  });
+
+  it('drops a value the contract rejects instead of sending it', () => {
+    expect(
+      parseFiltersFromSearchParams(new URLSearchParams('officeKey=Real+Broker')).officeKey,
+    ).toBeUndefined();
+    expect(
+      parseFiltersFromSearchParams(new URLSearchParams("officeKey=1'%3B--")).officeKey,
+    ).toBeUndefined();
+  });
+});
+
 describe('parsePageFromSearchParams', () => {
   it('reads a valid page', () => {
     expect(parsePageFromSearchParams(new URLSearchParams('page=4'))).toBe(4);

@@ -22,6 +22,7 @@ jest.mock('@/lib/api/listings', () => ({
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
   getZipGroups: jest.fn(() => Promise.resolve({ groups: [], total: 0, listingTotal: 0 })),
+  getBrokerGroups: jest.fn(() => Promise.resolve({ groups: [], total: 0, listingTotal: 0 })),
   // Carries `code` and `status` like the real one. A bare `class extends Error {}` was enough while
   // nothing branched on the code, but `useListingSearch` now reports it so the UI can tell a
   // deterministic failure (a page past the result window, #65) from a retryable one — a mock

@@ -193,6 +193,25 @@ describe('buildSearchQuery', () => {
     expect(params).toContainEqual('capitol hill');
   });
 
+  it('filters by office key with a bound parameter, and by no key for `unlisted` (#722)', () => {
+    const keyed = build({ officeKey: '1234567' });
+    expect(keyed.where).toContain('lo.office_key = $');
+    expect(keyed.params).toContainEqual('1234567');
+
+    const unlisted = build({ officeKey: 'unlisted' });
+    expect(unlisted.where).toContain('lo.office_key IS NULL');
+    expect(unlisted.params).not.toContainEqual('unlisted');
+
+    expect(build().where).not.toContain('office_key');
+  });
+
+  it('rejects an office key that is not digits or `unlisted` (#722)', () => {
+    expect(searchRequestSchema.safeParse({ officeKey: "1'; DROP TABLE listings" }).success).toBe(
+      false,
+    );
+    expect(searchRequestSchema.safeParse({ officeKey: 'Real Broker' }).success).toBe(false);
+  });
+
   it('does not fall back to city when neighborhood is unset', () => {
     expect(build({ city: 'Rockville' }).where).not.toContain('v.neighborhood');
   });

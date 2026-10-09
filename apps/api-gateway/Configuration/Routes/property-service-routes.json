@@ -78,6 +78,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/listings/brokers",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings/brokers",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 120
+      },
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/listings/map",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/listings/map",

@@ -181,6 +181,8 @@ export interface ListingRow {
   virtual_tour_url?: string | null;
   list_agent_phone?: string | null;
   list_agent_email?: string | null;
+  /** #722. Bright `ListOfficeKey`, the identity of the listing office. Omitted means null. */
+  office_key?: string | null;
 }
 
 export interface OpenHouseRow {

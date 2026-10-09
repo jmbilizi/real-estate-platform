@@ -88,3 +88,37 @@ export const zipsResponseSchema = z.object({
 });
 
 export type ZipsResponse = z.infer<typeof zipsResponseSchema>;
+
+/**
+ * #722. `GET /listings/brokers`: the same search, grouped by listing office. The key is the MLS
+ * office key, so two spellings of one office form one group and two offices with one name stay
+ * apart. Listings with no office key form one group with the key `unlisted`, so the counts still
+ * add up. No brokerage is ranked, featured or left out.
+ */
+export const BROKER_UNLISTED_NAME = 'Other / unlisted';
+
+export const brokersRequestSchema = listingGroupsRequestSchema;
+export type BrokersRequest = ListingGroupsRequest;
+
+export const brokerGroupSchema = z.object({
+  key: z
+    .string()
+    .describe('The MLS office key, or `unlisted` for listings that carry no office key.'),
+  name: z
+    .string()
+    .describe(
+      'The office name of the most recently updated listing in the group. ' +
+        `\`${BROKER_UNLISTED_NAME}\` for the unlisted group.`,
+    ),
+  count: z.number().int().nonnegative().describe('Listing cards of the office.'),
+});
+
+export type BrokerGroup = z.infer<typeof brokerGroupSchema>;
+
+export const brokersResponseSchema = z.object({
+  groups: z.array(brokerGroupSchema),
+  total: z.number().int().nonnegative(),
+  listingTotal: z.number().int().nonnegative(),
+});
+
+export type BrokersResponse = z.infer<typeof brokersResponseSchema>;

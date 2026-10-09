@@ -33,6 +33,10 @@ export interface AttributionFields {
   readonly brokerPhone: string;
   readonly brokerEmail: string | null;
   readonly officeName: string;
+  /** #722. Bright `ListOfficeKey`, an Int64 that may arrive as a number or a string. `null` when
+   *  the feed sends none. A missing key never fails the record: the listing joins the "unlisted"
+   *  broker group. */
+  readonly officeKey: string | null;
   readonly officeBrokerLeadPhone: string | null;
   readonly officeBrokerLeadEmail: string | null;
   readonly listingAgentName: string | null;
@@ -44,6 +48,14 @@ export type AttributionResult =
 
 function nonBlank(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function officeKeyOf(value: unknown): string | null {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : null;
+  }
+  const text = nonBlank(value);
+  return text !== null && /^\d{1,19}$/.test(text) ? text : null;
 }
 
 export function mapAttribution(payload: Readonly<Record<string, unknown>>): AttributionResult {
@@ -60,6 +72,7 @@ export function mapAttribution(payload: Readonly<Record<string, unknown>>): Attr
       brokerPhone: officePhone ?? '',
       brokerEmail: officeEmail,
       officeName,
+      officeKey: officeKeyOf(payload.ListOfficeKey),
       // Bright carries the agent's own office line, not a separate "broker lead" contact. It is the
       // closest available fit and optional on the DB side, so a missing value stays null rather than
       // falling back to the office's own number twice.

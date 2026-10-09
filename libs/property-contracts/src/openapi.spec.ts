@@ -34,6 +34,7 @@ describe('toOpenApiDocument', () => {
       '/agent/leads/{id}/decline',
       '/agent/leads/{id}/status',
       '/listings',
+      '/listings/brokers',
       '/listings/map',
       '/listings/meta',
       '/listings/neighborhoods',

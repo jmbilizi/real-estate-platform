@@ -1,5 +1,9 @@
 import {
+  BROKER_UNLISTED_NAME,
+  type BrokersResponse,
+  brokersResponseSchema,
   type ListingGroupsRequest,
+  OFFICE_KEY_UNLISTED,
   PAGE_SIZE_DEFAULT,
   type SearchRequest,
   type ZipsResponse,
@@ -49,6 +53,27 @@ const ZIP_SPEC: GroupSpec = {
   directName: 'NULL::text',
   viewName: 'NULL::text',
   order: { count: 'group_count DESC, group_key ASC', name: 'group_key ASC' },
+};
+
+/** #722. The key is the office key, and a listing with no key joins the "unlisted" group. */
+const UNLISTED_KEY_SQL = `'${OFFICE_KEY_UNLISTED}'`;
+/** The name of the most recently updated listing of the group. `r` is the `listings` row alias. */
+const brokerName = (r: string): string =>
+  `CASE WHEN bool_and(${r}.office_key IS NULL)
+        THEN '${BROKER_UNLISTED_NAME}'
+        ELSE (array_agg(${r}.office_name
+                        ORDER BY ${r}.source_modification_timestamp DESC NULLS LAST, ${r}.id DESC))[1]
+   END`;
+
+const BROKER_SPEC: GroupSpec = {
+  directKey: `COALESCE(v.office_key, ${UNLISTED_KEY_SQL})`,
+  viewKey: `COALESCE(l.office_key, ${UNLISTED_KEY_SQL})`,
+  directName: brokerName('v'),
+  viewName: brokerName('l'),
+  order: {
+    count: 'group_count DESC, group_key ASC',
+    name: 'lower(group_name) ASC, group_key ASC',
+  },
 };
 
 interface GroupDbRow {
@@ -139,6 +164,25 @@ async function queryGroups(
   } finally {
     client.release();
   }
+}
+
+/** `GET /listings/brokers`. */
+export async function getBrokerGroups(
+  pool: ReadPool,
+  request: ListingGroupsRequest,
+): Promise<BrokersResponse> {
+  const rows = await queryGroups(pool, request, BROKER_SPEC);
+  return brokersResponseSchema.parse({
+    groups: rows
+      .filter((row) => row.key !== null)
+      .map((row) => ({
+        key: row.key as string,
+        name: row.name as string,
+        count: row.count as number,
+      })),
+    total: rows[0]?.group_total ?? 0,
+    listingTotal: rows[0]?.listing_total ?? 0,
+  });
 }
 
 /** `GET /listings/zips`. */

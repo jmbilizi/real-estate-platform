@@ -115,7 +115,7 @@ export async function upsertListing(
         is_sample, last_updated, original_list_price, listed_at, coming_soon_date,
         status_changed_at,
         tax_annual_amount, tax_year, hoa_fee, hoa_fee_frequency, virtual_tour_url,
-        list_agent_phone, list_agent_email)
+        list_agent_phone, list_agent_email, office_key)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
              $9, $10, $11, $12,
              $13, $14, $15,
@@ -129,7 +129,7 @@ export async function upsertListing(
              $43, $44, $45, $46,
              $47, $48, $49,
              $50, $51, $52, $53, $54, $55,
-             $56, $57, $58, $59, $60, $61, $62)
+             $56, $57, $58, $59, $60, $61, $62, $63)
      -- Re-ingesting the same feed record (source_system, source_listing_key) reuses the SAME id
      -- (resolved by the caller, see upsertListingBySourceKey), so this is the idempotent re-run
      -- path (#93): every column the INSERT list carries is also refreshed on conflict.
@@ -196,6 +196,8 @@ export async function upsertListing(
        virtual_tour_url = EXCLUDED.virtual_tour_url,
        list_agent_phone = EXCLUDED.list_agent_phone,
        list_agent_email = EXCLUDED.list_agent_email,
+       -- #722. Refreshed like the other feed facts. An absent key clears the old one.
+       office_key = EXCLUDED.office_key,
        -- A record the feed maps again is live again (#338): a takedown is not permanent.
        deleted_at = NULL
      -- #391. xmax = 0 is Postgres' own "this row was just inserted, not updated" signal, cheaper
@@ -272,6 +274,7 @@ export async function upsertListing(
       row.virtual_tour_url ?? null,
       row.list_agent_phone ?? null,
       row.list_agent_email ?? null,
+      row.office_key ?? null,
     ],
   );
 

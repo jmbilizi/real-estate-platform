@@ -452,6 +452,55 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "BrokersResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "groups": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "description": "Listing cards of the office.",
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "key": {
+                  "description": "The MLS office key, or \`unlisted\` for listings that carry no office key.",
+                  "type": "string",
+                },
+                "name": {
+                  "description": "The office name of the most recently updated listing in the group. \`Other / unlisted\` for the unlisted group.",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "key",
+                "name",
+                "count",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "listingTotal": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer",
+          },
+        },
+        "required": [
+          "groups",
+          "total",
+          "listingTotal",
+        ],
+        "type": "object",
+      },
       "CreateAgentProfileRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3836,6 +3885,16 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
           },
           {
             "in": "query",
+            "name": "officeKey",
+            "required": false,
+            "schema": {
+              "description": "The listing office, by its MLS office key. A drill-down from a broker group, not a search box. \`unlisted\` matches the listings that carry no office key. It is an exact match, ANDed with every other filter.",
+              "pattern": "^(\\d{1,19}|unlisted)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
             "name": "county",
             "required": false,
             "schema": {
@@ -4027,6 +4086,372 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
         "summary": "Search listings",
       },
     },
+    "/listings/brokers": {
+      "get": {
+        "description": "The listings of a search, grouped by listing office. The request takes the \`GET /listings\` filters. Each group counts the listing cards that search returns, so the group counts add up to the search total. The group key is the MLS office key. The name is the office name of the most recently updated listing in the group. Listings with no office key form one group with the key \`unlisted\`. Order by \`count\` (default) or \`name\`. Ties break by \`key\`. No office is ranked, featured or left out. \`minCount\` defaults to 1. Page with \`limit\` and \`offset\`.",
+        "operationId": "getBrokerGroups",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "zip",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "street",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "description": "Case-insensitive EXACT match, not substring — a place name, not a search term. ANDed with every other filter, including \`query\`. Mirrors \`neighborhood\`: a substring match would make \`Ken\` match \`Kensington\`.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "description": "Two-letter state code, case-insensitive exact match (e.g. \`MD\`). ANDed with every other filter, including \`query\` — no parameter suppresses another. Full state names are the client’s job to normalize before sending this parameter.",
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "listingType",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "sale",
+                "rent",
+                "sold",
+                "all",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "propertyType",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values: Single Family, Condo, Townhome, Multi-Family, Loft, Land, New Construction, Manufactured/Mobile. 'all' means every type.",
+            },
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values from the closed set: Active, Coming Soon, Pending. Default when omitted or empty: Active, Coming Soon. 'Pending' means "Under Contract" to consumers. It covers both the Active Under Contract and Pending MLS statuses. Sold is not a value here. No sold listing publishes in search yet.",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minPrice",
+            "required": false,
+            "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "maxPrice",
+            "required": false,
+            "schema": {
+              "description": "Whole number. A listing with a seller-suppressed price never matches this filter, because it has no price to compare.",
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "beds",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "baths",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+(\\.5)?$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minSqft",
+            "required": false,
+            "schema": {
+              "pattern": "^\\d+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "neighborhood",
+            "required": false,
+            "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "officeKey",
+            "required": false,
+            "schema": {
+              "description": "The listing office, by its MLS office key. A drill-down from a broker group, not a search box. \`unlisted\` matches the listings that carry no office key. It is an exact match, ANDed with every other filter.",
+              "pattern": "^(\\d{1,19}|unlisted)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "county",
+            "required": false,
+            "schema": {
+              "description": "A 5-digit county FIPS code, matched exactly (case-insensitive) against county_fips. ANDed with every other filter. A caller without a FIPS code should send \`boundary\` instead — this and \`boundary\` should not both be sent for the same conceptual place.",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "boundary",
+            "required": false,
+            "schema": {
+              "description": "GeoJSON Polygon or MultiPolygon, as a JSON string, simplified client-side. ANDs with \`neighborhood\` when both are sent. Capped at 500 points and 20000 characters.",
+              "maxLength": 20000,
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "bounds",
+            "required": false,
+            "schema": {
+              "description": "Viewport as \`west,south,east,north\` in decimal degrees. West must be less than east and south less than north. A listing whose seller withheld the address has no coordinates, so it never matches a viewport.",
+              "pattern": "^-?\\d+(\\.\\d+)?(,-?\\d+(\\.\\d+)?){3}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "openHouse",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "newConstruction",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "waterfront",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "petFriendly",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "amenities",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated values from the closed set: Pool, Garage, Gym, Elevator, Balcony, Fireplace, Washer/Dryer, Pet Friendly, Waterfront, Office, Rooftop, Garden, Smart Home, Solar, EV Charging.",
+            },
+            "style": "form",
+          },
+          {
+            "in": "query",
+            "name": "listedWithinDays",
+            "required": false,
+            "schema": {
+              "description": "Whole number, 1 to 30. Matches a listing whose listed_at is within this many days of now. A listing with no listed_at (the feed carried no list date) never matches.",
+              "pattern": "^([1-9]|[12][0-9]|30)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "priceReduced",
+            "required": false,
+            "schema": {
+              "enum": [
+                "true",
+                "false",
+              ],
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "minCount",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 1000. Default 1. A group with fewer listings is omitted. A value above 1 makes the group counts add up to less than \`listingTotal\`.",
+              "pattern": "^([1-9]\\d{0,2}|1000)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 100. Default 24.",
+              "pattern": "^([1-9][0-9]?|100)$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 0 to 10000. Default 0. Skips this many groups in the order given by \`order\`. \`total\` stays the exact group count.",
+              "pattern": "^\\d{1,5}$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "count",
+              "description": "\`count\` (default): listing count descending. \`name\`: name ascending. Ties break by \`key\`. No other order exists.",
+              "enum": [
+                "count",
+                "name",
+              ],
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokersResponse",
+                },
+              },
+            },
+            "description": "Listing office groups with a listing count at or above minCount.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown or invalid query parameter (\`invalid_request\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Listing office groups",
+      },
+    },
     "/listings/map": {
       "get": {
         "description": "Takes the same filters as \`/listings\`, without paging or sort, plus the viewport \`bounds\`. The matching set is the search set limited to the viewport. The response is one pin per listing, newest first, up to a cap. \`total\` counts every match in the viewport, so \`total\` above the pin count means the cap applied. The response never holds clusters. A listing whose street address is withheld has no coordinates, so it is in no pin and not in \`total\`.",
@@ -4180,6 +4605,16 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "neighborhood",
             "required": false,
             "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "officeKey",
+            "required": false,
+            "schema": {
+              "description": "The listing office, by its MLS office key. A drill-down from a broker group, not a search box. \`unlisted\` matches the listings that carry no office key. It is an exact match, ANDed with every other filter.",
+              "pattern": "^(\\d{1,19}|unlisted)$",
               "type": "string",
             },
           },
@@ -4521,6 +4956,16 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "neighborhood",
             "required": false,
             "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "officeKey",
+            "required": false,
+            "schema": {
+              "description": "The listing office, by its MLS office key. A drill-down from a broker group, not a search box. \`unlisted\` matches the listings that carry no office key. It is an exact match, ANDed with every other filter.",
+              "pattern": "^(\\d{1,19}|unlisted)$",
               "type": "string",
             },
           },
@@ -4909,6 +5354,16 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
             "name": "neighborhood",
             "required": false,
             "schema": {
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "officeKey",
+            "required": false,
+            "schema": {
+              "description": "The listing office, by its MLS office key. A drill-down from a broker group, not a search box. \`unlisted\` matches the listings that carry no office key. It is an exact match, ANDed with every other filter.",
+              "pattern": "^(\\d{1,19}|unlisted)$",
               "type": "string",
             },
           },
