@@ -39,6 +39,8 @@ const detail = {
     featured: false,
     sponsored: false,
     priceReduced: false,
+    previousPrice: null,
+    priceChangedAt: null,
     newConstruction: false,
     isSample: true,
     closePrice: null,
@@ -64,6 +66,7 @@ const detail = {
     listAgentEmail: null,
     alsoListedAs: [],
     listedSince: null,
+    priceHistory: [],
     facts: {
       parking: null,
       heating: null,

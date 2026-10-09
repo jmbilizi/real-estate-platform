@@ -279,6 +279,8 @@ describe('upsertListingBySourceKey', () => {
     /** Whether the fake `INSERT ... RETURNING (xmax = 0)` reports a fresh insert. Defaults to
      *  the natural reading of `lookupRows`: empty means no prior row, so this write inserts one. */
     inserted?: boolean;
+    /** The list price the record carried before this write, as the fake RETURNING reports it. */
+    priorPrice?: string | null;
   }): { client: Queryable; queries: RecordedQuery[] } {
     const queries: RecordedQuery[] = [];
     const client: Queryable = {
@@ -295,7 +297,9 @@ describe('upsertListingBySourceKey', () => {
         }
         if (text.includes('INSERT INTO listings')) {
           const inserted = options.inserted ?? options.lookupRows.length === 0;
-          return Promise.resolve({ rows: [{ inserted }] });
+          return Promise.resolve({
+            rows: [{ inserted, prior_price: options.priorPrice ?? null }],
+          });
         }
         if (text.includes('FROM properties p')) {
           return Promise.resolve({
@@ -417,6 +421,47 @@ describe('upsertListingBySourceKey', () => {
    * current marketing period), so reusing it for every event would date every later event the
    * same, no matter how long ago the listing actually first appeared.
    */
+  describe('price_change event (#717)', () => {
+    const reingest = { lookupRows: [{ id: 'listing-1', is_terminal: false }], inserted: false };
+    const priceEvents = (queries: RecordedQuery[]): RecordedQuery[] =>
+      queries.filter(
+        (q) => q.text.includes('INSERT INTO listing_events') && q.values?.[3] === 'price_change',
+      );
+
+    it('appends the old and new price when the key list price changes', async () => {
+      const { client, queries } = createFakeClient({ ...reingest, priorPrice: '2297500.00' });
+
+      await upsertListingBySourceKey(client, { ...baseRow, list_price: 2197500 });
+
+      const [event] = priceEvents(queries);
+      expect(event?.values?.slice(4, 7)).toEqual([baseRow.last_updated, 2297500, 2197500]);
+    });
+
+    it('records an increase the same way as a cut', async () => {
+      const { client, queries } = createFakeClient({ ...reingest, priorPrice: '2000000.00' });
+
+      await upsertListingBySourceKey(client, { ...baseRow, list_price: 2100000 });
+
+      expect(priceEvents(queries)[0]?.values?.slice(5, 7)).toEqual([2000000, 2100000]);
+    });
+
+    it('appends nothing when the price is unchanged', async () => {
+      const { client, queries } = createFakeClient({ ...reingest, priorPrice: '450000.00' });
+
+      await upsertListingBySourceKey(client, { ...baseRow, list_price: 450000 });
+
+      expect(priceEvents(queries)).toHaveLength(0);
+    });
+
+    it('appends nothing on a fresh insert', async () => {
+      const { client, queries } = createFakeClient({ lookupRows: [], inserted: true });
+
+      await upsertListingBySourceKey(client, baseRow);
+
+      expect(priceEvents(queries)).toHaveLength(0);
+    });
+  });
+
   describe('listed event occurred_at (#391)', () => {
     it('uses listed_at on the first write when the feed supplied one', async () => {
       const { client, queries } = createFakeClient({ lookupRows: [], inserted: true });

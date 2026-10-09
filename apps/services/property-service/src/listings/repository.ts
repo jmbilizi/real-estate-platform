@@ -31,6 +31,7 @@ import {
   mergedRecordsLateral,
 } from './collapse';
 import { resolvedSearchRequest } from './on-demand';
+import { priceChangeLateral } from './price-change';
 import {
   buildSearchQuery,
   isScopeOnlyRequest,
@@ -102,6 +103,10 @@ const MEDIA_VISIBLE = mediaVisibleSql('v');
  */
 const PRIMARY_MEDIA_ORDER = 'm.is_primary DESC, m.sort_order, m.id';
 
+/** #717. The earlier MLS price of the shown record. Page rows only, never the count. */
+const PRICE_CHANGE_JOIN = `
+    LEFT JOIN LATERAL ${priceChangeLateral()} pc ON true`;
+
 const PRIMARY_MEDIA_JOIN = `
     LEFT JOIN LATERAL (
       SELECT m.source_url AS primary_media_url, m.alt_text AS primary_media_alt_text
@@ -162,8 +167,9 @@ export async function searchListings(
 
     const pageResult = await client.query<ListingCardDbRow>(
       `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text,
+              pc.previous_price, pc.price_changed_at,
               ${CARD_UNIT_NUMBER}
-       FROM listing_search_v v${PRIMARY_MEDIA_JOIN}
+       FROM listing_search_v v${PRIMARY_MEDIA_JOIN}${PRICE_CHANGE_JOIN}
        WHERE ${where}
        ORDER BY ${orderBy}
        LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
@@ -217,6 +223,7 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
             l.list_agent_phone, l.list_agent_email,
             facts.facts,
             merged.also_listed_as, merged.listed_since,
+            pc.previous_price, pc.price_changed_at, pc.price_history,
             media.media,
             open_houses.open_houses
      FROM listing_search_v v
@@ -225,6 +232,8 @@ export async function findListingById(pool: ReadClient, id: string): Promise<Lis
      LEFT JOIN units u ON u.id = v.unit_id
      -- #716. The other live records of this home. A record hidden from search still opens here.
      LEFT JOIN LATERAL ${mergedRecordsLateral()} merged ON true
+     -- #717. Two stored MLS prices of this home, and the prices we hold.
+     LEFT JOIN LATERAL ${priceChangeLateral(true)} pc ON true
      LEFT JOIN LATERAL (
        -- #53. Same MEDIA_VISIBLE rule as PRIMARY_MEDIA_JOIN, applied to the full gallery: when
        -- media is suppressed only the marked row can match, so the detail response degrades to at
@@ -285,8 +294,9 @@ export async function findListingCardById(
 ): Promise<ListingCardRow | null> {
   const result = await pool.query<ListingCardDbRow>(
     `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text,
+              pc.previous_price, pc.price_changed_at,
             ${CARD_UNIT_NUMBER}
-     FROM listing_search_v v${PRIMARY_MEDIA_JOIN}
+     FROM listing_search_v v${PRIMARY_MEDIA_JOIN}${PRICE_CHANGE_JOIN}
      WHERE v.id = $1`,
     [id],
   );
@@ -883,8 +893,9 @@ export async function findListingCardsByIds(
   if (ids.length === 0) return new Map();
   const result = await pool.query<ListingCardDbRow>(
     `SELECT ${LISTING_CARD_SELECT}, pm.primary_media_url, pm.primary_media_alt_text,
+              pc.previous_price, pc.price_changed_at,
             ${CARD_UNIT_NUMBER}
-     FROM listing_search_v v${PRIMARY_MEDIA_JOIN}
+     FROM listing_search_v v${PRIMARY_MEDIA_JOIN}${PRICE_CHANGE_JOIN}
      WHERE v.id = ANY($1::uuid[])`,
     [ids],
   );

@@ -54,6 +54,12 @@ export const listingCardSchema = z
     // Paid placement ranks first under `recommended`; the label is a disclosure obligation.
     sponsored: z.boolean(),
     priceReduced: z.boolean(),
+    // #717. The earlier MLS list price we hold for this home, and the day of the change. The day
+    // is midnight UTC of the calendar day in the property time zone. Both are null when we hold no
+    // earlier price, or when the seller withheld the price or its history. The card shows the
+    // difference of two stored MLS prices. It never shows an estimate.
+    previousPrice: z.number().positive().nullable(),
+    priceChangedAt: z.iso.datetime().nullable(),
     newConstruction: z.boolean(),
     isSample: z.boolean(),
     closePrice: z.number().nonnegative().nullable(),

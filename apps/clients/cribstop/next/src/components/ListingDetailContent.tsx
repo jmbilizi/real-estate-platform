@@ -12,10 +12,12 @@ import SingleListingMap from '@/components/SingleListingMap';
 import GalleryStatusBadge from '@/components/listing/GalleryStatusBadge';
 import ListingProvenance from '@/components/listing/ListingProvenance';
 import ListingFacts from '@/components/listing/ListingFacts';
+import PriceHistory from '@/components/listing/PriceHistory';
 import ListingHeaderNav from '@/components/listing/ListingHeaderNav';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatCalendarDate, formatNumber, formatPrice } from '@/lib/format';
+import { describePriceChange, formatDetailPriceChange } from '@/lib/price-change';
 import { BRAND } from '@/lib/brand';
 import {
   agentContactLines,
@@ -236,6 +238,7 @@ export default function ListingDetailContent({
   const lotSizeText = formatLotSize(listing.lotSqft);
   const priceDisplay = formatListingPrice(listing.price, listing.listingType);
   const closePriceText = formatClosePrice(listing.closePrice, listing.closeDate);
+  const priceChange = describePriceChange(listing);
 
   // #716. The MLS day count when the feed carries it. Otherwise the oldest list date of the home.
   // Never a number we worked out ourselves.
@@ -373,7 +376,7 @@ export default function ListingDetailContent({
                 <div className="mb-3 flex flex-wrap items-center gap-1.5 empty:hidden">
                   {listing.isSample && <SampleBadge />}
                   {listing.sponsored && <SponsoredBadge />}
-                  {listing.priceReduced && (
+                  {listing.priceReduced && priceChange?.direction !== 'up' && (
                     <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
                   )}
                   {listing.newConstruction && (
@@ -408,6 +411,13 @@ export default function ListingDetailContent({
                     }
                   >
                     {priceDisplay.text}
+                  </p>
+                )}
+
+                {/* #717. Two stored MLS prices. A cut and an increase read alike. */}
+                {priceChange && !closePriceText && (
+                  <p className="mt-1 text-sm text-ink-body" data-testid="price-change">
+                    {formatDetailPriceChange(priceChange)}
                   </p>
                 )}
 
@@ -463,6 +473,9 @@ export default function ListingDetailContent({
             )}
 
             <ListingFacts listing={listing} className={PANEL} />
+
+            {/* #717 */}
+            <PriceHistory entries={listing.priceHistory} className={PANEL} />
 
             {/* Amenities */}
             {listing.amenities.length > 0 && (

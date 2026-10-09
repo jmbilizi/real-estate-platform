@@ -50,6 +50,17 @@ export const listingFactsSchema = z.object({
 });
 
 /**
+ * #717. One stored MLS list price. `change` is this price minus the one before it, null for the
+ * first row. `mlsNumber` is null when the sync has not stored it yet.
+ */
+export const priceHistoryEntrySchema = z.object({
+  date: z.iso.datetime(),
+  price: z.number().positive(),
+  change: z.number().nullable(),
+  mlsNumber: z.string().nullable(),
+});
+
+/**
  * #564. Detail-only facts from the Bright record. Never on the card or the map payload. Every key
  * is present. A fact the feed does not carry is `null`.
  */
@@ -72,6 +83,10 @@ const listingExtraFieldsSchema = z.object({
   // #716. The oldest list date among this record and the other live records of the home. The
   // client shows it as "Listed since" when `daysOnMarket` is null. Null when no record has a date.
   listedSince: z.iso.datetime().nullable().default(null),
+  // #717. The MLS list prices we hold for this record and its relist predecessor, oldest first.
+  // Empty when the seller withheld the price history, or when we hold no price. The default lets a
+  // response from a service that predates the field still parse.
+  priceHistory: z.array(priceHistoryEntrySchema).default([]),
 });
 
 const listingDetailFieldsSchema = listingCardSchema
@@ -91,5 +106,6 @@ export const listingDetailSchema = z.object({
 });
 
 export type ListingDetail = z.infer<typeof listingDetailSchema>;
+export type PriceHistoryEntry = z.infer<typeof priceHistoryEntrySchema>;
 export type DetailMedia = z.infer<typeof detailMediaSchema>;
 export type ListingFacts = z.infer<typeof listingFactsSchema>;

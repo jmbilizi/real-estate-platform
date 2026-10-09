@@ -85,6 +85,11 @@ export interface ListingCardDbRow {
   /** #716. The other live records of the same home. Detail projection only. */
   also_listed_as?: { id: string; mls_number: string | null }[] | null;
   listed_since?: Date | null;
+  /** #717. Null when we hold no earlier MLS price. */
+  previous_price?: number | null;
+  price_changed_at?: Date | null;
+  /** #717. Detail projection only. Oldest first. */
+  price_history?: { date: string; price: number; mls_number: string | null }[] | null;
   open_houses?: { starts_at: string; ends_at: string; remarks: string | null }[] | null;
   primary_media_url?: string | null;
   primary_media_alt_text?: string | null;
@@ -199,6 +204,8 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
     featured: row.featured,
     sponsored: row.featured_reason === 'paid',
     priceReduced: row.price_reduced,
+    previousPrice: row.previous_price ?? null,
+    priceChangedAt: row.price_changed_at == null ? null : instant(row.price_changed_at),
     newConstruction: row.new_construction,
     isSample: row.is_sample,
     closePrice: row.close_price,
@@ -278,6 +285,12 @@ export function toListingDetail(row: ListingCardDbRow): ListingDetail {
         mlsNumber: item.mls_number,
       })),
       listedSince: row.listed_since == null ? null : instant(row.listed_since),
+      priceHistory: (row.price_history ?? []).map((item, index, all) => ({
+        date: nestedInstant(item.date),
+        price: item.price,
+        change: index === 0 ? null : item.price - (all[index - 1]?.price ?? item.price),
+        mlsNumber: item.mls_number,
+      })),
       facts: {
         parking: row.facts?.parking ?? null,
         heating: row.facts?.heating ?? null,
