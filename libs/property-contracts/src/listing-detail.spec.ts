@@ -39,6 +39,8 @@ const detail = {
     featured: false,
     sponsored: false,
     priceReduced: false,
+    previousPrice: null,
+    priceChangedAt: null,
     newConstruction: false,
     isSample: true,
     closePrice: null,
@@ -64,6 +66,7 @@ const detail = {
     listAgentEmail: null,
     alsoListedAs: [],
     listedSince: null,
+    priceHistory: [],
     facts: {
       parking: null,
       heating: null,
@@ -98,6 +101,7 @@ describe('listingDetailSchema', () => {
     'facts',
     'alsoListedAs',
     'listedSince',
+    'priceHistory',
   ])('requires the %s key to be present (#564, #716)', (key) => {
     const { [key]: _omitted, ...rest } = detail.listing as Record<string, unknown>;
     expect(listingDetailSchema.safeParse({ ...detail, listing: rest }).success).toBe(false);
