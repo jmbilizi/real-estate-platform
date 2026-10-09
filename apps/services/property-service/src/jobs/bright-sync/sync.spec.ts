@@ -2,6 +2,7 @@ import type { BrightPage } from '../bright-ingest/bright-client';
 import { BRIGHT_STATUS_FILTER_LABELS } from '../bright-map/status';
 import {
   backfillStream,
+  electionFieldsRequested,
   INCREMENTAL_STREAM,
   PAGE_SIZE,
   type PageResult,
@@ -379,6 +380,71 @@ describe('runIncremental', () => {
 
     await expect(runIncremental(h.deps, { overlapMs: 120_000 })).rejects.toThrow('pod killed');
     expect(h.state.get(INCREMENTAL_STREAM)).toEqual({ watermark: '2026-09-26T11:58:00Z' });
+  });
+
+  describe('suppression report (#146)', () => {
+    const WINDOW = [
+      { ListingKey: 1, StandardStatus: 'Active', ModificationTimestamp: '2026-09-26T11:59:00Z' },
+    ];
+
+    function run(page: Partial<PageResult>, log: string[]) {
+      const h = harness(WINDOW);
+      h.state.set(INCREMENTAL_STREAM, { watermark: '2026-09-26T11:58:00Z' });
+      const deps: SyncDeps = {
+        ...h.deps,
+        applyPage: () => Promise.resolve({ ...RESULT, ...page }),
+        log: (message) => log.push(message),
+        select: [
+          'InternetListingDisplayPricesYN',
+          'InternetListingDisplayHistoricalPricesYN',
+          'InternetListingDisplayDaysOnSiteYN',
+        ],
+      };
+      return runIncremental(deps, { overlapMs: 0 });
+    }
+
+    it('reports the suppressed and anomaly counts in the run counts', async () => {
+      const counts = await run(
+        { mapped: 10, suppressedByFlag: { price: 2 }, suppressionAnomalies: { price: 1 } },
+        [],
+      );
+      expect(counts.suppressedByFlag).toEqual({ price: 2 });
+      expect(counts.suppressionAnomalies).toEqual({ price: 1 });
+    });
+
+    it('warns, and does not fail, when over 1,000 records set no suppression flag', async () => {
+      const log: string[] = [];
+      await run({ mapped: 1001 }, log);
+      expect(log.filter((m) => m.startsWith('WARNING'))).toHaveLength(1);
+    });
+
+    it('does not warn while the election fields are not in the select list', async () => {
+      expect(electionFieldsRequested()).toBe(false);
+      const h = harness(WINDOW);
+      h.state.set(INCREMENTAL_STREAM, { watermark: '2026-09-26T11:58:00Z' });
+      const log: string[] = [];
+      await runIncremental(
+        {
+          ...h.deps,
+          applyPage: () => Promise.resolve({ ...RESULT, mapped: 5000 }),
+          log: (message) => log.push(message),
+        },
+        { overlapMs: 0 },
+      );
+      expect(log).toEqual([]);
+    });
+
+    it('does not warn at 1,000 records or fewer', async () => {
+      const log: string[] = [];
+      await run({ mapped: 1000 }, log);
+      expect(log).toEqual([]);
+    });
+
+    it('does not warn when any flag was set', async () => {
+      const log: string[] = [];
+      await run({ mapped: 5000, suppressedByFlag: { daysOnMarket: 1 } }, log);
+      expect(log).toEqual([]);
+    });
   });
 
   it('refuses to run before a backfill recorded a watermark', async () => {

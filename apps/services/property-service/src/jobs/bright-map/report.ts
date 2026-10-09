@@ -33,6 +33,13 @@ export interface BrightMapRunReport {
    * rejection, so it is tracked separately from `withheldByReason`.
    */
   readonly outOfRangeFieldCounts: Readonly<Record<string, number>>;
+  /**
+   * Mapped rows per seller election flag set to suppressed (#146): `price`,
+   * `priceHistory`, `daysOnMarket`. An anomaly also counts here, because it suppresses.
+   */
+  readonly suppressedByFlag: Readonly<Record<string, number>>;
+  /** Mapped rows whose election field held a non-boolean value (#146), per flag. */
+  readonly suppressionAnomalies: Readonly<Record<string, number>>;
 }
 
 /**
@@ -83,4 +90,6 @@ export const ZERO_MAP_REPORT: BrightMapRunReport = {
   takenDown: 0,
   sampleMarked: 0,
   outOfRangeFieldCounts: {},
+  suppressedByFlag: {},
+  suppressionAnomalies: {},
 };

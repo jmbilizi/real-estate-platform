@@ -1,7 +1,25 @@
-import { mapSuppressionFlags } from './suppression';
+import {
+  mapSuppressionFlags,
+  SUPPRESSION_FIELDS_BY_SOURCE,
+  UNDECLARED_SUPPRESSION_FIELDS,
+} from './suppression';
+
+const FIELDS = SUPPRESSION_FIELDS_BY_SOURCE.BrightMLS;
 
 describe('mapSuppressionFlags', () => {
-  it('allows display only on an explicit true', () => {
+  it('names the election fields from the #146 ruling, keyed by source system', () => {
+    expect(SUPPRESSION_FIELDS_BY_SOURCE).toEqual({
+      BrightMLS: {
+        price: 'InternetListingDisplayPricesYN',
+        priceHistory: 'InternetListingDisplayHistoricalPricesYN',
+        daysOnMarket: 'InternetListingDisplayDaysOnSiteYN',
+        media: 'MediaInternetDisplayYN',
+      },
+    });
+    expect([...UNDECLARED_SUPPRESSION_FIELDS].sort()).toEqual(Object.values(FIELDS).sort());
+  });
+
+  it('shows every value when the record carries no election field', () => {
     expect(
       mapSuppressionFlags({
         InternetEntireListingDisplayYN: true,
@@ -10,68 +28,73 @@ describe('mapSuppressionFlags', () => {
     ).toEqual({
       internetDisplayAllowed: true,
       addressDisplayAllowed: true,
-      // Stakeholder ruling 2026-09-23: the list price displays.
       priceDisplayAllowed: true,
-      priceHistoryDisplayAllowed: false,
-      // Stakeholder ruling 2026-09-22 (#191): media display is allowed for every Bright row.
+      priceHistoryDisplayAllowed: true,
       mediaDisplayAllowed: true,
-      daysOnMarketDisplayAllowed: false,
+      daysOnMarketDisplayAllowed: true,
+      anomalies: [],
     });
   });
 
-  it('suppresses on an explicit false', () => {
-    const result = mapSuppressionFlags({
-      InternetEntireListingDisplayYN: false,
-      InternetAddressDisplayYN: false,
+  describe.each([
+    ['price', 'priceDisplayAllowed'],
+    ['priceHistory', 'priceHistoryDisplayAllowed'],
+    ['daysOnMarket', 'daysOnMarketDisplayAllowed'],
+  ] as const)('the %s election', (key, flag) => {
+    const field = FIELDS[key];
+    const others = (['priceDisplayAllowed', 'priceHistoryDisplayAllowed'] as const)
+      .concat('daysOnMarketDisplayAllowed' as never)
+      .filter((name) => name !== flag);
+
+    it('shows on a literal true', () => {
+      const result = mapSuppressionFlags({ [field]: true });
+      expect(result[flag]).toBe(true);
+      expect(result.anomalies).toEqual([]);
     });
-    expect(result.internetDisplayAllowed).toBe(false);
-    expect(result.addressDisplayAllowed).toBe(false);
+
+    it('suppresses on a literal false and leaves the other flags alone', () => {
+      const result = mapSuppressionFlags({ [field]: false });
+      expect(result[flag]).toBe(false);
+      expect(result.anomalies).toEqual([]);
+      for (const other of others) {
+        expect(result[other]).toBe(true);
+      }
+    });
+
+    it('shows when the field is absent', () => {
+      expect(mapSuppressionFlags({})[flag]).toBe(true);
+    });
+
+    it('shows when the field is null', () => {
+      const result = mapSuppressionFlags({ [field]: null });
+      expect(result[flag]).toBe(true);
+      expect(result.anomalies).toEqual([]);
+    });
+
+    it.each([['Y'], ['false'], ['true'], [0], [1]])(
+      'suppresses and counts an anomaly on the non-boolean %p',
+      (value) => {
+        const result = mapSuppressionFlags({ [field]: value });
+        expect(result[flag]).toBe(false);
+        expect(result.anomalies).toEqual([key]);
+      },
+    );
   });
 
-  it('fails closed when the fields are absent', () => {
-    const result = mapSuppressionFlags({});
-    expect(result.internetDisplayAllowed).toBe(false);
-    expect(result.addressDisplayAllowed).toBe(false);
-  });
-
-  it('fails closed on a value that is not literally true, e.g. a "Y" string', () => {
-    const result = mapSuppressionFlags({
+  it('keeps the listing and address gates explicit-true (default deny)', () => {
+    expect(mapSuppressionFlags({}).internetDisplayAllowed).toBe(false);
+    expect(mapSuppressionFlags({}).addressDisplayAllowed).toBe(false);
+    const odd = mapSuppressionFlags({
       InternetEntireListingDisplayYN: 'Y',
       InternetAddressDisplayYN: 1,
     });
-    expect(result.internetDisplayAllowed).toBe(false);
-    expect(result.addressDisplayAllowed).toBe(false);
+    expect(odd.internetDisplayAllowed).toBe(false);
+    expect(odd.addressDisplayAllowed).toBe(false);
+    expect(odd.anomalies).toEqual([]);
   });
 
-  it('holds price history and days on market suppressed, whatever the feed sends', () => {
-    const result = mapSuppressionFlags({
-      PriceDisplayYN: true,
-      PriceHistoryDisplayYN: true,
-      DaysOnMarketDisplayYN: true,
-    });
-    expect(result.priceHistoryDisplayAllowed).toBe(false);
-    expect(result.daysOnMarketDisplayAllowed).toBe(false);
-  });
-
-  /**
-   * The media and list-price rulings cover those two flags only. A change that lifts a third has to
-   * delete an assertion here, which a reviewer sees.
-   */
-  it('keeps the rulings narrow — price history and days on market stay fail-closed', () => {
-    const { priceHistoryDisplayAllowed, daysOnMarketDisplayAllowed } = mapSuppressionFlags({
-      InternetEntireListingDisplayYN: true,
-    });
-    expect([priceHistoryDisplayAllowed, daysOnMarketDisplayAllowed]).toEqual([false, false]);
-  });
-
-  it('allows the list price on every Bright row (stakeholder ruling 2026-09-23)', () => {
-    expect(mapSuppressionFlags({}).priceDisplayAllowed).toBe(true);
-  });
-
-  it('allows media display on every Bright row (stakeholder ruling 2026-09-22, #191)', () => {
-    // Unconditional, so an empty payload and a payload with a media-shaped field agree. No Bright
-    // field is read for this flag, which is the point: the licence is the source, not the feed.
+  it('keeps listing-level media allowed whatever the feed sends (ruling 2026-09-22)', () => {
     expect(mapSuppressionFlags({}).mediaDisplayAllowed).toBe(true);
-    expect(mapSuppressionFlags({ MediaDisplayYN: false }).mediaDisplayAllowed).toBe(true);
+    expect(mapSuppressionFlags({ [FIELDS.media]: false }).mediaDisplayAllowed).toBe(true);
   });
 });

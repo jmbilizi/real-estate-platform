@@ -85,7 +85,9 @@ describe('ListingDetailContent — price', () => {
     const view = toListingDetailView(aListingDetail({ listing: { price: null } }));
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.getAllByText(/Price withheld/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Contact Listing Agent for Additional Information/i).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText('$0')).toBeNull();
   });
 

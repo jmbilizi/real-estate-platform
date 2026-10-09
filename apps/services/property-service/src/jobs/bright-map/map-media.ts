@@ -42,12 +42,20 @@
  * Two `PreferredPhotoYN: true` rows on one listing is feed data we cannot rule out. Steps 2 and 3
  * resolve it deterministically rather than failing the run over a photo ordering.
  *
+ * ## Seller suppression is per record (#146)
+ *
+ * A record whose `MediaInternetDisplayYN` is `false` is skipped, not stored. The feed marks the one
+ * retained exterior photo by leaving the flag true on it. This module never picks a retained photo
+ * itself. The live `$metadata` does not declare the field yet. See `suppression.ts`.
+ *
  * ## Fail-closed, and counted
  *
  * A record this module cannot vouch for is rejected with a named reason, never mapped with a
  * guessed value. `run.ts` counts the reasons, so a feed change presents as a rejection spike in the
  * run report rather than as photos quietly disappearing.
  */
+
+import { readElection, SUPPRESSION_FIELDS_BY_SOURCE } from './suppression';
 
 /** One `BrightMedia` record accepted for display. `run.ts` turns a group of these into rows. */
 export interface MappedBrightMedia {
@@ -71,11 +79,18 @@ export type BrightMediaRejection =
   | 'missing_url'
   | 'wrong_resource'
   | 'not_a_photo'
-  | 'unknown_media_type';
+  | 'unknown_media_type'
+  | 'display_suppressed'
+  | 'display_flag_anomaly';
 
 export type BrightMediaMapResult =
   | { readonly kind: 'mapped'; readonly media: MappedBrightMedia }
-  | { readonly kind: 'rejected'; readonly reason: BrightMediaRejection };
+  | {
+      readonly kind: 'rejected';
+      readonly reason: BrightMediaRejection;
+      /** Set when the photo is suppressed, so the run can clear that listing's stored photos. */
+      readonly listingKey?: string;
+    };
 
 /** A `listing_media` row's display fields, after the gallery is ordered. */
 export interface GalleryEntry extends MappedBrightMedia {
@@ -178,6 +193,16 @@ export function mapBrightMediaRecord(
 
   if (!isPropertyResource(payload.ResourceName)) {
     return { kind: 'rejected', reason: 'wrong_resource' };
+  }
+
+  // Per-record seller election (#146, ruling 2026-10-08). `false` skips the photo. Absent or null
+  // shows it. A non-boolean skips it and counts apart, so a feed change is visible.
+  const display = readElection(payload[SUPPRESSION_FIELDS_BY_SOURCE.BrightMLS.media]);
+  if (display.anomaly) {
+    return { kind: 'rejected', reason: 'display_flag_anomaly', listingKey };
+  }
+  if (!display.allowed) {
+    return { kind: 'rejected', reason: 'display_suppressed', listingKey };
   }
 
   // `MediaURL` only. The feed also carries Thumb, Medium, HD, HiRes and Full variants, and picking

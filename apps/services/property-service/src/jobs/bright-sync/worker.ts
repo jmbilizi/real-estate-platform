@@ -364,6 +364,8 @@ function createDeps(
             withheld: report.withheld,
             takenDown,
             withheldByReason: report.withheldByReason,
+            suppressedByFlag: report.suppressedByFlag,
+            suppressionAnomalies: report.suppressionAnomalies,
           };
         });
       } finally {

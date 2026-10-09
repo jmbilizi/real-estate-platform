@@ -25,6 +25,7 @@ import {
 import { PropertyRow, UnitRow } from '../../db/types';
 import { randomUUID } from 'node:crypto';
 
+import type { ElectionFlag } from './suppression';
 import { buildListingGallery, mapBrightMediaRecord, type MappedBrightMedia } from './map-media';
 import { mapBrightPropertyRecord } from './map-record';
 import {
@@ -199,6 +200,8 @@ export async function mapBrightPayloads(
   const rejected: RejectedPayload[] = [];
   const withheldByReason: Record<string, number> = {};
   const outOfRangeFieldCounts: Record<string, number> = {};
+  const suppressedByFlag: Record<string, number> = {};
+  const suppressionAnomalies: Record<string, number> = {};
   const publishedListingKeys: string[] = [];
   let mapped = 0;
   let published = 0;
@@ -218,6 +221,21 @@ export async function mapBrightPayloads(
 
     for (const field of result.outOfRangeFields) {
       outOfRangeFieldCounts[field] = (outOfRangeFieldCounts[field] ?? 0) + 1;
+    }
+
+    const { suppression } = result.listing;
+    const flags: [ElectionFlag, boolean][] = [
+      ['price', suppression.priceDisplayAllowed],
+      ['priceHistory', suppression.priceHistoryDisplayAllowed],
+      ['daysOnMarket', suppression.daysOnMarketDisplayAllowed],
+    ];
+    for (const [flag, allowed] of flags) {
+      if (!allowed) {
+        suppressedByFlag[flag] = (suppressedByFlag[flag] ?? 0) + 1;
+      }
+    }
+    for (const flag of suppression.anomalies) {
+      suppressionAnomalies[flag] = (suppressionAnomalies[flag] ?? 0) + 1;
     }
 
     const propertyRow: PropertyRow = { id: randomUUID(), community_id: null, ...result.property };
@@ -336,6 +354,8 @@ export async function mapBrightPayloads(
       takenDown,
       sampleMarked,
       outOfRangeFieldCounts,
+      suppressedByFlag,
+      suppressionAnomalies,
     },
     rejected,
   };
@@ -443,6 +463,9 @@ export async function mapStagedBrightMedia(
 
   const byListingKey = new Map<string, MappedBrightMedia[]>();
   const rejectedByReason: Record<string, number> = {};
+  // Listings with a suppressed photo. One whose photos are all suppressed must still be written
+  // with an empty gallery, so a photo shown on an earlier run is deleted.
+  const suppressedListingKeys = new Set<string>();
   let mapped = 0;
   let rejected = 0;
 
@@ -456,6 +479,9 @@ export async function mapStagedBrightMedia(
     if (result.kind === 'rejected') {
       rejected += 1;
       rejectedByReason[result.reason] = (rejectedByReason[result.reason] ?? 0) + 1;
+      if (result.listingKey !== undefined) {
+        suppressedListingKeys.add(result.listingKey);
+      }
       continue;
     }
     mapped += 1;
@@ -464,6 +490,12 @@ export async function mapStagedBrightMedia(
       byListingKey.set(result.media.listingKey, [result.media]);
     } else {
       group.push(result.media);
+    }
+  }
+
+  for (const key of suppressedListingKeys) {
+    if (!byListingKey.has(key)) {
+      byListingKey.set(key, []);
     }
   }
 
@@ -507,7 +539,9 @@ export async function mapStagedBrightMedia(
       await client.query('ROLLBACK');
       throw error;
     }
-    listingsWithMedia += 1;
+    if (gallery.length > 0) {
+      listingsWithMedia += 1;
+    }
     mediaWritten += gallery.length;
   }
 

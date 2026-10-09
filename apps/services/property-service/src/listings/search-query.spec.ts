@@ -165,6 +165,16 @@ describe('buildSearchQuery', () => {
     expect(build().where).not.toContain('listed_at');
   });
 
+  it('sorts and filters price on the view column, which is null for a suppressed price (#146)', () => {
+    const { where } = build({ minPrice: '100000', maxPrice: '900000' });
+    expect(where).toContain('v.price >=');
+    expect(where).toContain('v.price <=');
+    expect(SORT_ORDERS['price-asc']).toContain('v.price ASC NULLS LAST');
+    expect(SORT_ORDERS['price-desc']).toContain('v.price DESC NULLS LAST');
+    const all = [where, ...Object.values(SORT_ORDERS)].join(' ');
+    expect(all).not.toContain('list_price');
+  });
+
   it('restricts to price cuts only when priceReduced is true (#391)', () => {
     expect(build({ priceReduced: 'true' }).where).toContain('v.price_reduced');
     expect(build({ priceReduced: 'false' }).where).not.toContain('v.price_reduced');
