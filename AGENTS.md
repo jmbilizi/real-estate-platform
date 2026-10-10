@@ -149,7 +149,6 @@ pnpm run pre-commit                    # Fast validation (format+lint+type-check
 pnpm run pre-push                      # Full validation (+ test + build)
 pnpm run dev:worktree:reclaim          # Classify and remove stale worktrees (dry run by default)
 pnpm install && pnpm run hooks:setup   # First-time setup
-pnpm run infra:local:certs:ensure      # New worktree: copy the enterprise CA bundle before an image build
 pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:disk | :images:list
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
 pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
@@ -228,6 +227,10 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
   `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
   `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
+- A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
+  `pnpm run infra:local:certs:ensure` before an image build. The second command copies the bundle
+  from the main checkout. A host with no bundle anywhere gets a warning and the build continues. If
+  the copy fails, the build stops and names this command.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
