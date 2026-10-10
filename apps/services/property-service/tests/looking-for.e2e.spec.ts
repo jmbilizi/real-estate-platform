@@ -168,6 +168,13 @@ describe('validation', () => {
     expect((await list(account)).items).toEqual([]);
   });
 
+  it('accepts a start date of yesterday and names the parent of a nested extra key', async () => {
+    const account = newAccount();
+    expect((await put(account, randomUUID(), body({ whenStart: day(-1) }))).status).toBe(201);
+    const nested = await put(account, randomUUID(), body({ places: [{ ...place, extra: 1 }] }));
+    expect(nested.data.error.fields).toEqual(['places']);
+  });
+
   it('accepts a start date of today and refuses a malformed id', async () => {
     const account = newAccount();
     expect((await put(account, randomUUID(), body({ whenStart: day(0) }))).status).toBe(201);

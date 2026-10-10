@@ -18,11 +18,31 @@ interface Recorded {
   values: unknown[];
 }
 
+const savedRow = {
+  id: PREF_ID,
+  intent: 'buy',
+  places: [place],
+  price_min: null,
+  price_max: null,
+  beds_min: null,
+  baths_min: null,
+  home_types: [],
+  when_start: '2026-10-09',
+  when_end: null,
+  created_at: new Date('2026-10-10T12:00:00Z'),
+  updated_at: new Date('2026-10-10T12:00:00Z'),
+};
+
 function createPool(): ReadPool & { recorded: Recorded[] } {
   const recorded: Recorded[] = [];
   const query = <T>(sql: string, values: unknown[] = []): Promise<{ rows: T[] }> => {
     recorded.push({ sql, values });
-    return Promise.resolve({ rows: [] as T[] });
+    const rows = sql.includes('INSERT')
+      ? [savedRow]
+      : sql.includes('count(*)')
+        ? [{ count: '0' }]
+        : [];
+    return Promise.resolve({ rows: rows as T[] });
   };
   return { recorded, query, connect: () => Promise.resolve({ query, release: () => undefined }) };
 }
@@ -73,18 +93,34 @@ describe('looking-for routes', () => {
   });
 
   it('refuses a start date before yesterday in UTC and accepts yesterday', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-10T12:00:00Z'));
+    try {
+      const { app } = appFor(ACCOUNT_A);
+      const past = await request(app)
+        .put(`/looking-for/${PREF_ID}`)
+        .send(body({ whenStart: '2026-10-08' }));
+      expect(past.status).toBe(400);
+      expect(past.body.error.fields).toEqual(['whenStart']);
+      const yesterday = await request(app)
+        .put(`/looking-for/${PREF_ID}`)
+        .send(body({ whenStart: '2026-10-09' }));
+      expect(yesterday.status).toBe(201);
+      expect(yesterday.body.whenStart).toBe('2026-10-09');
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('names the parent field for a nested extra key and the key for a top-level one', async () => {
     const { app } = appFor(ACCOUNT_A);
-    const day = (offset: number) =>
-      new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
-    const past = await request(app)
+    const nested = await request(app)
       .put(`/looking-for/${PREF_ID}`)
-      .send(body({ whenStart: day(-3) }));
-    expect(past.status).toBe(400);
-    expect(past.body.error.fields).toEqual(['whenStart']);
-    const yesterday = await request(app)
+      .send(body({ places: [{ ...place, extra: 1 }] }));
+    expect(nested.body.error.fields).toEqual(['places']);
+    const top = await request(app)
       .put(`/looking-for/${PREF_ID}`)
-      .send(body({ whenStart: day(-1) }));
-    expect(yesterday.status).not.toBe(400);
+      .send(body({ notes: 'x' }));
+    expect(top.body.error.fields).toEqual(['notes']);
   });
 
   it('refuses a malformed id with the field named', async () => {

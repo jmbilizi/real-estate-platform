@@ -45,7 +45,7 @@ export interface LookingForRouterDeps {
 export function createLookingForRouter(deps: LookingForRouterDeps): Router {
   const router = Router();
   const { pool, introspection } = deps;
-  const now = deps.now ?? (() => new Date());
+  const now = deps.now ?? (() => new Date(Date.now()));
 
   async function requireAccount(req: Request, res: Response): Promise<string | null> {
     res.set('Cache-Control', PRIVATE_CACHE_CONTROL);
@@ -95,7 +95,8 @@ export function createLookingForRouter(deps: LookingForRouterDeps): Router {
         const fields = new Set<string>();
         for (const issue of parsed.error.issues) {
           if (issue.code === 'unrecognized_keys') {
-            for (const key of issue.keys) fields.add(key);
+            if (issue.path.length > 0) fields.add(String(issue.path[0]));
+            else for (const key of issue.keys) fields.add(key);
           } else {
             fields.add(issue.path.length > 0 ? String(issue.path[0]) : 'body');
           }
