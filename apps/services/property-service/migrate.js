@@ -24,6 +24,12 @@ const {
   findRenumberedMigrationName,
   renameOrphanedMigrationRecord,
 } = require('./migrate-self-heal');
+const {
+  listMigrationNames,
+  diffMigrationHistory,
+  formatHistoryMismatch,
+  readRecordedNames,
+} = require('./migrate-history');
 
 // Mirrors MigrateWithRetryAsync: 12 attempts, 2s backoff doubling to a 10s ceiling.
 const MAX_ATTEMPTS = 12;
@@ -83,6 +89,24 @@ async function healOrphanedMigrationRecord(databaseUrl, oldName, newName) {
     await renameOrphanedMigrationRecord(client, MIGRATIONS_TABLE, oldName, newName);
   } finally {
     await client.end();
+  }
+}
+
+/**
+ * Local only (#303). Names the cause when the recorded history does not match the image.
+ * Returns null when the history matches or cannot be read.
+ */
+async function diagnoseHistory(databaseUrl) {
+  const client = new Client({ connectionString: databaseUrl });
+  try {
+    await client.connect();
+    const recorded = await readRecordedNames(client, MIGRATIONS_TABLE);
+    const diff = diffMigrationHistory(recorded, listMigrationNames(MIGRATIONS_DIR));
+    return diff.unexpected.length || diff.missing.length ? formatHistoryMismatch(diff) : null;
+  } catch {
+    return null;
+  } finally {
+    await client.end().catch(() => {});
   }
 }
 
@@ -148,6 +172,10 @@ async function main() {
       // Any other failure — including a genuine ordering problem, or an orphan whose migration
       // was truly removed rather than renumbered — rethrows untouched.
       if (!newName) {
+        const mismatch = selfHealAllowed ? await diagnoseHistory(databaseUrl) : null;
+        if (mismatch) {
+          console.error(mismatch);
+        }
         throw error;
       }
       console.warn(

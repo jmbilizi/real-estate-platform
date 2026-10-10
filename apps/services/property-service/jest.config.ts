@@ -30,6 +30,7 @@ export default {
     '/node_modules/',
     '/migrations/',
     'migrate-self-heal',
+    'migrate-history',
     'support/e2e-serve-defaults',
   ],
   coverageDirectory: '../../../coverage/apps/services/property-service',
