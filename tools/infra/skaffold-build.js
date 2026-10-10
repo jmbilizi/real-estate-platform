@@ -127,8 +127,8 @@ function detectDockerfile(projectName) {
 function ensureWorkspaceCertsDir() {
   // The Dockerfile uses a BuildKit bind mount for .workspace-certs/ (enterprise CA setup).
   // That mount fails the build if the directory does not exist in the build context.
-  // A local build also needs the bundle itself. An empty directory makes the Dockerfile skip the
-  // CA step, so fail fast here instead (#107). CI needs no bundle, only the directory.
+  // A worktree copies the bundle from the main checkout, or fails with the copy command (#107).
+  // A host with no bundle anywhere only warns. CI needs no bundle, only the directory.
   ensureWorkspaceCerts(workspaceRoot);
   const certsDir = path.join(workspaceRoot, '.workspace-certs');
   if (!fs.existsSync(certsDir)) {

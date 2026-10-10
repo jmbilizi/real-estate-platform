@@ -91,10 +91,6 @@ guide.
    `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background at every
    session start (throttled to once per 10 minutes). Run it after a PR merges.
 
-   A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
-   `pnpm run infra:local:certs:ensure` first. The second command copies the bundle from the main
-   checkout. A local image build fails fast with the same instruction if the bundle is missing.
-
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
     descriptions, commit messages, and replies to the user. See
@@ -150,7 +146,6 @@ pnpm run pre-commit                    # Fast validation (format+lint+type-check
 pnpm run pre-push                      # Full validation (+ test + build)
 pnpm run dev:worktree:reclaim          # Classify and remove stale worktrees (dry run by default)
 pnpm install && pnpm run hooks:setup   # First-time setup
-pnpm run infra:local:certs:ensure      # New worktree: copy the enterprise CA bundle before an image build
 pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:disk | :images:list
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
 pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
@@ -224,6 +219,10 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a
   committed base and misses uncommitted work.
+- A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
+  `pnpm run infra:local:certs:ensure` before an image build. The second command copies the bundle
+  from the main checkout. A host with no bundle anywhere gets a warning and the build continues. If
+  the copy fails, the build stops and names this command.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).

@@ -8,7 +8,8 @@
  * directory makes the Dockerfile skip the enterprise CA step, and the build later fails with an
  * opaque `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` error. See ticket #107.
  *
- * A local build always needs the bundle. CI does not, so CI skips this check.
+ * The bundle is EXPECTED only when the main checkout has one. A host with no SSL inspection has no
+ * bundle anywhere, and its builds work without one, so that case only warns. CI skips the check.
  */
 
 const fs = require('fs');
@@ -51,38 +52,46 @@ function findMainCheckoutRoot(root) {
  * Decide what a build must do about the bundle. Pure.
  *
  * @param {{ isCi: boolean, localHasBundle: boolean, mainBundleFile: string | null }} state
- * @returns {{ action: 'skip' | 'ok' | 'copy' | 'fail', from?: string }}
+ * @returns {{ action: 'skip' | 'ok' | 'copy' | 'warn', from?: string }}
  */
 function planCerts(state) {
   if (state.isCi) return { action: 'skip' };
   if (state.localHasBundle) return { action: 'ok' };
   if (state.mainBundleFile) return { action: 'copy', from: state.mainBundleFile };
-  return { action: 'fail' };
+  return { action: 'warn' };
 }
 
-function missingMessage(root) {
+function copyFailedMessage(root, from, error) {
   return (
-    `Enterprise CA bundle not found: ${bundlePath(root)}\n` +
-    'A local image build needs it behind SSL inspection. Without it the build fails later with\n' +
-    'UNABLE_TO_GET_ISSUER_CERT_LOCALLY.\n' +
-    `Create it with: ${SETUP_COMMAND}\n` +
-    `A worktree copies it from the main checkout with: ${ENSURE_COMMAND}`
+    `Cannot copy the enterprise CA bundle from ${from} to ${bundlePath(root)}: ${error.message}\n` +
+    'Without it the build fails later with UNABLE_TO_GET_ISSUER_CERT_LOCALLY.\n' +
+    `Copy it with: ${ENSURE_COMMAND}`
+  );
+}
+
+function noBundleMessage(root) {
+  return (
+    `No enterprise CA bundle at ${bundlePath(root)}. Continuing without it.\n` +
+    `Behind SSL inspection the build fails with UNABLE_TO_GET_ISSUER_CERT_LOCALLY. Run ${SETUP_COMMAND}.`
   );
 }
 
 /**
  * Ensure the bundle exists in `root`. Copies it from the main checkout when only that has it.
- * Throws with an actionable message when no bundle is available. Does nothing in CI.
+ * Throws when the bundle is expected but the copy fails. Warns when no bundle exists anywhere.
+ * Does nothing in CI.
  *
  * @param {string} root workspace root of the building tree
- * @param {{ env?: NodeJS.ProcessEnv, log?: (m: string) => void }} [options]
- * @returns {'skip' | 'ok' | 'copy'}
+ * @param {{ env?: NodeJS.ProcessEnv, log?: (m: string) => void, warn?: (m: string) => void,
+ *   mainRoot?: string | null }} [options]
+ * @returns {'skip' | 'ok' | 'copy' | 'warn'}
  */
 function ensureWorkspaceCerts(root, options = {}) {
   const env = options.env || process.env;
   const log = options.log || console.log;
+  const warn = options.warn || console.warn;
 
-  const mainRoot = findMainCheckoutRoot(root);
+  const mainRoot = options.mainRoot !== undefined ? options.mainRoot : findMainCheckoutRoot(root);
   const mainFile =
     mainRoot && path.resolve(mainRoot) !== path.resolve(root) ? bundlePath(mainRoot) : null;
 
@@ -92,10 +101,14 @@ function ensureWorkspaceCerts(root, options = {}) {
     mainBundleFile: mainFile && hasBundle(mainFile) ? mainFile : null,
   });
 
-  if (plan.action === 'fail') throw new Error(missingMessage(root));
+  if (plan.action === 'warn') warn(noBundleMessage(root));
   if (plan.action === 'copy') {
-    fs.mkdirSync(path.join(root, BUNDLE_DIR), { recursive: true });
-    fs.copyFileSync(plan.from, bundlePath(root));
+    try {
+      fs.mkdirSync(path.join(root, BUNDLE_DIR), { recursive: true });
+      fs.copyFileSync(plan.from, bundlePath(root));
+    } catch (error) {
+      throw new Error(copyFailedMessage(root, plan.from, error));
+    }
     log(`Copied enterprise CA bundle from the main checkout: ${plan.from}`);
   }
   return plan.action;
@@ -116,4 +129,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { planCerts, hasBundle, bundlePath, ensureWorkspaceCerts, missingMessage };
+module.exports = { planCerts, hasBundle, bundlePath, ensureWorkspaceCerts };

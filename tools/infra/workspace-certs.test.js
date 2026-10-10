@@ -28,10 +28,10 @@ test('planCerts copies from the main checkout when only it has the bundle', () =
   });
 });
 
-test('planCerts fails when no bundle exists anywhere (#107)', () => {
+test('planCerts warns when no bundle exists anywhere', () => {
   assert.equal(
     planCerts({ isCi: false, localHasBundle: false, mainBundleFile: null }).action,
-    'fail',
+    'warn',
   );
 });
 
@@ -50,14 +50,45 @@ test('hasBundle rejects a missing file and a file with no certificate', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('ensureWorkspaceCerts fails with the setup command for an empty .workspace-certs dir', () => {
+test('ensureWorkspaceCerts warns and continues when no bundle exists anywhere', () => {
   const root = tempRoot();
   fs.mkdirSync(path.join(root, '.workspace-certs'));
+  const warnings = [];
+  const action = ensureWorkspaceCerts(root, {
+    env: {},
+    mainRoot: null,
+    warn: (m) => warnings.push(m),
+  });
+  assert.equal(action, 'warn');
+  assert.match(warnings[0], /infra:local:cluster:setup/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('ensureWorkspaceCerts copies the bundle from the main checkout (#107)', () => {
+  const root = tempRoot();
+  const main = tempRoot();
+  fs.mkdirSync(path.join(main, '.workspace-certs'));
+  fs.writeFileSync(bundlePath(main), PEM);
+  const action = ensureWorkspaceCerts(root, { env: {}, mainRoot: main, log: () => {} });
+  assert.equal(action, 'copy');
+  assert.equal(fs.readFileSync(bundlePath(root), 'utf-8'), PEM);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(main, { recursive: true, force: true });
+});
+
+test('ensureWorkspaceCerts names the copy command when the copy fails', () => {
+  const root = tempRoot();
+  const main = tempRoot();
+  fs.mkdirSync(path.join(main, '.workspace-certs'));
+  fs.writeFileSync(bundlePath(main), PEM);
+  // A file where the directory must go makes the copy fail.
+  fs.writeFileSync(path.join(root, '.workspace-certs'), 'x');
   assert.throws(
-    () => ensureWorkspaceCerts(root, { env: {} }),
-    /workspace-enterprise-roots\.pem[\s\S]*infra:local:cluster:setup/,
+    () => ensureWorkspaceCerts(root, { env: {}, mainRoot: main }),
+    /infra:local:certs:ensure/,
   );
   fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(main, { recursive: true, force: true });
 });
 
 test('ensureWorkspaceCerts passes for an existing bundle and skips in CI', () => {
