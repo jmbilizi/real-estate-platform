@@ -1,7 +1,7 @@
 import type { BuiltUrl } from './nominatim';
 import { BRAND } from '@/lib/brand';
 import { createNominatimGate } from './nominatim-gate';
-import { createReadCache } from './read-cache';
+import { createReadCache, READ_CACHE_MAX_BODY_CHARS } from './read-cache';
 
 /**
  * The one way this app talks to Nominatim.
@@ -62,12 +62,22 @@ export async function proxyNominatim(
     });
   }
 
+  // Concurrent misses for one URL share one upstream call and one slot of the budget.
+  const shared = await cache.load(built.url, () => fetchUpstream(built.url, label, gate));
+  return shared.clone();
+}
+
+async function fetchUpstream(
+  url: string,
+  label: string,
+  gate: { acquire: () => Promise<boolean> },
+): Promise<Response> {
   if (!(await gate.acquire())) {
     return softFailure(label, 'rate limit: queue full', 429);
   }
 
   try {
-    const upstream = await fetch(built.url, {
+    const upstream = await fetch(url, {
       headers: {
         /*
          * The policy's requirement, and the thing a browser physically cannot do — see `nominatim`.
@@ -88,7 +98,10 @@ export async function proxyNominatim(
     }
 
     const body = await upstream.json();
-    cache.set(built.url, { body, browserMaxAgeSeconds: CACHE_SECONDS }, CACHE_SECONDS);
+    // A boundary polygon can be large. An oversize body is served but not stored.
+    if (JSON.stringify(body).length <= READ_CACHE_MAX_BODY_CHARS) {
+      cache.set(url, { body, browserMaxAgeSeconds: CACHE_SECONDS }, CACHE_SECONDS);
+    }
     return Response.json(body, {
       headers: { 'Cache-Control': `public, max-age=${CACHE_SECONDS}` },
     });

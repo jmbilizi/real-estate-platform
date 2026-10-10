@@ -77,6 +77,17 @@ describe('cache', () => {
     expect(again.status === 'ok' && again.suggestions).toHaveLength(1);
   });
 
+  it('does not cache an empty answer', async () => {
+    const fetcher = okBody([]);
+    await fetchWhereSuggestions('zzzz', fetcher as unknown as typeof fetch);
+    await fetchWhereSuggestions('zzzz', fetcher as unknown as typeof fetch);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('cuts the prefix to the API limit', () => {
+    expect(suggestPrefix('a'.repeat(60))).toHaveLength(40);
+  });
+
   it('does not cache a failure', async () => {
     const failing = jest.fn(async () => ({ ok: false, json: async () => ({}) }) as Response);
     await fetchWhereSuggestions('rock', failing as unknown as typeof fetch);

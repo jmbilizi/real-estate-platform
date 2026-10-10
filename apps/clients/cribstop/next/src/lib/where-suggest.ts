@@ -1,4 +1,4 @@
-import type { Suggestion } from '@cribstop/property-contracts';
+import { SUGGEST_Q_MAX, type Suggestion } from '@cribstop/property-contracts';
 
 /**
  * Where-field suggestions (#781).
@@ -28,7 +28,7 @@ export function clearWhereSuggestCache(): void {
 
 /** The part of the typed text that names a place: "Rockville, MD" suggests for "rockville". */
 export function suggestPrefix(typed: string): string {
-  return (typed.split(',')[0] ?? '').trim().toLowerCase();
+  return (typed.split(',')[0] ?? '').trim().toLowerCase().slice(0, SUGGEST_Q_MAX).trim();
 }
 
 /**
@@ -82,6 +82,8 @@ export async function fetchWhereSuggestions(
     const body = (await response.json()) as { suggestions?: Suggestion[] };
     if (!Array.isArray(body.suggestions)) return { status: 'unavailable' };
     const suggestions = body.suggestions.map(toPlaceResult);
+    // An empty answer is not stored: a place can gain its first listing within minutes.
+    if (suggestions.length === 0) return { status: 'ok', suggestions };
     if (cache.size >= CACHE_MAX_ENTRIES) {
       const oldest = cache.keys().next().value;
       if (oldest !== undefined) cache.delete(oldest);

@@ -5422,6 +5422,7 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
               "description": "Prefix of a city, ZIP or neighborhood name. 2 to 40 characters.",
               "maxLength": 40,
               "minLength": 2,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
               "type": "string",
             },
           },

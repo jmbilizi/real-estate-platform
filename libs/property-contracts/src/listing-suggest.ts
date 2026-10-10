@@ -27,6 +27,9 @@ export const suggestRequestSchema = z.strictObject({
     .trim()
     .min(SUGGEST_Q_MIN)
     .max(SUGGEST_Q_MAX)
+    // A NUL byte or other control character makes Postgres raise an error (a 500).
+    // eslint-disable-next-line no-control-regex
+    .regex(/^[^\u0000-\u001f\u007f]+$/, 'must not contain control characters')
     .describe(
       `Prefix of a city, ZIP or neighborhood name. ${SUGGEST_Q_MIN} to ${SUGGEST_Q_MAX} characters.`,
     ),

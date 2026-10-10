@@ -85,6 +85,21 @@ describe('proxyNominatim', () => {
     expect((init.headers as Record<string, string>)['User-Agent']).toMatch(/^real-estate-platform/);
   });
 
+  it('shares one upstream call between concurrent requests for one URL', async () => {
+    const fetchMock = jest.fn(async () => Response.json([{ place_id: 1 }]));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const acquire = jest.fn(async () => true);
+
+    const [a, b] = await Promise.all([
+      proxyNominatim(built, 'test', { acquire }),
+      proxyNominatim(built, 'test', { acquire }),
+    ]);
+
+    expect(await a.json()).toEqual(await b.json());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(acquire).toHaveBeenCalledTimes(1);
+  });
+
   it('does not cache a failure', async () => {
     const fetchMock = jest.fn(async () => new Response('{}', { status: 429 }));
     global.fetch = fetchMock as unknown as typeof fetch;

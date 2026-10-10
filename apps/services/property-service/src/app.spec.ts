@@ -553,13 +553,16 @@ describe('GET /listings/suggest (#781)', () => {
     );
   });
 
-  it.each(['', '?q=r', '?q=rock&limit=99', '?q=rock&x=1'])('rejects %p with 400', async (qs) => {
-    const response = await request(createApp({ pool: createSearchPool() })).get(
-      `/listings/suggest${qs}`,
-    );
+  it.each(['', '?q=r', '?q=%00%00', '?q=rock&limit=99', '?q=rock&x=1'])(
+    'rejects %p with 400',
+    async (qs) => {
+      const response = await request(createApp({ pool: createSearchPool() })).get(
+        `/listings/suggest${qs}`,
+      );
 
-    expect(response.status).toBe(400);
-  });
+      expect(response.status).toBe(400);
+    },
+  );
 });
 
 describe('GET /listings/meta', () => {
