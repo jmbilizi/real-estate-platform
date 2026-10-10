@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cribstop.com/schemas/events/lead.accepted.v1.json",
+  "title": "lead.accepted v1",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "occurredAt",
+    "aggregateId",
+    "recipient",
+    "category",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "lead.accepted"
+    },
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "recipient": {
+      "type": "object",
+      "required": ["accountId"],
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "category": {
+      "enum": ["transactional", "non_transactional"]
+    },
+    "data": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]*$",
+        "not": {
+          "enum": ["email", "phone", "message", "buyerMessage", "buyerEmail", "buyerPhone", "name"]
+        }
+      },
+      "properties": {
+        "listingId": {
+          "type": "string",
+          "maxLength": 256,
+          "not": {
+            "pattern": "[^\\s@]+@[^\\s@]+\\.[^\\s@]+|\\d[\\d\\s().-]{8,}\\d"
+          },
+          "minLength": 1
+        },
+        "agentAccountId": {
+          "type": "string",
+          "maxLength": 256,
+          "not": {
+            "pattern": "[^\\s@]+@[^\\s@]+\\.[^\\s@]+|\\d[\\d\\s().-]{8,}\\d"
+          },
+          "minLength": 1
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256,
+        "not": {
+          "pattern": "[^\\s@]+@[^\\s@]+\\.[^\\s@]+|\\d[\\d\\s().-]{8,}\\d"
+        }
+      },
+      "required": ["listingId", "agentAccountId"]
+    }
+  },
+  "additionalProperties": true
+}

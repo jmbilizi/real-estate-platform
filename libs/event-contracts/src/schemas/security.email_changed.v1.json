@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cribstop.com/schemas/events/security.email_changed.v1.json",
+  "title": "security.email_changed v1",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "occurredAt",
+    "aggregateId",
+    "recipient",
+    "category",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "security.email_changed"
+    },
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "recipient": {
+      "type": "object",
+      "required": ["accountId"],
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "category": {
+      "const": "transactional"
+    },
+    "data": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]*$",
+        "not": {
+          "enum": ["email", "phone", "message", "buyerMessage", "buyerEmail", "buyerPhone", "name"]
+        }
+      },
+      "properties": {},
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256,
+        "not": {
+          "pattern": "[^\\s@]+@[^\\s@]+\\.[^\\s@]+|\\d[\\d\\s().-]{8,}\\d"
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

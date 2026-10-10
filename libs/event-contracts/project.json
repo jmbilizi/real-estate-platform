@@ -1,0 +1,69 @@
+{
+  "name": "@cribstop/event-contracts",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/event-contracts/src",
+  "projectType": "library",
+  "tags": [
+    "runtime:node",
+    "type:lib",
+    "framework:ajv",
+    "scope:event-contracts",
+    "devteam:unassigned"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/event-contracts",
+        "main": "libs/event-contracts/src/index.ts",
+        "tsConfig": "libs/event-contracts/tsconfig.lib.json",
+        "assets": ["libs/event-contracts/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "eslint --config tools/node/configs/eslint.config.js libs/event-contracts",
+        "cwd": "."
+      }
+    },
+    "type-check": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.ts",
+        "{projectRoot}/tsconfig*.json",
+        "{workspaceRoot}/tsconfig.json",
+        "^production"
+      ],
+      "options": {
+        "command": "tsc -b --noEmit libs/event-contracts/tsconfig.json",
+        "cwd": "."
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --write --ignore-path ../../.gitignore --ignore-path ../../.prettierignore .",
+        "cwd": "libs/event-contracts"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --check --ignore-path ../../.gitignore --ignore-path ../../.prettierignore .",
+        "cwd": "libs/event-contracts"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "options": {
+        "command": "jest --passWithNoTests",
+        "cwd": "libs/event-contracts"
+      }
+    }
+  }
+}
