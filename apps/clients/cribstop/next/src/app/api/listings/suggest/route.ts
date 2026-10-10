@@ -14,5 +14,6 @@ export async function GET(req: NextRequest) {
   return proxyListingsRead('/suggest', buildListingsQuery(params, FORWARDABLE_SUGGEST_PARAMS), {
     cache: true,
     clientIp: clientIpOf(req.headers),
+    store: 'suggest',
   });
 }

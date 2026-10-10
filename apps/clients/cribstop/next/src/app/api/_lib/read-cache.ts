@@ -58,7 +58,10 @@ export function lifetimeFrom(cacheControl: string | null): Lifetime {
   return { sharedSeconds: sMaxAge ?? maxAge, browserSeconds: maxAge };
 }
 
-export function createReadCache(now: () => number = Date.now) {
+export function createReadCache(
+  now: () => number = Date.now,
+  maxEntries: number = READ_CACHE_MAX_ENTRIES,
+) {
   const store = new Map<string, Entry>();
   const inFlight = new Map<string, Promise<unknown>>();
 
@@ -91,7 +94,7 @@ export function createReadCache(now: () => number = Date.now) {
       if (sharedSeconds <= 0) return;
       store.delete(key);
       store.set(key, { ...read, expiresAt: now() + sharedSeconds * 1000 });
-      while (store.size > READ_CACHE_MAX_ENTRIES) {
+      while (store.size > maxEntries) {
         const oldest = store.keys().next().value;
         if (oldest === undefined) break;
         store.delete(oldest);
