@@ -39,6 +39,7 @@ describe('toOpenApiDocument', () => {
       '/listings/map',
       '/listings/meta',
       '/listings/neighborhoods',
+      '/listings/suggest',
       '/listings/zips',
       '/listings/{id}',
       '/listings/{id}/card',

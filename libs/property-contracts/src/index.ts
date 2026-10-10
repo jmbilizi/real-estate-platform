@@ -4,6 +4,7 @@ export * from './search-request';
 export * from './listing-card';
 export * from './listing-detail';
 export * from './listing-inquiry';
+export * from './listing-suggest';
 export * from './listings-meta';
 export * from './listing-groups';
 export * from './neighborhoods';

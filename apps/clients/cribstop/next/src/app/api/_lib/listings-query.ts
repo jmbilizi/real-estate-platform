@@ -3,6 +3,7 @@ import {
   mapRequestSchema,
   neighborhoodsRequestSchema,
   searchRequestSchema,
+  suggestRequestSchema,
 } from '@cribstop/property-contracts';
 
 /**
@@ -43,6 +44,11 @@ export const FORWARDABLE_NEIGHBORHOODS_PARAMS: readonly string[] = Object.freeze
 /** The ZIP and broker group endpoints' allowlist (#722), derived the same way. */
 export const FORWARDABLE_GROUPS_PARAMS: readonly string[] = Object.freeze(
   Object.keys(listingGroupsRequestSchema.shape),
+);
+
+/** The Where suggestions endpoint's allowlist (#781), derived the same way. */
+export const FORWARDABLE_SUGGEST_PARAMS: readonly string[] = Object.freeze(
+  Object.keys(suggestRequestSchema.shape),
 );
 
 /**

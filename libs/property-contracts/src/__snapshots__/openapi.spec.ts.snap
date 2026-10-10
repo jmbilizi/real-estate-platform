@@ -3276,6 +3276,50 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "SuggestResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "suggestions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "city": {
+                  "type": "string",
+                },
+                "kind": {
+                  "enum": [
+                    "city",
+                    "zip",
+                    "neighborhood",
+                  ],
+                  "type": "string",
+                },
+                "name": {
+                  "type": "string",
+                },
+                "state": {
+                  "type": "string",
+                },
+                "zip": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "kind",
+                "name",
+                "city",
+                "state",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "suggestions",
+        ],
+        "type": "object",
+      },
       "UpdateAgentProfileRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5443,6 +5487,69 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
           },
         },
         "summary": "Neighborhood groups",
+      },
+    },
+    "/listings/suggest": {
+      "get": {
+        "description": "Prefix match on the city, ZIP and neighborhood of publishable listings, for the Where field. A ZIP is suggested only for a digit prefix. Cities rank first by listing count. At most \`limit\` rows come back.",
+        "operationId": "getListingSuggestions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Prefix of a city, ZIP or neighborhood name. 2 to 40 characters.",
+              "maxLength": 40,
+              "minLength": 2,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+              "type": "string",
+            },
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Whole number from 1 to 10. Default 8.",
+              "pattern": "^([1-9]|10)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestResponse",
+                },
+              },
+            },
+            "description": "Matching places.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown or invalid query parameter (\`invalid_request\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Place suggestions",
       },
     },
     "/listings/zips": {
