@@ -130,7 +130,7 @@ describe('AuthForm', () => {
       const form = field.closest('form') as HTMLElement;
       // Everything that can change a box size: tag, classes with the opacity and label-float
       // classes removed, and the node count. Opacity and the absolute label never move layout.
-      const NON_LAYOUT = /\b(opacity-\d+|top-1\.5|top-1\/2|-translate-y-1\/2|text-xs|text-sm)\b/g;
+      const NON_LAYOUT = /\bopacity-\d+\b/g;
       const signature = () =>
         Array.from(form.querySelectorAll('*'))
           .filter((el) => el.tagName !== 'LABEL')

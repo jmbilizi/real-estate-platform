@@ -297,7 +297,10 @@ export default function AuthForm({
                   onChange={(e) => setEmail(e.target.value)}
                   onFocus={() => setEmailFocused(true)}
                   onBlur={() => setEmailFocused(false)}
-                  aria-describedby={[formError ? 'auth-email-error' : null, 'auth-email-help']
+                  aria-describedby={[
+                    formError ? 'auth-email-error' : null,
+                    emailRaised ? 'auth-email-help' : null,
+                  ]
                     .filter(Boolean)
                     .join(' ')}
                 />

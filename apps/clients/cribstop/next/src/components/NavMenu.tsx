@@ -43,10 +43,13 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // SlidePanel closes on the trigger's mousedown. The click that follows must not reopen it.
-  const openAtMouseDown = useRef(false);
+  const closedAt = useRef(0);
   const { primary, secondary } = getNavMenuItems(signedIn);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    closedAt.current = Date.now();
+    setOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -126,12 +129,9 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
         title="More options"
         aria-haspopup="menu"
         aria-expanded={open}
-        onMouseDown={() => {
-          openAtMouseDown.current = open;
-        }}
         onClick={() => {
-          if (openAtMouseDown.current) openAtMouseDown.current = false;
-          else setOpen((v) => !v);
+          if (Date.now() - closedAt.current < 300) return;
+          setOpen((v) => !v);
         }}
         className="relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-3 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
       >
