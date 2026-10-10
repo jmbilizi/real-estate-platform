@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('node:os');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const { evaluate, resolveLaneRoot } = require('./lane-boundary');
@@ -436,4 +437,142 @@ test('a commit message that only names the phrase is allowed', () => {
 test('an unquoted worktree removal is still blocked', () => {
   const command = ['git', 'worktree', 'remove', '../other'].join(' ');
   assert.match(String(bashCall(command, PRIMARY_ROOT)), /dev:worktree:reclaim/);
+});
+
+// Shell writes and `cd` (#307, rules E and F).
+const OTHER_FILE = path.join(OTHER_WORKTREE_ROOT, 'notes.txt');
+const OWN_FILE = path.join(WORKTREE_ROOT, 'notes.txt');
+const lane = (command, cwd) => bashCall(command, WORKTREE_ROOT, {}, cwd || WORKTREE_ROOT);
+
+// Git Bash form of a native path: `C:\Users\x` becomes `/c/Users/x`. POSIX paths stay as they are.
+function msysPath(native) {
+  const m = /^([A-Za-z]):[\\/](.*)$/.exec(native);
+  return m ? `/${m[1].toLowerCase()}/${m[2].replace(/\\/g, '/')}` : native;
+}
+
+test('a write after cd names the cd in the refusal', () => {
+  const reason = lane(`cd sub && cd ../.. && echo x > other/f.txt`);
+  assert.match(reason, /after "cd \.\.\/\.\."/);
+  assert.match(reason, /another lane's worktree/);
+});
+
+test('redirect into another worktree is blocked and names the path', () => {
+  for (const op of ['>', '>>', '2>', '&>']) {
+    const reason = lane(`echo x ${op} "${OTHER_FILE}"`);
+    assert.match(reason, /another lane's worktree/, op);
+    assert.ok(reason.includes(OTHER_FILE), op);
+    assert.match(reason, /Write only inside your own lane root/, op);
+  }
+  assert.match(lane(`echo x>"${OTHER_FILE}"`), /another lane's worktree/);
+  assert.match(lane('echo x > ../other/notes.txt'), /another lane's worktree/);
+});
+
+test('tee into another worktree is blocked', () => {
+  assert.match(lane(`echo x | tee "${OTHER_FILE}"`), /another lane's worktree/);
+  assert.match(lane(`echo x | tee -a "${OTHER_FILE}"`), /another lane's worktree/);
+});
+
+test('cp, mv, rm, touch, mkdir and sed -i into another worktree are blocked', () => {
+  assert.match(lane(`cp a.txt "${OTHER_FILE}"`), /another lane's worktree/);
+  assert.match(lane(`mv a.txt "${OTHER_FILE}"`), /another lane's worktree/);
+  assert.match(lane(`mv "${OTHER_FILE}" a.txt`), /another lane's worktree/);
+  assert.match(lane(`rm -r "${OTHER_WORKTREE_ROOT}"`), /another lane's worktree/);
+  assert.match(lane(`touch "${OTHER_FILE}"`), /another lane's worktree/);
+  assert.match(lane(`mkdir -p "${OTHER_FILE}"`), /another lane's worktree/);
+  assert.match(lane(`sed -i s/a/b/ "${OTHER_FILE}"`), /another lane's worktree/);
+});
+
+test('redirect, tee and cp destination outside the lane root are blocked', () => {
+  const outside = path.join(OUTSIDE_ROOT, 'f.txt');
+  assert.match(lane(`echo x > "${outside}"`), /outside this lane's root/);
+  assert.match(lane(`echo x | tee "${outside}"`), /outside this lane's root/);
+  assert.match(lane(`cp a.txt "${outside}"`), /outside this lane's root/);
+});
+
+test('cd into another worktree is blocked, alone or before a command', () => {
+  const reason = lane(`cd "${OTHER_WORKTREE_ROOT}"`);
+  assert.match(reason, /enters another lane's worktree/);
+  assert.ok(reason.includes(OTHER_WORKTREE_ROOT));
+  assert.match(lane('cd ../other && git status'), /enters another lane's worktree/);
+  assert.match(lane(`pushd "${OTHER_WORKTREE_ROOT}"`), /enters another lane's worktree/);
+});
+
+test('cd carries the simulated directory into the next segment', () => {
+  const sub = path.join(WORKTREE_ROOT, 'sub');
+  assert.equal(lane(`cd "${sub}" && echo x > f.txt`), null);
+  assert.match(lane(`cd "${sub}" && echo x > ../../other/f.txt`), /another lane's worktree/);
+});
+
+test('allowed lookalikes stay allowed', () => {
+  const allowed = [
+    `echo x > "${OWN_FILE}"`,
+    'echo x > out.txt',
+    'echo x > /dev/null',
+    'echo x > nul',
+    'echo x > /tmp/a.txt',
+    'echo x | tee /var/tmp/a.txt',
+    'cp a.txt /tmp/a.txt',
+    `echo x > "${path.join(fs.realpathSync.native(os.tmpdir()), 'a.txt')}"`,
+    `echo x > ${msysPath(path.join(os.tmpdir(), 'a.txt'))}`,
+    'ls # note: out > ../../other/x.txt',
+    'echo done # > /var/elsewhere',
+    'pnpm run lint 2>&1',
+    'pnpm run lint >&2',
+    `echo x > "${path.join(os.tmpdir(), 'a.txt')}"`,
+    `cp a.txt "${OWN_FILE}"`,
+    `cp "${OTHER_FILE}" ./copy.txt`,
+    `cat "${OTHER_FILE}"`,
+    `cat "${OTHER_FILE}" | grep x`,
+    `ls "${OTHER_WORKTREE_ROOT}"`,
+    `git commit -m "fix: do not write > ${OTHER_FILE}"`,
+    `echo "cd ${OTHER_WORKTREE_ROOT}"`,
+    `echo "x | tee ${OTHER_FILE}"`,
+    'node -e "console.log(1 > 0)"',
+    'git log --format=%h->%s',
+    'grep -r "=>" src',
+    'echo x > "$HOME/f.txt"',
+    'rm -r ./dist',
+    'cd sub && ls',
+    `cd "${WORKTREE_ROOT}" && git status`,
+    `cat <<'EOF' > notes.txt\nuse: echo x > "${OTHER_FILE}"\ncd ${OTHER_WORKTREE_ROOT}\nEOF`,
+  ];
+  for (const command of allowed) {
+    assert.equal(lane(command), null, command);
+  }
+});
+
+// Corpus check: every command the repo itself defines must pass. A false positive
+// on these commands would get the rule switched off.
+test('no package.json script or workflow run line is blocked', () => {
+  const fs = require('node:fs');
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const commands = Object.values(
+    JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).scripts,
+  );
+  const workflowDir = path.join(repoRoot, '.github', 'workflows');
+  for (const file of fs.readdirSync(workflowDir).filter((f) => f.endsWith('.yml'))) {
+    for (const line of fs.readFileSync(path.join(workflowDir, file), 'utf8').split('\n')) {
+      const m = /^\s*(?:-\s*)?run:\s+(.+)$/.exec(line);
+      if (m) commands.push(m[1]);
+    }
+  }
+  assert.ok(commands.length > 50, 'corpus must not be empty');
+  for (const command of commands) {
+    assert.equal(lane(command), null, command);
+  }
+});
+
+test('the primary orchestrator may cd into and read a worktree', () => {
+  const primary = (command) => bashCall(command, PRIMARY_ROOT, {}, PRIMARY_ROOT);
+  assert.equal(primary(`cd "${OTHER_WORKTREE_ROOT}" && git status`), null);
+  assert.equal(primary(`cat "${OTHER_FILE}"`), null);
+  assert.equal(primary(`ls "${OTHER_WORKTREE_ROOT}" > /dev/null`), null);
+  assert.match(primary(`echo x > "${OTHER_FILE}"`), /another lane's worktree/);
+});
+
+test('unresolvable shell paths fail open', () => {
+  assert.equal(lane('echo x > $TARGET'), null);
+  assert.equal(lane('echo x > ~/f.txt'), null);
+  assert.equal(lane('cd $(git rev-parse --show-toplevel)'), null);
+  assert.equal(lane('cp a.txt ../*/b.txt'), null);
 });
