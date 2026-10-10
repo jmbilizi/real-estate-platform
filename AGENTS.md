@@ -94,16 +94,6 @@ guide.
    `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background at every
    session start (throttled to once per 10 minutes). Run it after a PR merges.
 
-   `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
-   for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
-   `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
-   `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
-   `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
-
-   A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
-   `pnpm run infra:local:certs:ensure` first. The second command copies the bundle from the main
-   checkout. A local image build fails fast with the same instruction if the bundle is missing.
-
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
     descriptions, commit messages, and replies to the user. See
@@ -233,6 +223,11 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a
   committed base and misses uncommitted work.
+- `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
+  for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
+  `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
+  `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
+  `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
