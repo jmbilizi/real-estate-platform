@@ -17,7 +17,33 @@ import { formatPrice } from '@/lib/format';
 const MAX_PLACES = 5;
 const ROOM_CHOICES = ['1', '2', '3', '4', '5'];
 
-type PlaceDraft = { city: string; state: string; zip: string };
+/** `raw` holds a place kind this form cannot edit. It goes back to the API unchanged. */
+type PlaceDraft = { city: string; state: string; zip: string; raw?: LookingForPlace };
+
+const EDITABLE_KINDS = ['city', 'zip'];
+
+function localToday(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+const FIELD_MESSAGES: Record<string, string> = {
+  intent: 'Choose buy or rent.',
+  places: 'Give 1 to 5 places, each with a city and a two-letter state.',
+  priceMin: 'Enter a price from 0 to 100,000,000.',
+  priceMax: 'Enter a price from 0 to 100,000,000, not below the minimum.',
+  bedsMin: 'Choose a bedroom count.',
+  bathsMin: 'Choose a bathroom count.',
+  homeTypes: 'Choose home types from the list.',
+  whenStart: 'The date must not be in the past.',
+  whenEnd: 'The end date must not be before the start date.',
+};
+
+/** The API names a bad place as `places[0]`. The form shows it under the places group. */
+function messageFor(field: string): string | undefined {
+  return FIELD_MESSAGES[field.startsWith('places[') ? 'places' : field];
+}
 type Draft = {
   id: string;
   intent: 'buy' | 'rent';
@@ -50,7 +76,11 @@ function draftFrom(item: LookingFor): Draft {
   return {
     id: item.id,
     intent: item.intent,
-    places: item.places.map((p) => ({ city: p.city ?? '', state: p.state, zip: p.zip ?? '' })),
+    places: item.places.map((p) =>
+      EDITABLE_KINDS.includes(p.kind)
+        ? { city: p.city ?? '', state: p.state, zip: p.zip ?? '' }
+        : { city: '', state: '', zip: '', raw: p },
+    ),
     priceMin: item.priceMin == null ? '' : String(item.priceMin),
     priceMax: item.priceMax == null ? '' : String(item.priceMax),
     bedsMin: item.bedsMin == null ? '' : String(item.bedsMin),
@@ -66,13 +96,16 @@ function draftFrom(item: LookingFor): Draft {
 
 function toInput(draft: Draft): LookingForInput {
   const places: LookingForPlace[] = draft.places
-    .filter((p) => p.city.trim() || p.state.trim() || p.zip.trim())
-    .map((p) => ({
-      kind: p.zip.trim() ? 'zip' : 'city',
-      state: p.state.trim().toUpperCase(),
-      city: p.city.trim(),
-      ...(p.zip.trim() ? { zip: p.zip.trim() } : {}),
-    }));
+    .filter((p) => p.raw || p.city.trim() || p.state.trim() || p.zip.trim())
+    .map(
+      (p): LookingForPlace =>
+        p.raw ?? {
+          kind: p.zip.trim() ? 'zip' : 'city',
+          state: p.state.trim().toUpperCase(),
+          city: p.city.trim(),
+          ...(p.zip.trim() ? { zip: p.zip.trim() } : {}),
+        },
+    );
   const num = (v: string) => (v.trim() === '' ? null : Number(v));
   const { start, end } = draft.dateRange;
   return {
@@ -98,9 +131,10 @@ function placeLabel(p: LookingForPlace): string {
 function whenLabel(item: LookingFor): string | null {
   if (!item.whenStart) return null;
   const label = item.intent === 'rent' ? 'Move-in date' : 'Buying window';
-  return item.whenEnd
+  const text = item.whenEnd
     ? `${label}: ${item.whenStart} to ${item.whenEnd}`
     : `${label}: ${item.whenStart}`;
+  return item.whenStart < localToday() ? `${text} (expired, edit to update or clear it)` : text;
 }
 
 function summary(item: LookingFor): string[] {
@@ -146,6 +180,7 @@ export default function LookingForSection() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
@@ -164,6 +199,7 @@ export default function LookingForSection() {
     if (!draft) return;
     setSaving(true);
     setError(null);
+    setFieldErrors([]);
     try {
       const saved = await saveLookingFor(draft.id, toInput(draft));
       setItems((prev) => [saved, ...(prev ?? []).filter((i) => i.id !== saved.id)]);
@@ -172,7 +208,8 @@ export default function LookingForSection() {
       if (err instanceof LookingForError && err.code === 'limit_reached') {
         setError(`You can save up to ${max} preferences. Delete one to add another.`);
       } else if (err instanceof LookingForError && err.code === 'invalid') {
-        setError('Check the highlighted values. Dates must not be in the past.');
+        setFieldErrors(err.fields);
+        setError('Some values need a change. See the messages below each field.');
       } else {
         setError('Could not save. Try again.');
       }
@@ -285,10 +322,12 @@ export default function LookingForSection() {
           draft={draft}
           setDraft={setDraft}
           saving={saving}
+          fieldErrors={fieldErrors}
           onSave={save}
           onCancel={() => {
             setDraft(null);
             setError(null);
+            setFieldErrors([]);
           }}
         />
       )}
@@ -300,12 +339,14 @@ function LookingForForm({
   draft,
   setDraft,
   saving,
+  fieldErrors,
   onSave,
   onCancel,
 }: {
   draft: Draft;
   setDraft: (d: Draft) => void;
   saving: boolean;
+  fieldErrors: string[];
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -331,7 +372,19 @@ function LookingForForm({
       ? `${draft.dateRange.start} to ${draft.dateRange.end}`
       : draft.dateRange.start
     : 'No date';
-  const hasPlace = draft.places.some((p) => p.city.trim() && p.state.trim());
+  const hasPlace = draft.places.some((p) => p.raw || (p.city.trim() && p.state.trim()));
+  const expired = !!draft.dateRange.start && draft.dateRange.start < localToday();
+  const has = (key: string) =>
+    fieldErrors.some((f) => (key === 'places' ? f.startsWith('places') : f === key));
+  const aria = (key: string) =>
+    has(key) ? { 'aria-invalid': true, 'aria-describedby': `lf-err-${key}` } : {};
+  const msg = (key: string) =>
+    has(key) ? (
+      <p id={`lf-err-${key}`} className="mt-1 text-xs text-red-600">
+        {messageFor(key)}
+      </p>
+    ) : null;
+  const whenKey = has('whenStart') ? 'whenStart' : 'whenEnd';
 
   return (
     <form
@@ -356,35 +409,13 @@ function LookingForForm({
         </select>
       </div>
 
-      <fieldset className="flex flex-col gap-3">
+      <fieldset className="flex flex-col gap-3" {...aria('places')}>
         <legend className={label}>Places (up to {MAX_PLACES})</legend>
-        {draft.places.map((place, i) => (
-          <div key={i} className="grid grid-cols-6 gap-2">
-            <input
-              aria-label={`City ${i + 1}`}
-              placeholder="City"
-              className="input-field col-span-6 min-h-11 sm:col-span-3"
-              value={place.city}
-              onChange={(e) => setPlace(i, { city: e.target.value })}
-            />
-            <input
-              aria-label={`State ${i + 1}`}
-              placeholder="State"
-              maxLength={2}
-              className="input-field col-span-2 min-h-11 uppercase sm:col-span-1"
-              value={place.state}
-              onChange={(e) => setPlace(i, { state: e.target.value })}
-            />
-            <input
-              aria-label={`ZIP code ${i + 1} (optional)`}
-              placeholder="ZIP code"
-              inputMode="numeric"
-              maxLength={5}
-              className="input-field col-span-3 min-h-11 sm:col-span-2"
-              value={place.zip}
-              onChange={(e) => setPlace(i, { zip: e.target.value.replace(/\D/g, '') })}
-            />
-            {draft.places.length > 1 && (
+        {msg('places')}
+        {draft.places.map((place, i) =>
+          place.raw ? (
+            <div key={i} className="flex items-center justify-between gap-2 text-sm text-ink">
+              <span className="min-w-0 break-words">{placeLabel(place.raw)}</span>
               <button
                 type="button"
                 aria-label={`Remove place ${i + 1}`}
@@ -394,13 +425,56 @@ function LookingForForm({
                     draft.places.filter((_, j) => j !== i),
                   )
                 }
-                className="col-span-1 min-h-11 text-sm text-ink-muted hover:text-ink"
+                className="min-h-11 text-sm text-ink-muted hover:text-ink"
               >
                 Remove
               </button>
-            )}
-          </div>
-        ))}
+            </div>
+          ) : (
+            <div key={i} className="grid grid-cols-6 gap-2">
+              <input
+                aria-label={`City ${i + 1}`}
+                {...aria('places')}
+                placeholder="City"
+                className="input-field col-span-6 min-h-11 sm:col-span-3"
+                value={place.city}
+                onChange={(e) => setPlace(i, { city: e.target.value })}
+              />
+              <input
+                aria-label={`State ${i + 1}`}
+                placeholder="State"
+                maxLength={2}
+                className="input-field col-span-2 min-h-11 uppercase sm:col-span-1"
+                value={place.state}
+                onChange={(e) => setPlace(i, { state: e.target.value })}
+              />
+              <input
+                aria-label={`ZIP code ${i + 1} (optional)`}
+                placeholder="ZIP code"
+                inputMode="numeric"
+                maxLength={5}
+                className="input-field col-span-3 min-h-11 sm:col-span-2"
+                value={place.zip}
+                onChange={(e) => setPlace(i, { zip: e.target.value.replace(/\D/g, '') })}
+              />
+              {draft.places.length > 1 && (
+                <button
+                  type="button"
+                  aria-label={`Remove place ${i + 1}`}
+                  onClick={() =>
+                    set(
+                      'places',
+                      draft.places.filter((_, j) => j !== i),
+                    )
+                  }
+                  className="col-span-1 min-h-11 text-sm text-ink-muted hover:text-ink"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ),
+        )}
         {draft.places.length < MAX_PLACES && (
           <button
             type="button"
@@ -419,11 +493,13 @@ function LookingForForm({
           </label>
           <input
             id="lf-price-min"
+            {...aria('priceMin')}
             inputMode="numeric"
             className="input-field min-h-11"
             value={draft.priceMin}
             onChange={(e) => set('priceMin', e.target.value.replace(/\D/g, ''))}
           />
+          {msg('priceMin')}
         </div>
         <div>
           <label htmlFor="lf-price-max" className={label}>
@@ -431,11 +507,13 @@ function LookingForForm({
           </label>
           <input
             id="lf-price-max"
+            {...aria('priceMax')}
             inputMode="numeric"
             className="input-field min-h-11"
             value={draft.priceMax}
             onChange={(e) => set('priceMax', e.target.value.replace(/\D/g, ''))}
           />
+          {msg('priceMax')}
         </div>
         <div>
           <label htmlFor="lf-beds" className={label}>
@@ -443,6 +521,7 @@ function LookingForForm({
           </label>
           <select
             id="lf-beds"
+            {...aria('bedsMin')}
             className="input-field min-h-11"
             value={draft.bedsMin}
             onChange={(e) => set('bedsMin', e.target.value)}
@@ -454,6 +533,7 @@ function LookingForForm({
               </option>
             ))}
           </select>
+          {msg('bedsMin')}
         </div>
         <div>
           <label htmlFor="lf-baths" className={label}>
@@ -461,6 +541,7 @@ function LookingForForm({
           </label>
           <select
             id="lf-baths"
+            {...aria('bathsMin')}
             className="input-field min-h-11"
             value={draft.bathsMin}
             onChange={(e) => set('bathsMin', e.target.value)}
@@ -472,11 +553,13 @@ function LookingForForm({
               </option>
             ))}
           </select>
+          {msg('bathsMin')}
         </div>
       </div>
 
-      <fieldset>
+      <fieldset {...aria('homeTypes')}>
         <legend className={label}>Home type</legend>
+        {msg('homeTypes')}
         <div className="flex flex-wrap gap-2">
           {PROPERTY_TYPES.map((type) => {
             const on = draft.homeTypes.includes(type);
@@ -517,7 +600,29 @@ function LookingForForm({
           >
             {pickerOpen ? 'Close calendar' : 'Choose date'}
           </button>
+          {draft.dateRange.start && (
+            <button
+              type="button"
+              onClick={() => {
+                set('dateRange', emptyRange());
+                setRangePickStep('start');
+              }}
+              className="min-h-11 text-sm font-medium text-ink-muted hover:text-ink"
+            >
+              Clear date
+            </button>
+          )}
         </div>
+        {expired && (
+          <p role="alert" className="text-xs text-red-600">
+            This date has passed. Choose a new date or clear it before you save.
+          </p>
+        )}
+        {!expired && has(whenKey) && (
+          <p id={`lf-err-${whenKey}`} className="text-xs text-red-600">
+            {messageFor(whenKey)}
+          </p>
+        )}
         {pickerOpen && (
           <DateRangePanel
             inline
@@ -540,7 +645,7 @@ function LookingForForm({
         <button
           type="submit"
           className="btn-primary min-h-11 flex-1"
-          disabled={saving || !hasPlace}
+          disabled={saving || !hasPlace || expired}
         >
           {saving ? 'Saving' : 'Save'}
         </button>

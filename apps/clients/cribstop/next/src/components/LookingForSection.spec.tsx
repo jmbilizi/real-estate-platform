@@ -154,6 +154,60 @@ describe('LookingForSection', () => {
     expect(screen.queryByRole('button', { name: 'Add' })).toBeNull();
   });
 
+  it('clears a date', async () => {
+    mockGet.mockResolvedValue({
+      items: [item({ whenStart: '2999-01-10', whenEnd: null })],
+      max: 5,
+    });
+    mockSave.mockImplementation(async (id, input) => ({ ...item(), ...input, id }) as LookingFor);
+    render(<LookingForSection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit buy preference' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear date' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockSave).toHaveBeenCalled());
+    expect(mockSave.mock.calls[0][1]).toMatchObject({ whenStart: null, whenEnd: null });
+  });
+
+  it('marks a stored past date as expired and blocks Save until it changes', async () => {
+    mockGet.mockResolvedValue({
+      items: [item({ whenStart: '2020-01-10', whenEnd: null })],
+      max: 5,
+    });
+    render(<LookingForSection />);
+    expect(await screen.findByText(/expired/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit buy preference' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('This date has passed');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear date' }));
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('keeps a place kind the form cannot edit', async () => {
+    const county = { kind: 'county', county: 'Fairfax', state: 'VA' } as const;
+    mockGet.mockResolvedValue({ items: [item({ places: [county] })], max: 5 });
+    mockSave.mockImplementation(async (id, input) => ({ ...item(), ...input, id }) as LookingFor);
+    render(<LookingForSection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit buy preference' }));
+    expect(screen.getByText('Fairfax County, VA')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockSave).toHaveBeenCalled());
+    expect(mockSave.mock.calls[0][1].places).toEqual([county]);
+  });
+
+  it('shows a 400 as inline messages tied to the fields', async () => {
+    mockGet.mockResolvedValue({ items: [item()], max: 5 });
+    mockSave.mockRejectedValue(new LookingForError(400, 'invalid', ['priceMax', 'places[0]']));
+    render(<LookingForSection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit buy preference' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const price = await screen.findByLabelText('Maximum price');
+    await waitFor(() => expect(price).toHaveAttribute('aria-invalid', 'true'));
+    expect(price).toHaveAttribute('aria-describedby', 'lf-err-priceMax');
+    expect(document.getElementById('lf-err-priceMax')).toHaveTextContent('not below the minimum');
+    expect(screen.getByLabelText('City 1')).toHaveAttribute('aria-describedby', 'lf-err-places');
+    expect(document.getElementById('lf-err-places')).toBeInTheDocument();
+  });
+
   it('deletes a preference', async () => {
     mockGet.mockResolvedValue({ items: [item()], max: 5 });
     mockDelete.mockResolvedValue();
