@@ -91,6 +91,12 @@ guide.
    `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background at every
    session start (throttled to once per 10 minutes). Run it after a PR merges.
 
+   `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
+   for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
+   `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
+   `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
+   `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
+
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
     descriptions, commit messages, and replies to the user. See
