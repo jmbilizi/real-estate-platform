@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { LISTING_TYPES } from '@cribstop/property-contracts';
-import { SearchDateRange, SearchSuggestion } from '@/lib/store/types';
+import { SearchSuggestion } from '@/lib/store/types';
 
 /** The search bar's own Listing Type filter — the contract's enum plus `'all'`. Default `'sale'` (#350). */
 export type SearchListingType = (typeof LISTING_TYPES)[number] | 'all';
@@ -21,8 +21,6 @@ export type SearchListingType = (typeof LISTING_TYPES)[number] | 'all';
 interface SearchState {
   searchLocation: string;
   searchSuggestion: SearchSuggestion;
-  searchMoveInDate: string;
-  searchDateRange: SearchDateRange;
   searchPriceIdx: number;
   searchListingType: SearchListingType;
 }
@@ -30,8 +28,6 @@ interface SearchState {
 const initialState: SearchState = {
   searchLocation: '',
   searchSuggestion: null,
-  searchMoveInDate: '',
-  searchDateRange: { start: '', end: '', flexibility: 'exact' },
   searchPriceIdx: 0,
   searchListingType: 'all',
 };
@@ -46,12 +42,6 @@ const searchSlice = createSlice({
     setSearchSuggestion: (state, action: PayloadAction<SearchSuggestion>) => {
       state.searchSuggestion = action.payload;
     },
-    setSearchMoveInDate: (state, action: PayloadAction<string>) => {
-      state.searchMoveInDate = action.payload;
-    },
-    setSearchDateRange: (state, action: PayloadAction<SearchDateRange>) => {
-      state.searchDateRange = action.payload;
-    },
     setSearchPriceIdx: (state, action: PayloadAction<number>) => {
       state.searchPriceIdx = action.payload;
     },
@@ -61,12 +51,6 @@ const searchSlice = createSlice({
   },
 });
 
-export const {
-  setSearchLocation,
-  setSearchSuggestion,
-  setSearchMoveInDate,
-  setSearchDateRange,
-  setSearchPriceIdx,
-  setSearchListingType,
-} = searchSlice.actions;
+export const { setSearchLocation, setSearchSuggestion, setSearchPriceIdx, setSearchListingType } =
+  searchSlice.actions;
 export default searchSlice.reducer;

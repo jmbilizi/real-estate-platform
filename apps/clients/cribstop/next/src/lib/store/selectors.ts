@@ -14,7 +14,5 @@ export const selectMobileSearchOpen = (state: RootState) => state.ui.mobileSearc
 
 export const selectSearchLocation = (state: RootState) => state.search.searchLocation;
 export const selectSearchSuggestion = (state: RootState) => state.search.searchSuggestion;
-export const selectSearchMoveInDate = (state: RootState) => state.search.searchMoveInDate;
-export const selectSearchDateRange = (state: RootState) => state.search.searchDateRange;
 export const selectSearchPriceIdx = (state: RootState) => state.search.searchPriceIdx;
 export const selectSearchListingType = (state: RootState) => state.search.searchListingType;

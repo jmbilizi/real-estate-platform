@@ -15,8 +15,7 @@ import { parseSearchPath } from '@cribstop/property-contracts';
  * The caller is responsible for the outer container / positioning wrapper.
  */
 export default function MobileSearchPill() {
-  const { searchLocation, searchListingType, activeTab, searchDateRange, setMobileSearchOpen } =
-    useApp();
+  const { searchLocation, searchListingType, activeTab, setMobileSearchOpen } = useApp();
   const pathname = usePathname();
 
   const [hydrated, setHydrated] = useState(false);
@@ -32,64 +31,7 @@ export default function MobileSearchPill() {
   const summary = (() => {
     if (activeTab === 'services') return 'Find services';
     if (activeTab === 'connect') return 'Explore connect';
-    const parts: string[] = [];
-    parts.push(LISTING_TYPE_SUMMARY_LABELS[searchListingType]);
-    const { start, end, flexibility } = searchDateRange;
-    if (start) {
-      const mo = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      const fmt = (ds: string) => {
-        const [, m, d] = ds.split('-');
-        return `${mo[parseInt(m) - 1]} ${parseInt(d)}`;
-      };
-      const flexSuffix: Record<string, string> = {
-        '1': '±1d',
-        '3': '±3d',
-        '7': '±1wk',
-        '14': '±2wk',
-        '30': '±1mo',
-        '60': '±2mo',
-        '90': '±3mo',
-        '180': '±6mo',
-        '365': '±1yr',
-        '730': '±2yr',
-      };
-      const base = end && end !== start ? `${fmt(start)} – ${fmt(end)}` : fmt(start);
-      const suf =
-        flexibility && flexibility !== 'exact' && (!end || end === start)
-          ? flexSuffix[flexibility]
-          : '';
-      parts.push(suf ? `${base} ${suf}` : base);
-    } else if (flexibility && flexibility !== 'exact') {
-      const flexLabelMap: Record<string, string> = {
-        '1': '± 1 day',
-        '3': '± 3 days',
-        '7': '± 1 week',
-        '14': '± 2 weeks',
-        '30': '± 1 month',
-        '60': '± 2 months',
-        '90': '± 3 months',
-        '180': '± 6 months',
-        '365': '± 1 year',
-        '730': '± 2 years',
-      };
-      parts.push(flexLabelMap[flexibility] ?? 'Flexible');
-    } else {
-      parts.push('Any dates');
-    }
-    return parts.join(' · ');
+    return LISTING_TYPE_SUMMARY_LABELS[searchListingType];
   })();
 
   /*

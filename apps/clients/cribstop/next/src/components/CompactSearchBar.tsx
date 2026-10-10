@@ -16,7 +16,6 @@ import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
 import { LISTING_TYPE_SUMMARY_LABELS } from '@/lib/listing-type-labels';
 import { Z_LAYERS } from '@/lib/z-layers';
-import { DateRangePanel } from './DateRangePanel';
 import { SkeletonBlock, SkeletonText } from './Skeleton';
 import { LISTING_TYPES } from '@cribstop/property-contracts';
 
@@ -341,10 +340,6 @@ export default function CompactSearchBar({
     setSearchLocation,
     searchSuggestion,
     setSearchSuggestion,
-    searchMoveInDate,
-    setSearchMoveInDate,
-    searchDateRange,
-    setSearchDateRange,
     searchListingType,
     setSearchListingType,
     showHeaderPill,
@@ -541,14 +536,6 @@ export default function CompactSearchBar({
   const setLocation = setSearchLocation;
   const selectedSuggestion = searchSuggestion;
   const setSelectedSuggestion = setSearchSuggestion;
-  const _moveInDate = searchMoveInDate;
-  const _setMoveInDate = setSearchMoveInDate;
-  const dateRange = searchDateRange;
-  const setDateRange = setSearchDateRange;
-  // Local state for range-picking interaction (first click = start, second = end)
-  const [rangePickStep, setRangePickStep] = useState<'start' | 'end'>('start');
-  // hovered date for visual range preview
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const listingTab = ctxTab;
   // State for nearby locations and loading
   const [nearbyLocations, setNearbyLocations] = useState<any[]>([]);
@@ -826,7 +813,6 @@ export default function CompactSearchBar({
   }, [selectedSuggestion]);
 
   const whereRef = useRef<HTMLButtonElement>(null);
-  const whenRef = useRef<HTMLButtonElement>(null);
   const whatRef = useRef<HTMLButtonElement>(null);
   const searchBtnRef = useRef<HTMLDivElement>(null);
   const getIndicatorStyle = (): React.CSSProperties => {
@@ -835,7 +821,6 @@ export default function CompactSearchBar({
     // exists — there is no 'who' slot to point at (#34).
     const refs: Record<SearchPanel, React.RefObject<HTMLButtonElement | null>> = {
       where: whereRef,
-      when: whenRef,
       what: whatRef,
     };
     const btn = refs[activePanel]?.current;
@@ -845,12 +830,6 @@ export default function CompactSearchBar({
     }
     return { left: btn.offsetLeft, width: btn.offsetWidth };
   };
-  const [calendarBaseMonth, setCalendarBaseMonth] = useState<{ year: number; month: number }>(
-    () => {
-      const now = new Date();
-      return { year: now.getFullYear(), month: now.getMonth() };
-    },
-  );
   const panelRef = useRef<HTMLDivElement | null>(null);
   // Load recent searches from localStorage
   useEffect(() => {
@@ -1082,10 +1061,8 @@ export default function CompactSearchBar({
                 onClick={(e) => {
                   e.stopPropagation();
                   setSearchListingType(option);
-                  // The 'for-sale'/'for-rent' tab drives the "When" panel's buy-vs-rent date
-                  // wording (DateRangePanel) and the header tab, so it stays in sync for the two
-                  // values it can express. 'all'/'sold' have no date-flexibility equivalent, so
-                  // the tab is left as it was.
+                  // The header tab stays in sync for the two values it can express.
+                  // 'all' and 'sold' have no tab, so the tab stays as it was.
                   if (option === 'sale' || option === 'rent') {
                     const tab = option === 'sale' ? 'for-sale' : 'for-rent';
                     setListingType(tab);
@@ -1114,23 +1091,6 @@ export default function CompactSearchBar({
       >
         <div className="p-5">{renderWhatPanelContent(highlightRef)}</div>
       </div>
-    );
-  }
-
-  function renderWhenPanel() {
-    return (
-      <DateRangePanel
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        rangePickStep={rangePickStep}
-        setRangePickStep={setRangePickStep}
-        hoveredDate={hoveredDate}
-        setHoveredDate={setHoveredDate}
-        calendarBaseMonth={calendarBaseMonth}
-        setCalendarBaseMonth={setCalendarBaseMonth}
-        onClose={() => setActivePanel(null)}
-        listingType={listingType}
-      />
     );
   }
 
@@ -1635,99 +1595,9 @@ export default function CompactSearchBar({
 
   // --- helpers (used in both render paths) ---------------------------------
 
-  function _formatMoveInDate(d: string): string {
-    if (!d) return '';
-    const parts = d.split('-');
-    const month = parseInt(parts[1]) - 1;
-    const day = parts[2] ? parseInt(parts[2]) : null;
-    const year = parseInt(parts[0]);
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    const currentYear = new Date().getFullYear();
-    if (day)
-      return year !== currentYear ? `${months[month]} ${day}, ${year}` : `${months[month]} ${day}`;
-    return `${months[month]} ${year}`;
-  }
-
-  function formatDateRangeLabel(range: {
-    start: string;
-    end: string;
-    flexibility: string;
-  }): string {
-    if (!range.start) return '';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    function fmt(ds: string) {
-      const [y, m, d] = ds.split('-');
-      const mo = months[parseInt(m) - 1];
-      const currentYear = new Date().getFullYear();
-      return parseInt(y) !== currentYear ? `${mo} ${parseInt(d)}, ${y}` : `${mo} ${parseInt(d)}`;
-    }
-    const flexSuffix: Record<string, string> = {
-      '1': '±1d',
-      '3': '±3d',
-      '7': '±1wk',
-      '14': '±2wk',
-      '30': '±1mo',
-      '60': '±2mo',
-      '90': '±3mo',
-      '180': '±6mo',
-      '365': '±1yr',
-      '730': '±2yr',
-    };
-    if (!range.end || range.start === range.end) {
-      const label = fmt(range.start);
-      const suf = flexSuffix[range.flexibility];
-      return suf ? `${label} ${suf}` : label;
-    }
-    return `${fmt(range.start)} – ${fmt(range.end)}`;
-  }
-
   // --- mobileSheetMode: full-screen mobile search sheet reusing all panels --
 
   if (mobileSheetMode) {
-    const flexLabelMap: Record<string, string> = {
-      '1': '± 1 day',
-      '3': '± 3 days',
-      '7': '± 1 week',
-      '14': '± 2 weeks',
-      '30': '± 1 month',
-      '60': '± 2 months',
-      '90': '± 3 months',
-      '180': '± 6 months',
-      '365': '± 1 year',
-      '730': '± 2 years',
-    };
-    const whenLabel = dateRange.start
-      ? formatDateRangeLabel(dateRange)
-      : dateRange.flexibility !== 'exact'
-        ? (flexLabelMap[dateRange.flexibility] ?? '')
-        : '';
-
     const handleClearAll = () => {
       if (typeof setLocation === 'function') setLocation('');
       setSelectedSuggestion(null);
@@ -1735,16 +1605,11 @@ export default function CompactSearchBar({
       setIsCommittedSelection(false);
       setLocationNotFound(false);
       setSuggestions([]);
-      setDateRange({ start: '', end: '', flexibility: 'exact' });
-      setRangePickStep('start');
       setSearchListingType('all');
       setActivePanel('where');
     };
 
     const handleSheetSearch = async () => {
-      const dates = new URLSearchParams();
-      if (dateRange.start) dates.set('moveIn', dateRange.start);
-      if (dateRange.end && dateRange.end !== dateRange.start) dates.set('moveInEnd', dateRange.end);
       // Same fallback as the desktop path (handleSearch, #369): a suggestion picked from the
       // dropdown wins, else the typed text is geocoded directly, never searched unfiltered.
       let finalSuggestion = selectedSuggestion;
@@ -1753,7 +1618,7 @@ export default function CompactSearchBar({
         const target = searchTargetFor(location || '', finalSuggestion);
         if (target) {
           setLocationNotFound(false);
-          pushUrl(searchTargetUrl(target, searchListingType, dates));
+          pushUrl(searchTargetUrl(target, searchListingType));
           onClose?.();
           return;
         }
@@ -1909,7 +1774,7 @@ export default function CompactSearchBar({
                     className="relative z-[1] flex w-full items-center gap-3 px-5 py-3 text-left transition-colors"
                     onClick={async () => {
                       await handleGeolocate();
-                      setActivePanel('when');
+                      setActivePanel('what');
                     }}
                   >
                     <span className="inline-block w-5 h-5 text-brand flex-shrink-0">
@@ -1949,7 +1814,7 @@ export default function CompactSearchBar({
                       setSuggestions([]);
                       setIsDropdownOpen(false);
                       addRecentSearch(s);
-                      setActivePanel('when');
+                      setActivePanel('what');
                     }}
                   >
                     <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
@@ -2024,7 +1889,7 @@ export default function CompactSearchBar({
                                 setIsCommittedSelection(true);
                                 setSelectedSuggestion({ ...loc, display_name: formatted });
                                 setIsDropdownOpen(false);
-                                setActivePanel('when');
+                                setActivePanel('what');
                               }}
                             >
                               <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
@@ -2074,7 +1939,7 @@ export default function CompactSearchBar({
                               if (typeof setLocation === 'function')
                                 setLocation(formatLocationLabel(s));
                               setIsDropdownOpen(false);
-                              setActivePanel('when');
+                              setActivePanel('what');
                             }}
                           >
                             <span className="inline-block w-5 h-5 text-ink-subtle flex-shrink-0">
@@ -2123,37 +1988,6 @@ export default function CompactSearchBar({
                   )}
               </div>
             )}
-          </div>
-
-          {/* WHEN card */}
-          <div
-            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
-              activePanel === 'when' ? 'ring-2 ring-ink' : 'cursor-pointer'
-            }`}
-            onClick={() => activePanel !== 'when' && setActivePanel('when')}
-          >
-            <div className="px-5 pt-4 pb-4">
-              <p className="text-[11px] font-bold text-ink uppercase tracking-wider">When?</p>
-              {activePanel === 'when' ? (
-                <DateRangePanel
-                  dateRange={dateRange}
-                  setDateRange={setDateRange}
-                  rangePickStep={rangePickStep}
-                  setRangePickStep={setRangePickStep}
-                  hoveredDate={hoveredDate}
-                  setHoveredDate={setHoveredDate}
-                  calendarBaseMonth={calendarBaseMonth}
-                  setCalendarBaseMonth={setCalendarBaseMonth}
-                  // Next card in the sheet's cycle. Was 'who' until that segment was removed
-                  // (#34) — the chain now runs where → when → what.
-                  onClose={() => setActivePanel('what')}
-                  listingType={listingType}
-                  inline
-                />
-              ) : (
-                <p className="text-[14px] text-ink-muted mt-1">{whenLabel || 'Anytime'}</p>
-              )}
-            </div>
           </div>
 
           {/* WHAT card */}
@@ -2241,27 +2075,6 @@ export default function CompactSearchBar({
           </span>
         </button>
         <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
-        {/* When */}
-        <button
-          type="button"
-          onClick={() => openFromPill('when')}
-          aria-label="When — edit search"
-          className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap hover:bg-surface-alt/60 transition-colors"
-        >
-          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            <SkeletonText loading={!hydrated} width="w-9">
-              When
-            </SkeletonText>
-          </span>
-          <span
-            className={`text-[13px] leading-snug ${dateRange.start ? 'text-ink font-bold' : 'text-ink-muted'}`}
-          >
-            <SkeletonText loading={!hydrated} width="w-16">
-              {dateRange.start ? formatDateRangeLabel(dateRange) : 'Anytime'}
-            </SkeletonText>
-          </span>
-        </button>
-        <div className="my-auto h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
         {/* What */}
         <button
           type="button"
@@ -2337,9 +2150,7 @@ export default function CompactSearchBar({
             />
           )}
           {/* WHERE */}
-          <div
-            className={`relative w-2/5 lg:w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
-          >
+          <div className={`relative w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}>
             <button
               ref={whereRef}
               type="button"
@@ -2413,41 +2224,14 @@ export default function CompactSearchBar({
             )}
           </div>
           <div
-            className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'where' || activePanel === 'when' ? 'opacity-0' : ''}`}
+            className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'where' || activePanel === 'what' ? 'opacity-0' : ''}`}
           />
-          {/* WHEN */}
-          <button
-            ref={whenRef}
-            type="button"
-            onClick={() => setActivePanel('when')}
-            className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-              activePanel !== 'when' ? 'hover:bg-surface-alt/60' : ''
-            }`}
-          >
-            <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-              When
-            </span>
-            <span
-              className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-muted'}`}
-            >
-              {dateRange.start ? (
-                formatDateRangeLabel(dateRange)
-              ) : (
-                <>
-                  <span className="">Add dates</span>
-                </>
-              )}
-            </span>
-          </button>
-          <div
-            className={`hidden md:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'when' || activePanel === 'what' ? 'opacity-0' : ''}`}
-          />
-          {/* WHAT — hidden on mobile, visible md+ */}
+          {/* WHAT */}
           <button
             ref={whatRef}
             type="button"
             onClick={() => setActivePanel('what')}
-            className={`hidden md:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 md:px-3 py-2.5 md:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
+            className={`flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
               activePanel !== 'what' ? 'hover:bg-surface-alt/60' : ''
             }`}
           >
@@ -2507,9 +2291,6 @@ export default function CompactSearchBar({
 
         {/* WHERE panel */}
         {activePanel === 'where' && renderWherePanel(whereHighlightRef)}
-
-        {/* WHEN panel */}
-        {activePanel === 'when' && renderWhenPanel()}
 
         {/* WHAT panel */}
         {activePanel === 'what' && renderWhatPanel(whatHighlightRef)}
@@ -2580,9 +2361,7 @@ export default function CompactSearchBar({
                 />
               )}
               {/* WHERE slot */}
-              <div
-                className={`relative w-2/5 lg:w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
-              >
+              <div className={`relative w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}>
                 <button
                   ref={whereRef}
                   type="button"
@@ -2662,42 +2441,15 @@ export default function CompactSearchBar({
               </div>
 
               <div
-                className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'where' || activePanel === 'when' ? 'opacity-0' : ''}`}
+                className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'where' || activePanel === 'what' ? 'opacity-0' : ''}`}
               />
 
-              {/* WHEN slot */}
-              <button
-                ref={whenRef}
-                type="button"
-                onClick={() => setActivePanel('when')}
-                className={`relative z-[1] flex-1 min-w-0 flex flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-                  activePanel !== 'when' ? 'hover:bg-surface-alt/60' : ''
-                }`}
-              >
-                <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                  <SkeletonText loading={!hydrated} width="w-9">
-                    When
-                  </SkeletonText>
-                </span>
-                <span
-                  className={`text-[11px] sm:text-[13px] leading-snug truncate ${dateRange.start ? 'text-ink font-bold' : 'text-ink-subtle'}`}
-                >
-                  <SkeletonText loading={!hydrated} width="w-20">
-                    {dateRange.start ? formatDateRangeLabel(dateRange) : <span>Add dates</span>}
-                  </SkeletonText>
-                </span>
-              </button>
-
-              <div
-                className={`hidden sm:block h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity duration-150 ${activePanel === 'when' || activePanel === 'what' ? 'opacity-0' : ''}`}
-              />
-
-              {/* WHAT slot — hidden on mobile, visible sm+ */}
+              {/* WHAT slot */}
               <button
                 ref={whatRef}
                 type="button"
                 onClick={() => setActivePanel('what')}
-                className={`hidden sm:flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-2 sm:px-3 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
+                className={`flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
                   activePanel !== 'what' ? 'hover:bg-surface-alt/60' : ''
                 }`}
               >
@@ -2780,9 +2532,6 @@ export default function CompactSearchBar({
 
             {/* WHERE panel */}
             {activePanel === 'where' && !morphing && renderWherePanel(whereHighlightRef2)}
-
-            {/* WHEN panel */}
-            {activePanel === 'when' && !morphing && renderWhenPanel()}
 
             {/* -- PANEL: WHAT (property criteria) ----------------------------- */}
             {activePanel === 'what' && !morphing && renderWhatPanel(whatHighlightRef2)}

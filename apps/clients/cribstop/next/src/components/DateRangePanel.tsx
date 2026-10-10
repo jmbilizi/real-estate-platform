@@ -1,3 +1,5 @@
+// Kept for a planned profile preference ("what I am looking for and when")
+// that drives new-listing alerts. The search bar no longer uses it.
 import React from 'react';
 
 export type DateRange = {
