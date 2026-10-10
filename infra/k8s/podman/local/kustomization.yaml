@@ -7,6 +7,10 @@ resources:
   # Placeholder CA bundle (#180) — see tools/infra/local-ca-overlay.js for the real-value path.
   - configmaps/workspace-ca-bundle.configmap.yaml
 
+# Enterprise CA mount and env for every Deployment and CronJob (#275).
+components:
+  - components/workspace-ca
+
 # Environment-specific patches (local Podman environment)
 # Patches override base resources with local development configuration:
 # - Minimal resource requests/limits for laptop/workstation constraints
