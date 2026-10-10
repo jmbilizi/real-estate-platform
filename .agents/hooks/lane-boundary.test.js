@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('node:os');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const { evaluate, resolveLaneRoot } = require('./lane-boundary');
@@ -443,6 +444,18 @@ const OTHER_FILE = path.join(OTHER_WORKTREE_ROOT, 'notes.txt');
 const OWN_FILE = path.join(WORKTREE_ROOT, 'notes.txt');
 const lane = (command, cwd) => bashCall(command, WORKTREE_ROOT, {}, cwd || WORKTREE_ROOT);
 
+// Git Bash form of a native path: `C:\Users\x` becomes `/c/Users/x`. POSIX paths stay as they are.
+function msysPath(native) {
+  const m = /^([A-Za-z]):[\\/](.*)$/.exec(native);
+  return m ? `/${m[1].toLowerCase()}/${m[2].replace(/\\/g, '/')}` : native;
+}
+
+test('a write after cd names the cd in the refusal', () => {
+  const reason = lane(`cd sub && cd ../.. && echo x > other/f.txt`);
+  assert.match(reason, /after "cd \.\.\/\.\."/);
+  assert.match(reason, /another lane's worktree/);
+});
+
 test('redirect into another worktree is blocked and names the path', () => {
   for (const op of ['>', '>>', '2>', '&>']) {
     const reason = lane(`echo x ${op} "${OTHER_FILE}"`);
@@ -496,6 +509,13 @@ test('allowed lookalikes stay allowed', () => {
     'echo x > out.txt',
     'echo x > /dev/null',
     'echo x > nul',
+    'echo x > /tmp/a.txt',
+    'echo x | tee /var/tmp/a.txt',
+    'cp a.txt /tmp/a.txt',
+    `echo x > "${path.join(fs.realpathSync.native(os.tmpdir()), 'a.txt')}"`,
+    `echo x > ${msysPath(path.join(os.tmpdir(), 'a.txt'))}`,
+    'ls # note: out > ../../other/x.txt',
+    'echo done # > /var/elsewhere',
     'pnpm run lint 2>&1',
     'pnpm run lint >&2',
     `echo x > "${path.join(os.tmpdir(), 'a.txt')}"`,
