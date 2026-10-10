@@ -34,7 +34,12 @@ const MESSAGE_FOR_STATUS = (status: number): string =>
 async function request<T>(path: string, method: string, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { method, signal, headers: { Accept: 'application/json' } });
+    res = await fetch(path, {
+      method,
+      signal,
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     throw new SavedHomesApiError(MESSAGE_FOR_STATUS(503), 503);
@@ -58,6 +63,19 @@ export function unsaveListing(listingId: string): Promise<SavedState> {
 /** Unsaves by property id. The only route that reaches an off-market home. */
 export function unsaveHomeById(propertyId: string): Promise<SavedState> {
   return request<SavedState>(`/api/saved-homes/${encodeURIComponent(propertyId)}`, 'DELETE');
+}
+
+/** The newest saves, newest first. One small read, for surfaces that need only the latest few. */
+export async function listRecentSavedHomes(
+  limit: number,
+  signal?: AbortSignal,
+): Promise<SavedHome[]> {
+  const envelope = await request<SavedHomesEnvelope>(
+    `/api/saved-homes?page=1&pageSize=${limit}`,
+    'GET',
+    signal,
+  );
+  return envelope.results;
 }
 
 const PAGE_SIZE = 100;
