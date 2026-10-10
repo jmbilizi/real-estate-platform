@@ -9,8 +9,9 @@ exports.shorthands = undefined;
 const VISIBLE = `deleted_at IS NULL
         AND internet_display_allowed
         AND consumer_status IS NOT NULL
-        AND (consumer_status <> 'Sold' OR close_date IS NOT NULL)
-        AND city IS NOT NULL AND state IS NOT NULL`;
+        AND (consumer_status <> 'Sold' OR close_date IS NOT NULL)`;
+// city, state and zip5 are NOT NULL columns. The planner drops `IS NOT NULL` on them from a query,
+// so a partial predicate on them could never be proven.
 
 /** @param {import('node-pg-migrate').MigrationBuilder} pgm */
 exports.up = (pgm) => {

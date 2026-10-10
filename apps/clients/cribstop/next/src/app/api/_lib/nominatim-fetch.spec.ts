@@ -27,6 +27,26 @@ describe('nominatim gate', () => {
     expect(slept).toEqual([1000, 1000]);
   });
 
+  it('shares the 1 req/s budget across replicas', async () => {
+    process.env.NOMINATIM_REPLICAS = '3';
+    try {
+      let clock = 0;
+      const slept: number[] = [];
+      const gate = createNominatimGate({
+        now: () => clock,
+        sleep: async (ms) => {
+          slept.push(ms);
+          clock += ms;
+        },
+      });
+      await gate.acquire();
+      await gate.acquire();
+      expect(slept).toEqual([3300]);
+    } finally {
+      delete process.env.NOMINATIM_REPLICAS;
+    }
+  });
+
   it('refuses a call when the wait is over the limit', async () => {
     const gate = createNominatimGate({
       minIntervalMs: 1000,

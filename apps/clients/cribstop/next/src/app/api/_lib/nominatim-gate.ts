@@ -12,9 +12,11 @@ export function createNominatimGate(
     sleep?: (ms: number) => Promise<void>;
   } = {},
 ) {
-  // 1.1 s, not 1 s, so clock jitter never puts two calls inside one second.
-  const minIntervalMs = options.minIntervalMs ?? 1_100;
-  const maxWaitMs = options.maxWaitMs ?? 4_000;
+  // 1.1 s, not 1 s, so clock jitter never puts two calls inside one second. The limit is total
+  // across all web pods, so each pod takes a share: interval x replicas (`NOMINATIM_REPLICAS`).
+  const replicas = Math.max(1, Number(process.env.NOMINATIM_REPLICAS) || 1);
+  const minIntervalMs = options.minIntervalMs ?? 1_100 * replicas;
+  const maxWaitMs = options.maxWaitMs ?? 4_000 * replicas;
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   let nextSlotAt = 0;

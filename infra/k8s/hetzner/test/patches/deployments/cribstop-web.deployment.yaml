@@ -33,3 +33,6 @@ spec:
             # Public origin of the web app. The deploy action substitutes the placeholder (#172).
             - name: SITE_ORIGIN
               value: "https://CRIBSTOP_DOMAIN_PLACEHOLDER"
+            # Nominatim allows 1 req/s in total. Each pod multiplies its call spacing by this. Keep equal to replicas (#781).
+            - name: NOMINATIM_REPLICAS
+              value: "2"

@@ -7,7 +7,7 @@ import type { ReadClient } from './repository';
 
 /**
  * `GET /listings/suggest` (#781). Each query is a prefix match on a partial btree index
- * (migration 059) and reads the index only. The index predicate equals `LISTING_VISIBILITY_SQL`,
+ * (migration 060) and reads the index only. The index predicate equals `LISTING_VISIBILITY_SQL`,
  * so the planner can use it. `text_pattern_ops` makes `LIKE 'abc%'` use the index in any locale.
  */
 
@@ -19,45 +19,42 @@ interface PlaceRow {
 }
 
 /** Escapes `%`, `_` and `\` so a typed character is never a wildcard. */
-function likePrefix(q: string): string {
+export function likePrefix(q: string): string {
   return `${q.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
 }
 
-const CITY_SQL = `
+export const CITY_SQL = `
   SELECT mode() WITHIN GROUP (ORDER BY l.city) AS name,
          mode() WITHIN GROUP (ORDER BY l.city) AS city,
          mode() WITHIN GROUP (ORDER BY l.state) AS state,
          NULL::text AS zip
     FROM listings l
    WHERE ${LISTING_VISIBILITY_SQL}
-     AND l.city IS NOT NULL AND l.state IS NOT NULL
      AND lower(l.city) LIKE $1
    GROUP BY lower(l.city), lower(l.state)
    ORDER BY count(*) DESC, lower(l.city)
    LIMIT $2`;
 
-const NEIGHBORHOOD_SQL = `
+export const NEIGHBORHOOD_SQL = `
   SELECT mode() WITHIN GROUP (ORDER BY l.neighborhood) AS name,
          mode() WITHIN GROUP (ORDER BY l.city) AS city,
          mode() WITHIN GROUP (ORDER BY l.state) AS state,
          NULL::text AS zip
     FROM listings l
    WHERE ${LISTING_VISIBILITY_SQL}
-     AND l.city IS NOT NULL AND l.state IS NOT NULL
      AND ${neighborhoodNotNoiseSql('l.neighborhood')}
      AND lower(l.neighborhood) LIKE $1
    GROUP BY lower(l.neighborhood), lower(l.city), lower(l.state)
    ORDER BY count(*) DESC, lower(l.neighborhood)
    LIMIT $2`;
 
-const ZIP_SQL = `
+export const ZIP_SQL = `
   SELECT l.zip5 AS name,
          mode() WITHIN GROUP (ORDER BY l.city) AS city,
          mode() WITHIN GROUP (ORDER BY l.state) AS state,
          l.zip5 AS zip
     FROM listings l
    WHERE ${LISTING_VISIBILITY_SQL}
-     AND l.city IS NOT NULL AND l.state IS NOT NULL
      AND l.zip5 LIKE $1
    GROUP BY l.zip5
    ORDER BY l.zip5
