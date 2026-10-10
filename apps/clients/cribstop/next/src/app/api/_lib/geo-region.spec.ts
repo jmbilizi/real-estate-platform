@@ -31,7 +31,7 @@ describe('fetchRegion', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
   });
 
-  it('forwards X-Real-IP to the gateway', async () => {
+  it('forwards the visitor IP as X-Forwarded-For', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -42,7 +42,7 @@ describe('fetchRegion', () => {
 
     expect(region).toEqual({ city: 'Rockville', state: 'MD' });
     const [, init] = fetchMock.mock.calls[0];
-    expect(new Headers(init.headers as HeadersInit).get('X-Real-IP')).toBe('203.0.113.5');
+    expect(new Headers(init.headers as HeadersInit).get('X-Forwarded-For')).toBe('203.0.113.5');
   });
 
   it('yields null on a 204', async () => {
@@ -68,6 +68,6 @@ describe('fetchRegion', () => {
     });
     await fetchRegion(null);
     const [, init] = fetchMock.mock.calls[0];
-    expect(new Headers(init.headers as HeadersInit).has('X-Real-IP')).toBe(false);
+    expect(new Headers(init.headers as HeadersInit).has('X-Forwarded-For')).toBe(false);
   });
 });
