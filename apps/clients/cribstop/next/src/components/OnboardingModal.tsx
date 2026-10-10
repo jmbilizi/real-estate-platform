@@ -224,7 +224,7 @@ function PreferencesStep({
       <ToggleRow
         emoji="📧"
         label="Email updates"
-        description="Email with new listings matching your searches. Unsubscribe at any time."
+        description="Email with new listings matching your searches. Turn this off in your account at any time."
         checked={emailNotifications}
         onChange={onEmailChange}
       />

@@ -345,7 +345,7 @@ function ProfileSection() {
           <div className="space-y-3">
             <ToggleField
               label="Email notifications"
-              description="Email with new listings, price drops and saved search alerts. Unsubscribe in any email or turn this off here."
+              description="Email with new listings, price drops and saved search alerts. Turn this off here at any time."
               checked={emailNotifications}
               onChange={setEmailNotifications}
               disabled={!editing}
