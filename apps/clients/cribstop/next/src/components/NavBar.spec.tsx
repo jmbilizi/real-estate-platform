@@ -1,4 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { readdirSync } from 'fs';
+import { join } from 'path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import NavBar from './NavBar';
 import type { User } from '@/lib/store/types';
@@ -270,4 +272,49 @@ describe('NavBar right side', () => {
       'dialog',
     );
   });
+
+  it('links every profile panel entry to a route that exists', () => {
+    mockUseApp.mockReturnValue(appValue(A_USER));
+    render(<NavBar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+
+    const hrefs = screen
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => h.startsWith('/') && h !== '/');
+    expect(hrefs).toEqual(expect.arrayContaining(['/account', '/favorites']));
+
+    const routes = pageRoutes(join(__dirname, '..', 'app'));
+    for (const href of hrefs) {
+      expect({ href, found: routes.some((r) => routeMatches(r, href)) }).toEqual({
+        href,
+        found: true,
+      });
+    }
+  });
 });
+
+/** Route segments of every page.tsx under the app dir. Route groups and slots add no segment. */
+function pageRoutes(dir: string, parts: string[] = []): string[][] {
+  const out: string[][] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) {
+      const hidden = /^\(.*\)$/.test(e.name) || e.name.startsWith('@');
+      out.push(...pageRoutes(join(dir, e.name), hidden ? parts : [...parts, e.name]));
+    } else if (e.name === 'page.tsx') {
+      out.push(parts);
+    }
+  }
+  return out;
+}
+
+function routeMatches(route: string[], href: string): boolean {
+  const segs = href.split(/[?#]/)[0].split('/').filter(Boolean);
+  for (let i = 0; i < route.length; i++) {
+    const r = route[i];
+    if (r.startsWith('[...')) return segs.length > i;
+    if (segs[i] === undefined) return false;
+    if (!r.startsWith('[') && r !== segs[i]) return false;
+  }
+  return route.length === segs.length;
+}
