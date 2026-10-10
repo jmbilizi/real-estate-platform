@@ -5,7 +5,7 @@ import {
   STAFF_LEAD_AGING_HOURS_DEFAULT,
   toOpenApiDocument,
 } from '@cribstop/property-contracts';
-import { getPool } from './db/pool';
+import { createAnalyticsPool, getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
 import { createAddressLoader } from './listings/address-loader';
@@ -242,7 +242,12 @@ export function createApp(options: CreateAppOptions = {}): Express {
     ),
   );
   app.use(createSavedHomesRouter({ pool, introspection }));
-  app.use(createAnalyticsRouter({ pool, enabled: options.analyticsEnabled }));
+  app.use(
+    createAnalyticsRouter({
+      pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,
+      enabled: options.analyticsEnabled,
+    }),
+  );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
   app.use(createStaffRouter({ introspection }));
   app.use(

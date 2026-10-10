@@ -72,6 +72,25 @@ export function getPool(config: PoolConfig = {}): Pool {
   return pool;
 }
 
+/**
+ * A small pool of its own for funnel events (#725). A burst of events then queues here and cannot
+ * take a connection from the pool that serves listing reads. Each statement stops after 1 s, and
+ * `connectionTimeoutMillis` bounds the wait for a connection.
+ */
+export function createAnalyticsPool(): Pool {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL is not set.');
+  }
+  return new Pool({
+    connectionString,
+    max: 2,
+    statement_timeout: 1000,
+    idle_in_transaction_session_timeout: 2000,
+    connectionTimeoutMillis: 1000,
+  });
+}
+
 export async function closePool(): Promise<void> {
   if (pool) {
     await pool.end();

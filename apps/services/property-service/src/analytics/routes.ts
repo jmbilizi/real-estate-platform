@@ -18,6 +18,9 @@ export const RAW_RETENTION_DAYS = 30;
 /** The purge runs at most this often per process. A DELETE on every write would cost more than it saves. */
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
+/** Events in flight at once. Past this the route drops the event and answers 204, so a burst never queues without bound. */
+const MAX_IN_FLIGHT = 50;
+
 const invalidRequest = (message: string): ErrorBody => ({
   error: { code: 'invalid_request', message },
 });
@@ -65,6 +68,7 @@ export interface AnalyticsRouterDeps {
 export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   const router = Router();
   const enabled = deps.enabled ?? (() => analyticsEnabled());
+  let inFlight = 0;
   // A timer, not a per-write check, so an idle pod still deletes rows older than 30 days.
   setInterval(() => {
     purgeRawAnalyticsEvents(deps.pool).catch((error: unknown) => {
@@ -97,11 +101,19 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
       res.status(204).end();
       return;
     }
+    if (inFlight >= MAX_IN_FLIGHT) {
+      res.status(204).end();
+      return;
+    }
+    inFlight += 1;
     recordAnalyticsEvent(deps.pool, parsed.data)
       .then(() => {
         res.status(204).end();
       })
-      .catch(next);
+      .catch(next)
+      .finally(() => {
+        inFlight -= 1;
+      });
   });
 
   return router;
