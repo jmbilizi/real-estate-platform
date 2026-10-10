@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cribstop.com/schemas/events/lead.received.v1.json",
+  "title": "lead.received v1",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "occurredAt",
+    "aggregateId",
+    "recipient",
+    "category",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "lead.received"
+    },
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$(?!\n)"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "recipient": {
+      "type": "object",
+      "required": ["accountId"],
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    },
+    "category": {
+      "enum": ["transactional", "non_transactional"]
+    },
+    "data": {
+      "type": "object",
+      "maxProperties": 20,
+      "propertyNames": {
+        "pattern": "^[a-z][A-Za-z0-9]*$(?!\n)",
+        "not": {
+          "pattern": "[Ee]mail|[Pp]hone|[Mm]essage|[Bb]ody|[Nn]ame|[Aa]ddress"
+        }
+      },
+      "properties": {
+        "listingId": {
+          "type": "string",
+          "maxLength": 256,
+          "not": {
+            "pattern": "[^ \\t\\r\\n@]+@[^ \\t\\r\\n@]+\\.[^ \\t\\r\\n@]+|[(]?[0-9]{3}[)]?[ .-]?[0-9]{3}[ .-]?[0-9]{4}|[+][0-9][0-9 .-]{8,}[0-9]"
+          },
+          "minLength": 1
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256,
+        "not": {
+          "pattern": "[^ \\t\\r\\n@]+@[^ \\t\\r\\n@]+\\.[^ \\t\\r\\n@]+|[(]?[0-9]{3}[)]?[ .-]?[0-9]{3}[ .-]?[0-9]{4}|[+][0-9][0-9 .-]{8,}[0-9]"
+        }
+      },
+      "required": ["listingId"]
+    }
+  },
+  "additionalProperties": true
+}
