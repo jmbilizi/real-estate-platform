@@ -47,6 +47,7 @@
  * `env X=1 git -C <path> ...` are caught. `cd ../other && git status` is
  * caught by Rule E at the `cd`.
  */
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
@@ -75,8 +76,21 @@ function findWorktreeRoot(targetPath) {
   return resolved.slice(0, match.index + match[0].length);
 }
 
+// The temp dir in short (8.3) and long form, plus POSIX /tmp and /var/tmp.
+// On win32 a shell `/tmp` path maps to os.tmpdir() in `resolveShellPath`.
+function tempDirs() {
+  const dirs = [os.tmpdir()];
+  try {
+    dirs.push(fs.realpathSync.native(os.tmpdir()));
+  } catch {
+    // The temp dir is missing. The plain form stays.
+  }
+  if (process.platform !== 'win32') dirs.push('/tmp', '/var/tmp');
+  return dirs;
+}
+
 function isAllowlisted(targetPath) {
-  const allowlist = [os.tmpdir(), path.join(os.homedir(), '.claude')];
+  const allowlist = [...tempDirs(), path.join(os.homedir(), '.claude')];
   return allowlist.some((dir) => isInside(targetPath, dir));
 }
 
@@ -328,6 +342,8 @@ const UNRESOLVABLE = /[$`*?~(){}<>!]/;
 // current drive, so convert it first.
 function toNativePath(value) {
   if (process.platform !== 'win32') return value;
+  const tmp = /^\/(?:var\/)?tmp(\/.*)?$/.exec(value);
+  if (tmp) return path.join(os.tmpdir(), tmp[1] || '');
   const m = /^\/([a-zA-Z])(\/.*)?$/.exec(value);
   return m ? `${m[1].toUpperCase()}:${m[2] || '/'}` : value;
 }
@@ -381,7 +397,7 @@ function checkDirectoryChange(tokens, laneRoot, cwd) {
       cwd,
     };
   }
-  return { reason: null, cwd: target };
+  return { reason: null, cwd: target, cd: `${name} ${operands[0].value}` };
 }
 
 function checkShellTarget(value, laneRoot, cwd, requireInside) {
@@ -453,6 +469,27 @@ function checkShellWrites(tokens, laneRoot, cwd) {
   return null;
 }
 
+// Drops an unquoted `#` comment (a `#` that starts a token) up to the end of its line,
+// so a `>` inside a comment is never read as a redirect.
+function stripComments(command) {
+  let out = '';
+  let quote = null;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '#' && (i === 0 || /\s/.test(command[i - 1]))) {
+      while (i < command.length && command[i] !== '\n') i += 1;
+      i -= 1;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 // Drops heredoc bodies so the text of a `cat <<EOF` block is never read as commands.
 function stripHeredocs(command) {
   const out = [];
@@ -500,7 +537,8 @@ function evaluate({ toolName, toolInput, laneRoot, env, cwd }) {
     const command = input.command;
     if (!command) return null;
     let simulatedCwd = cwd;
-    for (const segment of splitSegments(stripHeredocs(command))) {
+    let lastCd = null;
+    for (const segment of splitSegments(stripComments(stripHeredocs(command)))) {
       const adminReason = checkWorktreeAdmin(segment, safeEnv);
       if (adminReason) return adminReason;
       const flagReason = checkGitTargetFlags(segment, laneRoot, simulatedCwd);
@@ -509,8 +547,13 @@ function evaluate({ toolName, toolInput, laneRoot, env, cwd }) {
       const change = checkDirectoryChange(tokens, laneRoot, simulatedCwd);
       if (change.reason) return change.reason;
       simulatedCwd = change.cwd;
+      if (change.cd) lastCd = change.cd;
       const writeReason = checkShellWrites(tokens, laneRoot, simulatedCwd);
-      if (writeReason) return writeReason;
+      if (writeReason) {
+        return lastCd
+          ? `${writeReason}\nThe working directory is "${simulatedCwd}" after "${lastCd}".`
+          : writeReason;
+      }
     }
     return null;
   }
