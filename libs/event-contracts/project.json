@@ -1,5 +1,5 @@
 {
-  "name": "@cribstop/event-contracts",
+  "name": "@events/contracts",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/event-contracts/src",
   "projectType": "library",

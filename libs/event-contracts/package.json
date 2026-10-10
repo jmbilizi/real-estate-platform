@@ -1,5 +1,5 @@
 {
-  "name": "@cribstop/event-contracts",
+  "name": "@events/contracts",
   "version": "0.0.1",
   "private": true,
   "description": "Versioned event envelope and JSON Schemas for the Redis Streams bus (PRD 2.3)",

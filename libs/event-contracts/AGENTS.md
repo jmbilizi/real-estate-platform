@@ -1,8 +1,23 @@
-# event-contracts (`@cribstop/event-contracts`)
+# event-contracts (`@events/contracts`)
 
 The versioned event envelope and JSON Schemas for the Redis Streams bus (PRD 2.3). The Nx project
 name equals the npm package name, as in `libs/property-contracts`. This is a library. Nothing serves
 it.
+
+## Ownership and naming
+
+- Owner: `notification-service` (planned). It owns the bus contract. Producers and consumers depend
+  on this package with `workspace:*`.
+- The package name follows root `AGENTS.md` rule 12: domain scope, not `@cribstop`. The directory
+  stays `libs/event-contracts`. The Nx project name equals the package name.
+- The package is `"private": true`.
+
+## .NET readers
+
+- Schemas use JSON Schema draft 2020-12. Use a validator that supports it, such as JsonSchema.Net.
+  Newtonsoft.Json.Schema stops at draft 2019-09 and does not fit.
+- Schemas use the formats `uuid` and `date-time`. Patterns use no lookahead and no flags, so .NET
+  and ECMAScript regex engines agree.
 
 ## What this package is
 
@@ -32,16 +47,15 @@ it.
 - The envelope `id` is set once by the producer and equals the outbox row id.
 - Security events use category `transactional` only.
 - Pure code only: no I/O, no clock, no `process.env`, no Redis client.
-- Never add a `tsconfig` `paths` entry. Consumers declare
-  `"@cribstop/event-contracts": "workspace:*"` and the repo registers the package in
-  `pnpm-workspace.yaml`. See `libs/property-contracts/AGENTS.md`.
+- Never add a `tsconfig` `paths` entry. Consumers declare `"@events/contracts": "workspace:*"` and
+  the repo registers the package in `pnpm-workspace.yaml`. See `libs/property-contracts/AGENTS.md`.
 - A consuming Dockerfile must copy this package path, so the image rebuilds when a schema changes.
 
 ## Commands
 
 ```bash
-pnpm exec nx test @cribstop/event-contracts
-pnpm exec nx lint @cribstop/event-contracts
-pnpm exec nx type-check @cribstop/event-contracts
-pnpm exec nx build @cribstop/event-contracts
+pnpm exec nx test @events/contracts
+pnpm exec nx lint @events/contracts
+pnpm exec nx type-check @events/contracts
+pnpm exec nx build @events/contracts
 ```

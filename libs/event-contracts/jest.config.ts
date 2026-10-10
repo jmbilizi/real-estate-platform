@@ -1,5 +1,5 @@
 export default {
-  displayName: '@cribstop/event-contracts',
+  displayName: '@events/contracts',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
   transform: {
