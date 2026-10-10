@@ -39,10 +39,6 @@ function appValue(searchLocation: string) {
     // No committed suggestion — the typed text was never picked from the dropdown (the bug).
     searchSuggestion: null,
     setSearchSuggestion: jest.fn(),
-    searchMoveInDate: '',
-    setSearchMoveInDate: jest.fn(),
-    searchDateRange: { start: null, end: null },
-    setSearchDateRange: jest.fn(),
     searchListingType: 'sale',
     setSearchListingType: jest.fn(),
     showHeaderPill: false,

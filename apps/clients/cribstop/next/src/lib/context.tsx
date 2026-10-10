@@ -20,10 +20,8 @@ import {
   selectListingType,
   selectMobileSearchOpen,
   selectSavedHomes,
-  selectSearchDateRange,
   selectSearchListingType,
   selectSearchLocation,
-  selectSearchMoveInDate,
   selectSearchPriceIdx,
   selectSearchSuggestion,
   selectSessionChecked,
@@ -45,10 +43,8 @@ import { addToast } from '@/lib/store/slices/toastSlice';
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
   type SearchListingType,
-  setSearchDateRange,
   setSearchListingType,
   setSearchLocation,
-  setSearchMoveInDate,
   setSearchPriceIdx,
   setSearchSuggestion,
 } from '@/lib/store/slices/searchSlice';
@@ -60,14 +56,7 @@ import {
   setMobileSearchOpen,
   setShowHeaderPill,
 } from '@/lib/store/slices/uiSlice';
-import {
-  ListingTab,
-  ListingType,
-  NavTab,
-  SearchDateRange,
-  SearchSuggestion,
-  User,
-} from '@/lib/store/types';
+import { ListingTab, ListingType, NavTab, SearchSuggestion, User } from '@/lib/store/types';
 
 interface AppContextValue {
   user: User | null;
@@ -105,10 +94,6 @@ interface AppContextValue {
   setSearchLocation: (v: string) => void;
   searchSuggestion: SearchSuggestion;
   setSearchSuggestion: (v: SearchSuggestion) => void;
-  searchMoveInDate: string;
-  setSearchMoveInDate: (v: string) => void;
-  searchDateRange: SearchDateRange;
-  setSearchDateRange: (v: SearchDateRange) => void;
   searchPriceIdx: number;
   setSearchPriceIdx: (v: number) => void;
   searchListingType: SearchListingType;
@@ -222,8 +207,6 @@ export function useApp(): AppContextValue {
   const mobileSearchOpen = useAppSelector(selectMobileSearchOpen);
   const searchLocation = useAppSelector(selectSearchLocation);
   const searchSuggestion = useAppSelector(selectSearchSuggestion);
-  const searchMoveInDate = useAppSelector(selectSearchMoveInDate);
-  const searchDateRange = useAppSelector(selectSearchDateRange);
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
   const searchListingType = useAppSelector(selectSearchListingType);
 
@@ -382,20 +365,6 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const setMoveInDate = useCallback(
-    (v: string) => {
-      dispatch(setSearchMoveInDate(v));
-    },
-    [dispatch],
-  );
-
-  const setDateRange = useCallback(
-    (v: SearchDateRange) => {
-      dispatch(setSearchDateRange(v));
-    },
-    [dispatch],
-  );
-
   const setPriceIdx = useCallback(
     (v: number) => {
       dispatch(setSearchPriceIdx(v));
@@ -438,10 +407,6 @@ export function useApp(): AppContextValue {
     setSearchLocation: setLocation,
     searchSuggestion,
     setSearchSuggestion: setSuggestion,
-    searchMoveInDate,
-    setSearchMoveInDate: setMoveInDate,
-    searchDateRange,
-    setSearchDateRange: setDateRange,
     searchPriceIdx,
     setSearchPriceIdx: setPriceIdx,
     searchListingType,
