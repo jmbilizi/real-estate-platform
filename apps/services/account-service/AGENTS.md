@@ -321,4 +321,7 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - The preference sends no email. #505 and #769 add alerts with their own opt-in.
 - The `LookingForPreferences` migration creates a new empty table, so a plain `CREATE` is safe. An
   index on a populated table needs `CONCURRENTLY` (property-service rule).
-- The limit of 5 is checked in code, not by the database. Two parallel creates can pass 5.
+- `PUT` runs in a transaction with `pg_advisory_xact_lock(hashtext(userId))` before the count, so
+  the limit of 5 holds under parallel calls. A duplicate-key `DbUpdateException` retries once as a
+  replace.
+- Places accept only kinds `city` and `zip` until the web form supports the others.
