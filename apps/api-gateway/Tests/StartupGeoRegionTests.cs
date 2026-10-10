@@ -96,9 +96,9 @@ namespace ApiGateway.Tests
         [Fact]
         public void ResolveTrustedClientIp_ReadsXRealIp_IgnoringForgedXForwardedFor()
         {
-            // Nginx Ingress always sets X-Real-IP from its own observed connection, so an
-            // external caller cannot forge it there. X-Forwarded-For has no such guarantee, so a
-            // forged value there must not change the result (#362).
+            // UseTrustedClientIp derives X-Real-IP, so an external caller cannot forge it.
+            // X-Forwarded-For has no such guarantee, so a forged value there must not change the
+            // result (#362).
             var context = new DefaultHttpContext();
             context.Request.Headers["X-Real-IP"] = "203.0.113.7";
             context.Request.Headers["X-Forwarded-For"] = "8.8.8.8";

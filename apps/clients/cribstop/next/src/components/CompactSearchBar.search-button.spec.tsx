@@ -38,10 +38,6 @@ jest.mock('@/lib/context', () => ({
     setSearchLocation: jest.fn(),
     searchSuggestion: frederick,
     setSearchSuggestion: jest.fn(),
-    searchMoveInDate: '',
-    setSearchMoveInDate: jest.fn(),
-    searchDateRange: { start: null, end: null },
-    setSearchDateRange: jest.fn(),
     searchListingType: 'sale',
     setSearchListingType: jest.fn(),
     showHeaderPill: false,
@@ -82,4 +78,24 @@ it('re-enables the search button once the navigation it started has rendered', a
 
   expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/homes-for-sale'));
   expect(searchButtons()[0]).not.toBeDisabled();
+});
+
+// #770: the bar has two segments. Dates are not a search input.
+it('shows Where and What only, with no When segment', () => {
+  render(<CompactSearchBar />);
+
+  expect(screen.queryByText('When')).not.toBeInTheDocument();
+  expect(screen.queryByText('Add dates')).not.toBeInTheDocument();
+  expect(screen.getByText('Where')).toBeInTheDocument();
+  expect(screen.getByText('What')).toBeInTheDocument();
+});
+
+it('builds the search URL without date params', async () => {
+  render(<CompactSearchBar />);
+
+  await act(async () => {
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search' })[0]);
+  });
+
+  expect(String(mockPush.mock.calls.at(-1)?.[0])).not.toMatch(/moveIn/);
 });
