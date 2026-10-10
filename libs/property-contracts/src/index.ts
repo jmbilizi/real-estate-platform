@@ -16,3 +16,4 @@ export * from './saved-homes';
 export * from './staff';
 export * from './staff-metrics';
 export * from './agent-leads';
+export * from './analytics-event';

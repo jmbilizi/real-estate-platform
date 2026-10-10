@@ -1,3 +1,4 @@
+import { trackEvent } from '@/lib/analytics';
 import type { ConsentChannel, ConsentTextVersion, InquiryKind } from '@cribstop/property-contracts';
 
 export interface InquiryInput {
@@ -39,7 +40,10 @@ export async function submitInquiry(listingId: string, input: InquiryInput): Pro
   } catch {
     throw new InquiryError('retryable');
   }
-  if (res.ok) return;
+  if (res.ok) {
+    trackEvent('lead_submit', { surface: 'detail', listingId });
+    return;
+  }
   if (res.status === 401) throw new InquiryError('unauthorized');
   if (res.status === 403) throw new InquiryError('unconfirmed');
   if (res.status === 404) throw new InquiryError('unavailable');

@@ -3,6 +3,7 @@ import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
+import { analyticsEventRequestSchema } from './analytics-event';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { listingsMetaSchema } from './listings-meta';
 import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
@@ -114,6 +115,7 @@ function componentSchemas() {
   registry.add(brokersResponseSchema, { id: 'BrokersResponse' });
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
+  registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
@@ -673,6 +675,35 @@ export function toOpenApiDocument() {
                 'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
                 'the read endpoints above — because this limit is enforced by the service ' +
                 'itself (keyed on the path parameter), not by the gateway.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/analytics/events': {
+        post: {
+          operationId: 'recordAnalyticsEvent',
+          summary: 'Count one funnel event',
+          description:
+            'Cookieless funnel counting. The service stores the event name, the surface, the ' +
+            'listing id when present, a random per-tab session id and the server time. It stores ' +
+            'no header, IP address, account or free text. With ANALYTICS_ENABLED=false it stores ' +
+            'nothing and still answers 204.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AnalyticsEventRequest' },
+              },
+            },
+          },
+          responses: {
+            '204': { description: 'The event is counted, or analytics is off.' },
+            '400': {
+              description: 'Unknown event name, unknown field or malformed value.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

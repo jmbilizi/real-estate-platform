@@ -303,6 +303,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/analytics/events",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/analytics/events",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 120
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/listings/{id}/saved",
       "UpstreamHttpMethod": ["PUT", "DELETE"],
       "DownstreamPathTemplate": "/listings/{id}/saved",
