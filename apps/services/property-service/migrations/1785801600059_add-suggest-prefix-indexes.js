@@ -25,7 +25,7 @@ exports.up = (pgm) => {
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_listings_suggest_zip
       ON listings (zip5 text_pattern_ops)
       INCLUDE (city, state)
-      WHERE ${VISIBLE} AND zip5 IS NOT NULL
+      WHERE ${VISIBLE}
   `);
   pgm.sql(`
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_listings_suggest_neighborhood
