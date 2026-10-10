@@ -4,6 +4,11 @@ import { GET } from './route';
 
 describe('GET /api/geo/region', () => {
   const fetchMock = jest.fn();
+  const realFetch = global.fetch;
+
+  afterAll(() => {
+    global.fetch = realFetch;
+  });
 
   beforeEach(() => {
     fetchMock.mockReset();
