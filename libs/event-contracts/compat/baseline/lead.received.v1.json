@@ -23,6 +23,7 @@
       "const": "lead.received"
     },
     "version": {
+      "type": "integer",
       "const": 1
     },
     "source": {
@@ -33,7 +34,7 @@
     "occurredAt": {
       "type": "string",
       "format": "date-time",
-      "pattern": "Z$"
+      "pattern": "Z$(?!\n)"
     },
     "aggregateId": {
       "type": "string",
@@ -59,9 +60,9 @@
       "type": "object",
       "maxProperties": 20,
       "propertyNames": {
-        "pattern": "^[a-z][A-Za-z0-9]*$",
+        "pattern": "^[a-z][A-Za-z0-9]*$(?!\n)",
         "not": {
-          "enum": ["email", "phone", "message", "buyerMessage", "buyerEmail", "buyerPhone", "name"]
+          "pattern": "[Ee]mail|[Pp]hone|[Mm]essage|[Bb]ody|[Nn]ame|[Aa]ddress"
         }
       },
       "properties": {
@@ -69,7 +70,7 @@
           "type": "string",
           "maxLength": 256,
           "not": {
-            "pattern": "[^\\s@]+@[^\\s@]+\\.[^\\s@]+|\\d[\\d\\s().-]{8,}\\d"
+            "pattern": "[^ \\t\\r\\n@]+@[^ \\t\\r\\n@]+\\.[^ \\t\\r\\n@]+|[(]?[0-9]{3}[)]?[ .-]?[0-9]{3}[ .-]?[0-9]{4}|[+][0-9][0-9 .-]{8,}[0-9]"
           },
           "minLength": 1
         }
@@ -78,7 +79,7 @@
         "type": "string",
         "maxLength": 256,
         "not": {
-          "pattern": "[^\\s@]+@[^\\s@]+\\.[^\\s@]+|\\d[\\d\\s().-]{8,}\\d"
+          "pattern": "[^ \\t\\r\\n@]+@[^ \\t\\r\\n@]+\\.[^ \\t\\r\\n@]+|[(]?[0-9]{3}[)]?[ .-]?[0-9]{3}[ .-]?[0-9]{4}|[+][0-9][0-9 .-]{8,}[0-9]"
         }
       },
       "required": ["listingId"]

@@ -1,7 +1,7 @@
 import type { EventEnvelope } from './envelope';
 import { parseEvent, type ParseResult } from './parse';
 
-const TYPE_PATTERN = /^([a-z][a-z0-9]*)\.[a-z][a-z0-9_]*$/;
+const TYPE_PATTERN = /^([a-z][a-z0-9_]*)\.[a-z][a-z0-9_]*$/;
 
 function aggregateOf(type: string): string {
   const match = TYPE_PATTERN.exec(type);
@@ -38,5 +38,14 @@ export function fromStreamFields(fields: Record<string, string>): ParseResult {
   } catch {
     return { ok: false, errors: ['envelope field is not valid JSON'] };
   }
-  return parseEvent(json);
+  const result = parseEvent(json);
+  if (!result.ok) return result;
+  const { type, id } = fields;
+  if (
+    (type !== undefined && type !== result.event.type) ||
+    (id !== undefined && id !== result.event.id)
+  ) {
+    return { ok: false, errors: ['entry type or id does not match the envelope'] };
+  }
+  return result;
 }

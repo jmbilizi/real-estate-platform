@@ -34,6 +34,7 @@
       "cache": true,
       "inputs": [
         "{projectRoot}/**/*.ts",
+        "{projectRoot}/src/**/*.json",
         "{projectRoot}/tsconfig*.json",
         "{workspaceRoot}/tsconfig.json",
         "^production"

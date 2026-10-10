@@ -77,6 +77,10 @@ describe('parseEvent', () => {
     ['email address', { listingId: 'L-1', note: 'jane@example.com' }],
     ['phone number', { listingId: 'L-1', note: '(202) 555-0147' }],
     ['phone digits', { listingId: 'L-1', note: '2025550147' }],
+    ['international phone', { listingId: 'L-1', note: '+44 20 7946 0958' }],
+    ['phoneNumber key', { listingId: 'L-1', phoneNumber: 'x' }],
+    ['emailAddress key', { listingId: 'L-1', emailAddress: 'x' }],
+    ['key with trailing newline', { listingId: 'L-1', 'note\n': 'x' }],
     ['email key', { listingId: 'L-1', email: 'x' }],
     ['phone key', { listingId: 'L-1', phone: 'x' }],
     ['message key', { listingId: 'L-1', message: 'hello' }],
@@ -106,6 +110,16 @@ describe('stream entry encoding', () => {
     expect(fields.type).toBe('lead.received');
     expect(fields.id).toBe(event.id);
     expect(fromStreamFields(fields)).toEqual({ ok: true, event });
+  });
+
+  it('rejects an entry whose type or id differs from the envelope', () => {
+    const fields = toStreamFields(valid());
+    expect(fromStreamFields({ ...fields, type: 'lead.accepted' }).ok).toBe(false);
+    expect(fromStreamFields({ ...fields, id: 'other' }).ok).toBe(false);
+  });
+
+  it('accepts ISO dates and short ids in data', () => {
+    expect(parseEvent(valid({ data: { listingId: 'L-1', day: '2026-10-09' } })).ok).toBe(true);
   });
 
   it('reports a missing or broken envelope field', () => {
@@ -143,16 +157,43 @@ describe('schema compatibility', () => {
     const base = read(join(__dirname, '..', 'compat', 'baseline'), 'lead.received.v1.json');
     const clone = (): any => JSON.parse(JSON.stringify(base));
 
-    it('accepts an added optional field', () => {
+    it('accepts an added unconstrained field', () => {
       const next = clone();
-      next.properties.priority = { type: 'string' };
+      next.properties.priority = { description: 'free form' };
       expect(breakingChanges(base, next)).toEqual([]);
     });
 
-    it('accepts a wider limit', () => {
+    it('flags an added field that constrains a key old events may carry', () => {
+      const next = clone();
+      next.properties.priority = { type: 'string' };
+      expect(breakingChanges(base, next).join()).toMatch(/priority/);
+    });
+
+    it('accepts a wider limit and a removed limit', () => {
       const next = clone();
       next.properties.data.maxProperties = 30;
+      delete next.properties.source.maxLength;
       expect(breakingChanges(base, next)).toEqual([]);
+    });
+
+    it('flags a stricter additionalProperties schema', () => {
+      const next = clone();
+      next.properties.data.additionalProperties.maxLength = 100;
+      expect(breakingChanges(base, next).join()).toMatch(
+        /additionalProperties.*maxLength narrowed/,
+      );
+    });
+
+    it('flags a type added to a typeless old schema', () => {
+      const old = { type: 'object', properties: { a: {} } };
+      const next = { type: 'object', properties: { a: { type: 'string' } } };
+      expect(breakingChanges(old, next).join()).toMatch(/properties\/a: type changed/);
+    });
+
+    it('fails closed on an unsupported keyword change', () => {
+      const next = clone();
+      next.properties.source.minimum = 1;
+      expect(breakingChanges(base, next).join()).toMatch(/unsupported keyword minimum/);
     });
 
     it('flags a removed field', () => {

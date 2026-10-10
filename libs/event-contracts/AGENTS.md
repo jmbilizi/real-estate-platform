@@ -16,8 +16,10 @@ it.
 
 - Schemas use JSON Schema draft 2020-12. Use a validator that supports it, such as JsonSchema.Net.
   Newtonsoft.Json.Schema stops at draft 2019-09 and does not fit.
-- Schemas use the formats `uuid` and `date-time`. Patterns use no lookahead and no flags, so .NET
-  and ECMAScript regex engines agree.
+- Schemas use the formats `uuid` and `date-time`. JsonSchema.Net treats `format` as an annotation by
+  default. Set `RequireFormatValidation = true` in every .NET validator.
+- Patterns use no flags and no lookbehind. They use `[0-9]`, not `\d`, because `\d` matches other
+  digits in .NET. The `(?!\n)` after `$` stops .NET from accepting a trailing newline.
 
 ## What this package is
 
@@ -41,8 +43,11 @@ it.
   in `src/schemas/` with its baseline. The test fails on a breaking change and on a schema without a
   baseline.
 - `data` is a flat string map: max 20 keys, 256 characters per value. A value never holds an email
-  address or a phone number. A key is never `email`, `phone`, `message` or a similar name. The
-  schemas enforce this, so a .NET consumer gets the same checks.
+  address or a 10-digit phone number, so an id of 10 or more digits is rejected. A key never
+  contains `email`, `phone`, `message`, `body`, `name` or `address`. The schemas enforce this, so a
+  .NET consumer gets the same checks.
+- A PR that changes a file in `compat/baseline/` is a release change. A reviewer must reject any
+  edit to an existing baseline file. Add a new version instead.
 - `recipient` holds an account id only.
 - The envelope `id` is set once by the producer and equals the outbox row id.
 - Security events use category `transactional` only.
