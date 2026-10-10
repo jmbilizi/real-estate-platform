@@ -305,3 +305,74 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - `DnsMailDomainResolver` (DnsClient) checks the domain. A timeout or DNS error fails open. It does
   not block disposable domains. Tests use `FakeMailDomainResolver` and never query DNS.
 - Nothing logs the address or the body.
+
+## What I'm looking for (#768)
+
+- `GET /account/looking-for`, `PUT` and `DELETE /account/looking-for/{id}` (`Routes/LookingFor.cs`,
+  `Helpers/LookingForValidator.cs`). Cookie or bearer session. The account id comes from the
+  principal.
+- An account holds at most 5 preferences. The 6th new id answers `409 limit_reached`. `PUT` creates
+  (`201`) or replaces (`200`). The client picks the id (a GUID). The key is (UserId, Id), so two
+  accounts can use the same id. `DELETE` of an absent id answers `204`.
+- Fields: `intent` (`buy`, `rent`), 1 to 5 `places`, `priceMin/Max`, `bedsMin`, `bathsMin`,
+  `homeTypes`, `whenStart`, `whenEnd`. A bad value answers `400`. A start date before yesterday
+  (UTC) is a past date. The body has no free-text field (PRD §6).
+- `GET` returns `{ items, max }`, newest change first. #364 reads this shape.
+- The preference sends no email. #505 and #769 add alerts with their own opt-in.
+- The `LookingForPreferences` migration creates a new empty table, so a plain `CREATE` is safe. An
+  index on a populated table needs `CONCURRENTLY` (property-service rule).
+- The limit of 5 is checked in code, not by the database. Two parallel creates can pass 5.
+
+## Notification consent (#694, #783, #769)
+
+- Tables `NotificationPreferences` (key AccountId, Channel, Category) and
+  `NotificationPreferenceAudits` (append-only). The ticket names them `notification_preferences`.
+  The service keeps its PascalCase table names. Neither table has a FK or an address column.
+- A missing row means not opted in. Email `non_transactional` and `sms` default to OFF.
+- One source of truth: the consent row. The legacy `EmailNotificationsEnabled` flag mirrors it.
+  Every email opt-in or opt-out, an unsubscribe and the profile toggle write through
+  `NotificationPreferenceService`, which sets the flag. An SMS opt-out clears
+  `SmsNotificationsEnabled`. `PUT /account/profile` with `emailNotificationsEnabled: true` answers
+  `400` unless the account already opted in. An opt-in needs the wording, so it goes through the
+  preferences endpoint.
+- The row is the consent record: `Enabled`, `Source` (`user`, `unsubscribe_link`), `UpdatedAt`,
+  `ConsentWordingId`, `ConsentWordingVersion` and `ConsentedAt`. The server holds the wording text
+  (`Models/ConsentWordings.cs`). The client sends only the id. A new text needs a new version. `GET`
+  returns the current wording in `consentWording`. Each change writes an audit row. A repeat that
+  changes nothing writes none. `DELETE /account/profile` deletes the account's preference and audit
+  rows.
+- `GET` and `PUT /account/notification-preferences` (`Routes/NotificationPreferences.cs`). Cookie or
+  bearer session. The gateway catch-all carries both. `PUT` takes
+  `{ items: [{ channel, category, enabled, consentWordingId }] }`, 1 to 4 items, all or nothing.
+  Errors: `400` `transactional_not_storable`, `invalid_channel`, `invalid_category`,
+  `consent_wording_required`, `unknown_consent_wording`. `409` `sms_requires_consent` for an SMS
+  opt-in.
+- Categories (`Models/NotificationCategories.cs`): `non_transactional` is the only stored category.
+  The policy lookup also accepts `marketing` and `alert` and maps both to it. `transactional` has no
+  row and always answers `allowed: true`. Align these names with `@events/contracts` (#791).
+- `POST /notifications/unsubscribe?t=<token>` (RFC 8058 one-click). No login. The token is the only
+  credential. Own gateway route with a rate limit. A valid token answers `200`, also on a repeat
+  call and for a deleted account. A bad token answers `400 invalid_token`.
+- Token (`Helpers/UnsubscribeTokenService.cs`): `base64url(v1|accountId|category).base64url(HMAC)`.
+  No address inside. No expiry, because CAN-SPAM needs an old link to work. The category is bound:
+  only `non_transactional` is valid, and the link opts out of exactly that category. A token for any
+  other category answers `400`. The key is `ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY` (its own key).
+  Only Development and Testing use a fixed dev key. With no key, no token is signed and the lookup
+  answers `allowed: false` for email that needs consent.
+- The token sits in the query string. The gateway and this service log requests at Warning only
+  (`Microsoft.AspNetCore`, `Ocelot`, `System.Net.Http.HttpClient`). The gateway redacts `t` from the
+  OTel URL tags (`SensitiveQueryRedactor`). Do not raise those levels.
+- `POST /internal/account/notification-policy` (`Routes/NotificationPolicy.cs`). Body
+  `{ items: [{ accountId, channel, category, includeUnsubscribeToken }] }`, 1 to 100 items. It needs
+  the `X-Internal-Key` header. The key is `ACCOUNT_SERVICE_INTERNAL_KEY`, compared in constant time.
+  With no key set, every call answers `403`. The Notification Service (#696, #769) is the caller. An
+  unknown channel or category fails the call with `400`. Unknown and soft-deleted accounts are
+  omitted. Each answer holds `allowed`, `suppressed` (the #664 list, email only), `emailConfirmed`
+  and `unsubscribeToken` (only when asked, and only for email that needs consent). No gateway route.
+  Hidden from OpenAPI.
+- Tests: `Tests/Integration/NotificationPreferencesEndpointTests.cs`,
+  `NotificationConsentEndpointTests.cs`, `Tests/Helpers/UnsubscribeTokenServiceTests.cs`,
+  `UnsubscribeTokenEdgeCaseTests.cs`. Gateway: `AccountNotificationRoutesTests`,
+  `SensitiveQueryRedactorTests`.
+- Open work: `ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY` and `ACCOUNT_SERVICE_INTERNAL_KEY` are not wired
+  in `infra/` or CI yet. See the ticket comment on #694.

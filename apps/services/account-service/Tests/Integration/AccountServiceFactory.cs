@@ -24,6 +24,9 @@ namespace AccountService.Tests.Integration
         /// <summary>The web origin every test host is configured with.</summary>
         internal const string WebOrigin = "https://web.test.example";
 
+        /// <summary>The shared key the test host accepts on internal calls (#694).</summary>
+        internal const string InternalKey = "test-internal-key-not-a-secret-0123456789";
+
         private readonly string dbName = $"AccountServiceTest-{Guid.NewGuid()}";
 
         /// <summary>Gets the fake breach client the host uses.</summary>
@@ -65,6 +68,7 @@ namespace AccountService.Tests.Integration
                 // TestServer requests carry no remote address, so every caller in a shared host
                 // shares one "unknown" bucket. Lift the limits and the timing floor out of the way.
                 // AccountRecoveryFactory sets back whatever its own tests need.
+                services.Configure<InternalCallerOptions>(options => options.Key = InternalKey);
                 services.Configure<AccountRecoveryOptions>(options =>
                 {
                     options.WebBaseUrl = new Uri(WebOrigin);
