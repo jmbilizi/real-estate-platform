@@ -257,7 +257,7 @@ export default function ListingDetailContent({
     listing.daysOnMarket !== null
       ? listing.daysOnMarket === 0
         ? 'Listed today'
-        : `${formatNumber(listing.daysOnMarket)} ${listing.daysOnMarket === 1 ? 'day' : 'days'} on Cribstop`
+        : `On market ${formatNumber(listing.daysOnMarket)} ${listing.daysOnMarket === 1 ? 'day' : 'days'}`
       : listing.listedSince !== null
         ? `Listed ${formatCalendarDate(listing.listedSince)}`
         : null;

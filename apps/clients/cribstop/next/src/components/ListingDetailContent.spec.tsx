@@ -647,7 +647,7 @@ describe('ListingDetailContent — one home, several MLS records (#716)', () => 
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.getByTestId('market-time')).toHaveTextContent('12 days on Cribstop');
+    expect(screen.getByTestId('market-time')).toHaveTextContent('On market 12 days');
     expect(screen.queryByText('Days on Market')).toBeNull();
     expect(screen.queryByText('Listed since')).toBeNull();
   });
