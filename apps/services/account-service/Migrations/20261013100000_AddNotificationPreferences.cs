@@ -28,7 +28,8 @@ namespace AccountService.Migrations
                     Enabled = table.Column<bool>(type: "boolean", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Source = table.Column<string>(type: "text", nullable: false),
-                    ConsentText = table.Column<string>(type: "text", nullable: true),
+                    ConsentWordingId = table.Column<string>(type: "text", nullable: true),
+                    ConsentWordingVersion = table.Column<int>(type: "integer", nullable: true),
                     ConsentedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
@@ -48,7 +49,8 @@ namespace AccountService.Migrations
                     PreviousEnabled = table.Column<bool>(type: "boolean", nullable: true),
                     Enabled = table.Column<bool>(type: "boolean", nullable: false),
                     Source = table.Column<string>(type: "text", nullable: false),
-                    ConsentText = table.Column<string>(type: "text", nullable: true),
+                    ConsentWordingId = table.Column<string>(type: "text", nullable: true),
+                    ConsentWordingVersion = table.Column<int>(type: "integer", nullable: true),
                     OccurredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>

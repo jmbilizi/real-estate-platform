@@ -113,6 +113,17 @@ internal static class Program
                     : builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") ? UnsubscribeOptions.DevelopmentKey
                     : string.Empty;
             });
+        builder.Services
+            .AddOptions<InternalCallerOptions>()
+            .PostConfigure(options =>
+            {
+                // Only the environment sets it. No fallback, so an unset key refuses every internal caller (#694).
+                var key = builder.Configuration[InternalCallerOptions.KeyVariable];
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    options.Key = key;
+                }
+            });
         builder.Services.AddSingleton<UnsubscribeTokenService>();
         builder.Services.AddScoped<NotificationPreferenceService>();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));

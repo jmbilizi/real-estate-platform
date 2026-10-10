@@ -15,4 +15,7 @@ internal sealed class NotificationPolicyQuery
 
     /// <summary>Gets or sets the category: <c>transactional</c>, <c>marketing</c>, <c>alert</c> or <c>non_transactional</c>.</summary>
     public string? Category { get; set; }
+
+    /// <summary>Gets or sets a value indicating whether the answer carries a signed unsubscribe token. Ask only when you build a mail link.</summary>
+    public bool IncludeUnsubscribeToken { get; set; }
 }

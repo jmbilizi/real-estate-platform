@@ -51,6 +51,33 @@ namespace ApiGateway.Tests.Configuration
                 .Should().NotContain(t => t.Contains("notification-policy", StringComparison.OrdinalIgnoreCase));
         }
 
+        [Theory]
+        [InlineData("/internal/account/notification-policy")]
+        [InlineData("/internal/account/introspect")]
+        [InlineData("/account/../internal/account/notification-policy")]
+        [InlineData("/ACCOUNT/internal/account/notification-policy")]
+        public void TheCatchAll_NeverMapsARequestToAnInternalDownstreamPath(string upstream)
+        {
+            // Ocelot turns {everything} into a greedy match and substitutes it into the downstream template.
+            // Every path it can produce starts with the fixed /account/ prefix, so /internal is out of reach.
+            var catchAll = Routes().Single(r => (string?)r["UpstreamPathTemplate"] == "/account/{everything}");
+            var pattern = "^" + System.Text.RegularExpressions.Regex.Escape("/account/") + "(?<everything>.*)$";
+
+            // Kestrel resolves dot segments before Ocelot sees the path. Do the same here.
+            var normalized = new Uri("http://h" + upstream).AbsolutePath;
+            var match = System.Text.RegularExpressions.Regex.Match(normalized, pattern);
+
+            if (!match.Success)
+            {
+                return;
+            }
+
+            var downstream = ((string)catchAll["DownstreamPathTemplate"]!).Replace("{everything}", match.Groups["everything"].Value, StringComparison.Ordinal);
+            downstream.Should().StartWith("/account/");
+            Uri.TryCreate("http://h" + downstream, UriKind.Absolute, out var uri).Should().BeTrue();
+            uri!.AbsolutePath.Should().StartWith("/account/", "dot segments must not climb out of /account");
+        }
+
         private static JArray Routes()
         {
             var directory = new DirectoryInfo(AppContext.BaseDirectory);

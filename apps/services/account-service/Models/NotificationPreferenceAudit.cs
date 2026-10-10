@@ -34,8 +34,11 @@ internal sealed class NotificationPreferenceAudit
     /// <summary>Gets or sets the source of the change.</summary>
     public string Source { get; set; } = string.Empty;
 
-    /// <summary>Gets or sets the consent wording stored with an opt-in.</summary>
-    public string? ConsentText { get; set; }
+    /// <summary>Gets or sets the id of the consent wording stored with an opt-in.</summary>
+    public string? ConsentWordingId { get; set; }
+
+    /// <summary>Gets or sets the version of that wording.</summary>
+    public int? ConsentWordingVersion { get; set; }
 
     /// <summary>Gets or sets the UTC time of the change.</summary>
     public DateTime OccurredAt { get; set; }

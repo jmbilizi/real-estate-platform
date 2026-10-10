@@ -24,7 +24,7 @@ namespace AccountService.Tests.Integration
         : IClassFixture<AccountServiceFactory>
     {
         private const string Password = "Test1234!@#Abcd";
-        private const string Wording = "Send me Cribstop alerts by email.";
+        private const string WordingId = "email_non_transactional";
         private const string PolicyPath = "/internal/account/notification-policy";
 
         [Fact]
@@ -64,7 +64,8 @@ namespace AccountService.Tests.Integration
             using var scope = factory.Services.CreateScope();
             var row = await scope.ServiceProvider.GetRequiredService<AccountDbContext>().NotificationPreferences
                 .SingleAsync(p => p.AccountId == id && p.Channel == "email");
-            row.ConsentText.Should().Be(Wording);
+            row.ConsentWordingId.Should().Be(WordingId);
+            row.ConsentWordingVersion.Should().Be(1);
             row.ConsentedAt.Should().NotBeNull();
         }
 
@@ -78,7 +79,7 @@ namespace AccountService.Tests.Integration
 
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()
-                .Should().Be("consent_text_required");
+                .Should().Be("consent_wording_required");
         }
 
         [Fact]
@@ -105,8 +106,8 @@ namespace AccountService.Tests.Integration
                 {
                     items = new[]
                     {
-                        new { channel = "email", category = "non_transactional", enabled = true, consentText = Wording },
-                        new { channel = "sms", category = "non_transactional", enabled = true, consentText = Wording },
+                        new { channel = "email", category = "non_transactional", enabled = true, consentWordingId = WordingId },
+                        new { channel = "sms", category = "non_transactional", enabled = true, consentWordingId = WordingId },
                     },
                 });
 
@@ -140,7 +141,7 @@ namespace AccountService.Tests.Integration
                 .Where(a => a.AccountId == id).OrderBy(a => a.OccurredAt).ToListAsync();
             audits.Should().HaveCount(2);
             audits[0].Should().Match<NotificationPreferenceAudit>(a =>
-                a.Enabled && a.PreviousEnabled == null && a.Source == "user" && a.ActorId == id && a.ConsentText == Wording);
+                a.Enabled && a.PreviousEnabled == null && a.Source == "user" && a.ActorId == id && a.ConsentWordingId == WordingId && a.ConsentWordingVersion == 1);
             audits[1].Should().Match<NotificationPreferenceAudit>(a => !a.Enabled && a.PreviousEnabled == true);
         }
 
@@ -251,7 +252,7 @@ namespace AccountService.Tests.Integration
             var (client, id) = await NewAccountAsync("np-policy-optin");
             await client.PutAsJsonAsync("/account/notification-preferences", Put("email", true));
 
-            var items = await PolicyAsync(Query(id, "email", "marketing"), Query(id, "sms", "marketing"));
+            var items = await PolicyAsync(Query(id, "email", "marketing", true), Query(id, "sms", "marketing"));
 
             items[0].GetProperty("allowed").GetBoolean().Should().BeTrue();
             var token = items[0].GetProperty("unsubscribeToken").GetString();
@@ -317,7 +318,7 @@ namespace AccountService.Tests.Integration
         [Fact]
         public async Task Policy_EnforcesBatchLimits_AndRejectsUnknownValues()
         {
-            var client = factory.CreateClient();
+            var client = PolicyClient();
             var id = Guid.NewGuid().ToString("D");
 
             (await client.PostAsJsonAsync(PolicyPath, new { items = Array.Empty<object>() })).StatusCode
@@ -335,10 +336,11 @@ namespace AccountService.Tests.Integration
 
         private static object Put(string channel, bool enabled) => new
         {
-            items = new[] { new { channel, category = "non_transactional", enabled, consentText = Wording } },
+            items = new[] { new { channel, category = "non_transactional", enabled, consentWordingId = WordingId } },
         };
 
-        private static object Query(string accountId, string channel, string category) => new { accountId, channel, category };
+        private static object Query(string accountId, string channel, string category, bool includeToken = false) =>
+            new { accountId, channel, category, includeUnsubscribeToken = includeToken };
 
         private static FormUrlEncodedContent OneClick() =>
             new(new Dictionary<string, string> { ["List-Unsubscribe"] = "One-Click" });
@@ -347,6 +349,13 @@ namespace AccountService.Tests.Integration
         {
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             return doc.RootElement.GetProperty("preferences").EnumerateArray().Select(e => e.Clone()).ToList();
+        }
+
+        private HttpClient PolicyClient()
+        {
+            var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Internal-Key", AccountServiceFactory.InternalKey);
+            return client;
         }
 
         private UnsubscribeTokenService Tokens() => factory.Services.GetRequiredService<UnsubscribeTokenService>();
@@ -369,7 +378,7 @@ namespace AccountService.Tests.Integration
 
         private async Task<List<JsonElement>> PolicyAsync(params object[] queries)
         {
-            var response = await factory.CreateClient().PostAsJsonAsync(PolicyPath, new { items = queries });
+            var response = await PolicyClient().PostAsJsonAsync(PolicyPath, new { items = queries });
             response.StatusCode.Should().Be(HttpStatusCode.OK);
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             return doc.RootElement.GetProperty("items").EnumerateArray().Select(e => e.Clone()).ToList();

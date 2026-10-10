@@ -2,9 +2,11 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using AccountService.Configuration;
 using AccountService.Dtos;
 using AccountService.Helpers;
 using AccountService.Models;
+using Microsoft.Extensions.Options;
 
 namespace AccountService.Routes;
 
@@ -18,7 +20,9 @@ internal static class NotificationPolicy
 
     /// <summary>
     /// Maps <c>POST /internal/account/notification-policy</c>. Same trust as <see cref="CredentialIntrospection"/>:
-    /// in-cluster only, no gateway route, hidden from OpenAPI. An unknown channel or category fails the whole call.
+    /// in-cluster only, no gateway route, hidden from OpenAPI. It also needs the <c>X-Internal-Key</c> header
+    /// (<c>ACCOUNT_SERVICE_INTERNAL_KEY</c>) and answers 403 without it. The future caller is the Notification
+    /// Service (#696, #769). An unknown channel or category fails the whole call.
     /// </summary>
     /// <param name="app">The endpoint route builder.</param>
     /// <returns>The same route builder, for chaining.</returns>
@@ -27,10 +31,17 @@ internal static class NotificationPolicy
         app.MapPost(PolicyPath, async (
             HttpContext context,
             NotificationPolicyRequest? request,
-            NotificationPreferenceService service) =>
+            NotificationPreferenceService service,
+            IOptions<InternalCallerOptions> caller) =>
         {
             context.Response.Headers.CacheControl = "no-store, no-cache, max-age=0";
             context.Response.Headers.Pragma = "no-cache";
+
+            // Defence in depth next to the network policy (#269). Fails closed with no configured key.
+            if (!caller.Value.IsAuthorized(context.Request.Headers[InternalCallerOptions.HeaderName].ToString()))
+            {
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
 
             var items = request?.Items;
             if (items is null || items.Length == 0 || items.Length > NotificationPreferenceService.MaxPolicyBatch)

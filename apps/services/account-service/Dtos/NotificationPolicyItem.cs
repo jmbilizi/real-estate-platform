@@ -11,7 +11,7 @@ namespace AccountService.Dtos;
 /// <param name="Allowed">Whether the preference allows the send. A missing consent record is false for marketing and alert.</param>
 /// <param name="Suppressed">Whether the suppression list blocks the address.</param>
 /// <param name="EmailConfirmed">Whether the account's email is confirmed.</param>
-/// <param name="UnsubscribeToken">The signed unsubscribe token. Only for non-transactional email.</param>
+/// <param name="UnsubscribeToken">The signed unsubscribe token. Only when asked, and only for email that needs consent.</param>
 internal sealed record NotificationPolicyItem(
     Guid AccountId,
     string Channel,

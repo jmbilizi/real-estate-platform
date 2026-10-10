@@ -16,6 +16,6 @@ internal sealed class NotificationPreferenceItem
     /// <summary>Gets or sets a value indicating whether the account opts in.</summary>
     public bool? Enabled { get; set; }
 
-    /// <summary>Gets or sets the wording the account saw. Required to opt in.</summary>
-    public string? ConsentText { get; set; }
+    /// <summary>Gets or sets the id of the wording the account saw. Required to opt in. The server holds the text.</summary>
+    public string? ConsentWordingId { get; set; }
 }

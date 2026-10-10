@@ -662,8 +662,11 @@ namespace AccountService.Migrations
                     b.Property<string>("Category")
                         .HasColumnType("text");
 
-                    b.Property<string>("ConsentText")
+                    b.Property<string>("ConsentWordingId")
                         .HasColumnType("text");
+
+                    b.Property<int?>("ConsentWordingVersion")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("ConsentedAt")
                         .HasColumnType("timestamp with time zone");
@@ -704,8 +707,11 @@ namespace AccountService.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("ConsentText")
+                    b.Property<string>("ConsentWordingId")
                         .HasColumnType("text");
+
+                    b.Property<int?>("ConsentWordingVersion")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");

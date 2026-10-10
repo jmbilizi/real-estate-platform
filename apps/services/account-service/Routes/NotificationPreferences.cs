@@ -79,12 +79,15 @@ internal static class NotificationPreferences
         {
             context.Response.Headers.CacheControl = "no-store";
             var token = context.Request.Query["t"].ToString();
-            if (!tokens.TryValidate(token, out var accountId, out var category) || !NotificationCategories.NeedsConsent(category))
+
+            // The token category is bound: the link opts the account out of exactly that category, and
+            // only the stored category is valid. A token for another category is refused.
+            if (!tokens.TryValidate(token, out var accountId, out var category) || category != NotificationCategories.NonTransactional)
             {
                 return Results.Json(new { error = "invalid_token" }, statusCode: StatusCodes.Status400BadRequest);
             }
 
-            await service.UnsubscribeAsync(accountId, NotificationCategories.NonTransactional, context.RequestAborted).ConfigureAwait(false);
+            await service.UnsubscribeAsync(accountId, category, context.RequestAborted).ConfigureAwait(false);
             return Results.Ok(new { status = "unsubscribed" });
         })
         .AllowAnonymous()
@@ -97,5 +100,11 @@ internal static class NotificationPreferences
     {
         preferences = await service.ListAsync(accountId, cancellationToken).ConfigureAwait(false),
         transactional = new { enabled = true, editable = false },
+        consentWording = new
+        {
+            id = ConsentWordings.EmailNonTransactional,
+            version = ConsentWordings.EmailNonTransactionalVersion,
+            text = ConsentWordings.EmailNonTransactionalText,
+        },
     };
 }

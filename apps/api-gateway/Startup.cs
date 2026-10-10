@@ -687,6 +687,7 @@ namespace ApiGateway
                                 // Get GeoIpService from HttpContext (proper DI resolution)
                                 GeoIpService? geoIpService = request.HttpContext.RequestServices.GetService<GeoIpService>();
                                 EnrichWithRequestOrigin(activity, request, storeFullIp, ipHashSalt, geoIpService);
+                                SensitiveQueryRedactor.RedactTags(activity, request.Path.Value);
                             };
                         })
 
@@ -694,6 +695,8 @@ namespace ApiGateway
                         .AddHttpClientInstrumentation(options =>
                         {
                             options.RecordException = true;
+                            options.EnrichWithHttpRequestMessage = (activity, request) =>
+                                SensitiveQueryRedactor.RedactTags(activity, request.RequestUri?.AbsolutePath);
                         })
 
                         // Configure sampler based on environment

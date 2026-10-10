@@ -24,9 +24,6 @@ internal sealed class NotificationPreferenceService(
     /// <summary>The most items one policy call accepts.</summary>
     internal const int MaxPolicyBatch = 100;
 
-    /// <summary>The longest consent wording stored, in characters.</summary>
-    internal const int MaxConsentTextLength = 1000;
-
     /// <summary>Checks a PUT body. Nothing is written when any item fails.</summary>
     /// <param name="request">The body.</param>
     /// <returns>The HTTP status and error code of the first failure, or <see langword="null"/> when the body is valid.</returns>
@@ -71,14 +68,14 @@ internal sealed class NotificationPreferenceService(
                 return (StatusCodes.Status409Conflict, "sms_requires_consent");
             }
 
-            if (item.Enabled == true && string.IsNullOrWhiteSpace(item.ConsentText))
+            if (item.Enabled == true && string.IsNullOrWhiteSpace(item.ConsentWordingId))
             {
-                return (StatusCodes.Status400BadRequest, "consent_text_required");
+                return (StatusCodes.Status400BadRequest, "consent_wording_required");
             }
 
-            if (item.ConsentText is { Length: > MaxConsentTextLength })
+            if (item.Enabled == true && !ConsentWordings.TryGetVersion(item.ConsentWordingId, out _))
             {
-                return (StatusCodes.Status400BadRequest, "consent_text_too_long");
+                return (StatusCodes.Status400BadRequest, "unknown_consent_wording");
             }
         }
 
@@ -130,7 +127,7 @@ internal sealed class NotificationPreferenceService(
                 NotificationCategories.NonTransactional,
                 item.Enabled!.Value,
                 NotificationSources.User,
-                item.ConsentText?.Trim(),
+                item.ConsentWordingId,
                 cancellationToken).ConfigureAwait(false);
         }
     }
@@ -222,10 +219,55 @@ internal sealed class NotificationPreferenceService(
                 || (rows.TryGetValue($"{id}|{channel}", out var row) && row.Enabled
                     && (channel != NotificationChannels.Email || token is not null));
 
-            answers.Add(new NotificationPolicyItem(query.AccountId, channel, category, allowed, isSuppressed, user.EmailConfirmed, token));
+            answers.Add(new NotificationPolicyItem(query.AccountId, channel, category, allowed, isSuppressed, user.EmailConfirmed, query.IncludeUnsubscribeToken ? token : null));
         }
 
         return answers;
+    }
+
+    /// <summary>Applies the profile email toggle through the consent record.</summary>
+    /// <param name="accountId">The signed-in account.</param>
+    /// <param name="enabled">The requested value.</param>
+    /// <param name="cancellationToken">A token to cancel the call.</param>
+    /// <returns>
+    /// <see langword="false"/> when the toggle asks for an opt-in. An opt-in needs the consent wording,
+    /// so it goes through <c>PUT /account/notification-preferences</c>.
+    /// </returns>
+    internal async Task<bool> ApplyProfileEmailToggleAsync(string accountId, bool enabled, CancellationToken cancellationToken = default)
+    {
+        if (enabled)
+        {
+            var optedIn = await db.NotificationPreferences
+                .AsNoTracking()
+                .AnyAsync(
+                    p => p.AccountId == accountId && p.Channel == NotificationChannels.Email
+                        && p.Category == NotificationCategories.NonTransactional && p.Enabled,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return optedIn;
+        }
+
+        await this.SetAsync(
+            accountId,
+            accountId,
+            NotificationChannels.Email,
+            NotificationCategories.NonTransactional,
+            false,
+            NotificationSources.User,
+            null,
+            cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    /// <summary>Deletes the consent and audit rows of an account that was deleted (#694).</summary>
+    /// <param name="accountId">The account id.</param>
+    /// <param name="cancellationToken">A token to cancel the call.</param>
+    /// <returns>A task that completes when the rows are gone.</returns>
+    internal async Task PurgeAsync(string accountId, CancellationToken cancellationToken = default)
+    {
+        db.NotificationPreferences.RemoveRange(db.NotificationPreferences.Where(p => p.AccountId == accountId));
+        db.NotificationPreferenceAudits.RemoveRange(db.NotificationPreferenceAudits.Where(a => a.AccountId == accountId));
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task SetAsync(
@@ -235,7 +277,7 @@ internal sealed class NotificationPreferenceService(
         string category,
         bool enabled,
         string source,
-        string? consentText,
+        string? consentWordingId,
         CancellationToken cancellationToken)
     {
         for (var attempt = 0; ; attempt++)
@@ -245,10 +287,41 @@ internal sealed class NotificationPreferenceService(
                 .FirstOrDefaultAsync(p => p.AccountId == accountId && p.Channel == channel && p.Category == category, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (row is not null && row.Enabled == enabled && (!enabled || row.ConsentText == consentText))
+            // The legacy flags on the user row mirror the consent, so a sender that still reads them
+            // cannot email an account that opted out. An email change goes both ways. An SMS opt-out
+            // clears the SMS flag. Nothing opts an account in through the SMS flag.
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == accountId, cancellationToken).ConfigureAwait(false);
+            var mirrored = false;
+            if (user is not null && category == NotificationCategories.NonTransactional)
             {
+                if (channel == NotificationChannels.Email && user.EmailNotificationsEnabled != enabled)
+                {
+                    user.EmailNotificationsEnabled = enabled;
+                    mirrored = true;
+                }
+                else if (channel == NotificationChannels.Sms && !enabled && user.SmsNotificationsEnabled)
+                {
+                    user.SmsNotificationsEnabled = false;
+                    mirrored = true;
+                }
+
+                if (mirrored)
+                {
+                    user.UpdatedAt = now;
+                }
+            }
+
+            if (row is not null && row.Enabled == enabled && (!enabled || row.ConsentWordingId == consentWordingId))
+            {
+                if (mirrored)
+                {
+                    await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                }
+
                 return;
             }
+
+            var wordingVersion = enabled && ConsentWordings.TryGetVersion(consentWordingId, out var current) ? current : (int?)null;
 
             db.NotificationPreferenceAudits.Add(new NotificationPreferenceAudit
             {
@@ -260,7 +333,8 @@ internal sealed class NotificationPreferenceService(
                 PreviousEnabled = row?.Enabled,
                 Enabled = enabled,
                 Source = source,
-                ConsentText = enabled ? consentText : null,
+                ConsentWordingId = enabled ? consentWordingId : null,
+                ConsentWordingVersion = enabled ? wordingVersion : null,
                 OccurredAt = now,
             });
 
@@ -275,7 +349,8 @@ internal sealed class NotificationPreferenceService(
             row.UpdatedAt = now;
             if (enabled)
             {
-                row.ConsentText = consentText;
+                row.ConsentWordingId = consentWordingId;
+                row.ConsentWordingVersion = wordingVersion;
                 row.ConsentedAt = now;
             }
 
