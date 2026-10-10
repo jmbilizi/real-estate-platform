@@ -21,19 +21,24 @@ ones carrying obligations — NAR 7.58 attribution, seller display-suppression, 
 labelling — so the failure mode this package exists to prevent is not a type error, it's an
 attribution field that quietly stops being sent.
 
-## What belongs here
+## What belongs here and does not belong here
+
+This package follows the placement rule in AGENTS.md →
+[Workspace Naming & Shared Libraries](#workspace-naming--shared-libraries): a file belongs in this
+library only if another deployable needs to read it to talk to the property service correctly.
+
+**Specifically here:**
 
 - Zod schemas (request, response, error shapes) and the types derived from them via `z.infer`.
-- The OpenAPI builder (`toOpenApiDocument()`, via Zod v4's built-in `z.toJSONSchema()` — no
-  converter package; do not add one).
 - Pure, side-effect-free code only. No I/O, no state, no clock, no randomness beyond what a caller
   passes in.
 
-## What does not belong here
+**Never add:**
 
+- **No OpenAPI document** (moved to property-service by #63 — the service owns the document, not the
+  contract).
 - **No SQL.** No `pg`, no query builders, no anything that assumes a database exists.
-- **No HTTP.** No `express`, no route handlers, no request/response objects — only the data shapes a
-  route would use.
+- **No HTTP.** No `express`, no route handlers, no request/response objects — only the data shapes.
 - **No environment access.** No `process.env`, no config loading, no secrets.
 - If a file in this package imports `pg` or `express`, that import is the bug, not the file.
 
@@ -80,18 +85,15 @@ pnpm exec nx format @cribstop/property-contracts       # also: format-check
 
 ## Rules
 
-- **The Nx project name must equal the npm package name** — both are `@cribstop/property-contracts`.
-  This is the opposite of an earlier draft of this rule, which said to keep them distinct; that was
-  backwards and shipped a real bug (#47, ticket #55 tracks the upstream defects).
-  `@nx/js:prune-lockfile` on Nx 22.0.1 looks up a workspace dependency's project node by **package**
-  name in a map keyed by **project** name (`project-graph-pruning.js:98-104` vs. `:22-24`); when the
-  two names differ the lookup misses and the library's own dependencies (here, `zod`) are silently
-  dropped from a consumer's pruned `pnpm-lock.yaml`, breaking that consumer's `--frozen-lockfile`
-  production install with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`. Moving the dependency to
-  `devDependencies` is not a fallback on this Nx version — the executor never rewrites workspace
-  specifiers there either, so it trades one failure for a guaranteed `ERR_PNPM_OUTDATED_LOCKFILE`.
-  This is the template the next four Node libraries copy: give every one of them a scoped Nx project
-  name that matches its package name from the start.
+- **Nx project name equals package name.** Link to AGENTS.md → Repo-Wide Rules #12 for the
+  enforcement rule and the reason: `@nx/js:prune-lockfile` (Nx 22.0.1) looks up a workspace
+  dependency by **package** name in a map keyed by **project** name; when the two differ the lookup
+  misses and `zod` is silently dropped from a consumer's pruned lockfile, breaking
+  `--frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+- **Workspace scope convention:** This package is named `@cribstop/property-contracts` today. The
+  repo-wide rule in AGENTS.md says domain-scoped libraries should use `@property/contracts` (domain,
+  not brand or service name); #64 updates this package to that name. Do not pre-empt the rename from
+  this ticket.
 - Only dependency: `zod` (pinned `^4.4.3`). Do not add a JSON-Schema converter package — Zod v4
   emits `z.toJSONSchema()` natively, target `"openapi-3.0"` for legible `nullable: true` rendering
   instead of the draft-2020-12 `anyOf` form.

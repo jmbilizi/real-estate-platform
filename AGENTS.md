@@ -105,6 +105,15 @@ guide.
     the tool works, do nothing. If it fails, stop and report a `human-action` item. The scripts are
     idempotent: they read the current state and write only what is missing.
 
+12. **Service-owned libraries carry domain-scoped package names; apps carry unscoped deployment
+    identities.** A contracts library belongs in `libs/` only if another deployable needs it to
+    construct requests or interpret responses. Exactly one service owns each library; if two
+    services share a shape, one owns it (do not create a shared `common` library). **Naming:**
+    service-owned libraries use domain scope (`@property/contracts`), not service name; apps use one
+    unscoped name (`property-service`) byte-identical across Nx project, `package.json`, image,
+    skaffold, and deploy-control. Everything is `"private": true`; internal dependencies are
+    `workspace:*`.
+
 ## Writing Standard (ASD-STE100)
 
 Every agent writes in Simplified Technical English. The rules that matter most here:
@@ -944,6 +953,19 @@ tools (IDEs, lint-staged, workspace format scripts, CI) use the same config auto
 
 **When to use which**: Use workspace format for repo-wide changes (pre-commit/pre-push). Use project
 format during development of specific projects.
+
+## Workspace Naming & Shared Libraries
+
+Beyond Rule 12 (see above):
+
+- **Nx project name == `package.json` name, always.** When these differ, `prune-lockfile` (Nx
+  22.0.1) drops a library's own dependencies from a consumer's pruned lockfile, breaking
+  `--frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+- **Everything is `"private": true` and every internal dependency is `workspace:*`.** The latter
+  makes pnpm resolve from the workspace and fail loudly if the package is missing.
+- **The brand never appears in a partner-visible artifact** — OpenAPI `info.title`, gateway Swagger
+  keys, and gateway URL namespaces are named for the service domain (`Property Service`, key
+  `Property`, `/property/*`), never `Cribstop…`. After #64, no `@cribstop/*` packages remain.
 
 ## Common Pitfalls & Solutions
 

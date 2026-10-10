@@ -226,10 +226,35 @@ shared by the web client and the Property API.
 > service's
 > ["Data model — durable home vs. listing episode"](apps/services/property-service/AGENTS.md).
 
-- **Listing type:** `sale` | `rent` | `sold` (the platform supports buy, sell, and rent — not
-  rentals only). `sold` is a **lifecycle state projected into this union for display**, not a kind
-  of offer: storage separates the durable offer kind (`sale` | `rent`) from status, so a sold
-  _rental_ is representable and a listing cannot simultaneously claim to be sold and active.
+#### List vs. Detail Payloads
+
+Search results and the listings grid carry a **lean projection** (`ListingCard` shape): flat fields
+a card renders (price, beds, baths, address, neighborhood) plus a **single primary image** only. The
+detail page (opened from a card) returns the **full graph** (all photos, description, open houses,
+full NAR attribution, unit detail): fetched only when a user actually opens a listing. This
+two-payload split is non-negotiable because a results page renders ~20 cards on the first screen a
+new visitor sees, and every field on that card is paid twenty times per page. The card row must stay
+small.
+
+**Compliance asymmetry, enforced both ways:**
+
+- **Attribution is required on BOTH list and detail** (NAR Policy 7.58 applies to search results,
+  not just detail pages). An attribution field may never be trimmed, made conditional, or omitted
+  from any API response, regardless of the payload shape. No field-selection parameter exists that
+  could suppress it.
+- **Description is detail-only** and belongs on neither the list row nor in the card schema (Section
+  6.3 — it is the field carrying the most Fair Housing steering risk and does not belong on the
+  widest, most-cached surface). A future "trim the list" pass must not treat it as fat and move it.
+
+**Justification for each field proposed for the card row:** Every field currently on `ListingCard`
+must be classified as exactly one of — rendered by a card component surface, consumed by
+filtering/sorting/`appliedFilters` reconciliation, or required by compliance. Any field matching
+none of the three is a candidate for removal; addition is not in scope in this section.
+
+- **Listing type:** (the platform supports buy, sell, and rent — not rentals only). `sold` is a
+  **lifecycle state projected into this union for display**, not a kind of offer: storage separates
+  the durable offer kind (`sale` | `rent`) from status, so a sold _rental_ is representable and a
+  listing cannot simultaneously claim to be sold and active.
 - **Listing source:** `brightMLS` | `internal` | `other` — tracks provenance for MLS compliance,
   attribution, and deduplication. This is the consumer-facing discriminator; the specific
   originating system and per-source record keys are stored alongside it, so onboarding a second MLS
@@ -740,7 +765,7 @@ differentiated by scope and role.
 
 - Account service manages users, roles, and auth credentials (cookies, opaque bearer tokens, API
   keys).
-- Listings service provides CRUD for communities, properties, units, listings with hierarchical
+- Property service provides CRUD for communities, properties, units, listings with hierarchical
   queries, plus property relationship claims (Section 3.2), Bright MLS ingestion/sync, and saved
   searches.
 - Messaging service exposes REST and WebSocket endpoints for chat lifecycle, message CRUD, and
