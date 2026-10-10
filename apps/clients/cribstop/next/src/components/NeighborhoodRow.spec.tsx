@@ -236,8 +236,9 @@ describe('NeighborhoodRow (#393)', () => {
     for (const label of ['Scroll left', 'Scroll right']) {
       const button = screen.getByLabelText(label);
       expect(button.className).toContain('shrink-0');
-      expect(button.className).toContain('h-11');
-      expect(button.className).toContain('w-11');
+      expect(button.className).toContain('h-8');
+      expect(button.className).toContain('w-8');
+      expect(button.className).toContain('before:-inset-1.5');
     }
   });
 

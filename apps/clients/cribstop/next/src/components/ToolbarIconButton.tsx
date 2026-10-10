@@ -167,7 +167,14 @@ export interface ToolbarIconButtonProps
    * for a button over map tiles (#764). Nothing else differs.
    */
   surface?: 'page' | 'map';
+  /** `sm` is a 32px circle with a 44px tap area, for inline row controls such as carousel arrows. */
+  size?: 'md' | 'sm';
 }
+
+const SIZE_CLASSES = {
+  md: 'h-11 w-11',
+  sm: "h-8 w-8 before:absolute before:-inset-1.5 before:content-['']",
+} as const;
 
 export const SURFACE_CLASSES = {
   page: 'bg-transparent hover:bg-surface-soft disabled:hover:bg-transparent aria-expanded:bg-surface-soft',
@@ -184,6 +191,7 @@ export default function ToolbarIconButton({
   active,
   countTestId,
   surface = 'page',
+  size = 'md',
   className = '',
   type = 'button',
   ...rest
@@ -202,7 +210,7 @@ export default function ToolbarIconButton({
       aria-label={label}
       title={tooltip ?? label}
       aria-pressed={pressed}
-      className={`${position} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-gray-300 ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
+      className={`${position} inline-flex ${SIZE_CLASSES[size]} shrink-0 cursor-pointer items-center justify-center rounded-full border border-gray-300 ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
         dark ? 'text-ink' : 'text-ink-muted'
       } ${className}`}
       {...rest}

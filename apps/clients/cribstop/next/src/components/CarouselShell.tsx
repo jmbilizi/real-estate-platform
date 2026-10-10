@@ -85,6 +85,7 @@ export function CarouselArrows({
       icon={icon}
       onClick={() => onScroll(dir)}
       disabled={disabled}
+      size="sm"
       className="disabled:opacity-50"
     />
   );
