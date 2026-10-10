@@ -25,7 +25,7 @@ internal static class LookingForLimits
     /// <summary>Gets the valid place kinds.</summary>
     public static IReadOnlySet<string> PlaceKinds { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
-        "city", "zip", "neighborhood", "street", "county",
+        "city", "zip",
     };
 
     /// <summary>Gets the valid home types. Mirrors <c>PROPERTY_TYPES</c> in <c>@cribstop/property-contracts</c>.</summary>

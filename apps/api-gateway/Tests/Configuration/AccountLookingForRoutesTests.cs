@@ -30,11 +30,23 @@ namespace ApiGateway.Tests.Configuration
         [Fact]
         public void NoSpecificAccountRoute_ShadowsLookingFor()
         {
-            var specific = AccountRoutes()
+            // A literal route or a wildcard route (for example /account/{section}) would shadow the
+            // catch-all for these paths. Each template becomes a regex: a placeholder matches one segment.
+            var paths = new[] { "/account/looking-for", $"/account/looking-for/{Guid.NewGuid()}" };
+            var shadows = AccountRoutes()
                 .Select(r => (string?)r["UpstreamPathTemplate"] ?? string.Empty)
-                .Where(t => t.StartsWith("/account/looking-for", StringComparison.Ordinal));
+                .Where(t => t != "/account/{everything}")
+                .Where(t => t.StartsWith("/account/", StringComparison.Ordinal))
+                .Where(t =>
+                {
+                    var pattern = "^" + System.Text.RegularExpressions.Regex.Replace(
+                        System.Text.RegularExpressions.Regex.Escape(t).Replace("\\{", "{", StringComparison.Ordinal),
+                        @"\{[^}]+\}",
+                        "[^/]+") + "/?$";
+                    return paths.Any(p => System.Text.RegularExpressions.Regex.IsMatch(p, pattern));
+                });
 
-            specific.Should().BeEmpty();
+            shadows.Should().BeEmpty();
         }
 
         [Fact]

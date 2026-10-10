@@ -82,44 +82,19 @@ internal static class LookingFor
                 return Results.ValidationProblem(errors);
             }
 
-            var row = await dbContext.LookingForPreferences
-                .FirstOrDefaultAsync(p => p.UserId == user.Id && p.Id == id)
-                .ConfigureAwait(false);
-
-            var created = row is null;
-            if (row is null)
+            // The retry covers a duplicate-key race on a provider with no advisory lock. The second
+            // pass finds the row the other request inserted and replaces it.
+            for (var attempt = 0; ; attempt++)
             {
-                var count = await dbContext.LookingForPreferences
-                    .CountAsync(p => p.UserId == user.Id)
-                    .ConfigureAwait(false);
-                if (count >= LookingForLimits.MaxPerAccount)
+                try
                 {
-                    return Results.Json(
-                        new { error = "limit_reached", max = LookingForLimits.MaxPerAccount },
-                        statusCode: StatusCodes.Status409Conflict);
+                    return await UpsertAsync(dbContext, user.Id, id, request, now.UtcDateTime).ConfigureAwait(false);
                 }
-
-                row = new LookingForPreference { Id = id, UserId = user.Id, CreatedAt = now.UtcDateTime };
-                dbContext.LookingForPreferences.Add(row);
+                catch (DbUpdateException) when (attempt == 0)
+                {
+                    dbContext.ChangeTracker.Clear();
+                }
             }
-
-            row.Intent = request.Intent!;
-            row.PlacesJson = JsonSerializer.Serialize(request.Places, PlaceJson);
-            row.PriceMin = request.PriceMin;
-            row.PriceMax = request.PriceMax;
-            row.BedsMin = request.BedsMin;
-            row.BathsMin = request.BathsMin;
-            row.HomeTypes = request.HomeTypes?.ToList() ?? new List<string>();
-            row.WhenStart = request.WhenStart;
-            row.WhenEnd = request.WhenStart is null ? null : request.WhenEnd;
-            row.UpdatedAt = now.UtcDateTime;
-
-            await dbContext.SaveChangesAsync().ConfigureAwait(false);
-
-            var item = ToItem(row);
-            return created
-                ? Results.Created(new Uri($"/account/looking-for/{id}", UriKind.Relative), item)
-                : Results.Ok(item);
         }).RequireAuthorization();
 
         // DELETE /account/looking-for/{id} — remove one preference. An absent id succeeds.
@@ -153,6 +128,72 @@ internal static class LookingFor
         }).RequireAuthorization();
 
         return app;
+    }
+
+    // Creates or replaces one row. On Postgres a per-account advisory lock serializes the calls of
+    // one account, so the count and the insert cannot interleave and the limit holds.
+    internal static async Task<IResult> UpsertAsync(
+        AccountDbContext dbContext,
+        string userId,
+        Guid id,
+        LookingForRequest request,
+        DateTime now)
+    {
+        var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync().ConfigureAwait(false)
+            : null;
+        await using (transaction)
+        {
+            if (transaction is not null)
+            {
+                await dbContext.Database
+                    .ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({userId}))")
+                    .ConfigureAwait(false);
+            }
+
+            var row = await dbContext.LookingForPreferences
+                .FirstOrDefaultAsync(p => p.UserId == userId && p.Id == id)
+                .ConfigureAwait(false);
+
+            var created = row is null;
+            if (row is null)
+            {
+                var count = await dbContext.LookingForPreferences
+                    .CountAsync(p => p.UserId == userId)
+                    .ConfigureAwait(false);
+                if (count >= LookingForLimits.MaxPerAccount)
+                {
+                    return Results.Json(
+                        new { error = "limit_reached", max = LookingForLimits.MaxPerAccount },
+                        statusCode: StatusCodes.Status409Conflict);
+                }
+
+                row = new LookingForPreference { Id = id, UserId = userId, CreatedAt = now };
+                dbContext.LookingForPreferences.Add(row);
+            }
+
+            row.Intent = request.Intent!;
+            row.PlacesJson = JsonSerializer.Serialize(request.Places, PlaceJson);
+            row.PriceMin = request.PriceMin;
+            row.PriceMax = request.PriceMax;
+            row.BedsMin = request.BedsMin;
+            row.BathsMin = request.BathsMin;
+            row.HomeTypes = request.HomeTypes?.ToList() ?? new List<string>();
+            row.WhenStart = request.WhenStart;
+            row.WhenEnd = request.WhenStart is null ? null : request.WhenEnd;
+            row.UpdatedAt = now;
+
+            await dbContext.SaveChangesAsync().ConfigureAwait(false);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync().ConfigureAwait(false);
+            }
+
+            var item = ToItem(row);
+            return created
+                ? Results.Created(new Uri($"/account/looking-for/{id}", UriKind.Relative), item)
+                : Results.Ok(item);
+        }
     }
 
     private static object ToItem(LookingForPreference p) => new
