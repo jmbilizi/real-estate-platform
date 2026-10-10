@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import { DropdownContainer } from './DropdownContainer';
-import ToolbarIconButton, { MORE_ICON } from './ToolbarIconButton';
+import { MORE_ICON } from './ToolbarIconButton';
 
 export type NavMenuItem =
   | { kind: 'link'; label: string; href: string }
@@ -131,15 +131,19 @@ export default function NavMenu({
 
   return (
     <>
-      <ToolbarIconButton
+      {/* A bare glyph at the far right, like other sites: no fill, no padding. The pseudo element keeps a 44px tap target. */}
+      <button
         ref={triggerRef}
-        surface="nav"
-        label="More options"
-        icon={MORE_ICON}
+        type="button"
+        aria-label="More options"
+        title="More options"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-      />
+        className="relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center text-ink before:absolute before:-inset-2.5 before:content-[''] hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 rounded"
+      >
+        {MORE_ICON}
+      </button>
       {open && (
         <DropdownContainer onClose={close} alignRight triggerRef={triggerRef}>
           <div

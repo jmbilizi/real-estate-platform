@@ -431,7 +431,7 @@ export default function NavBar() {
                 <NavMenu signedIn={!!user} onAuth={openModal} onLogout={logout} />
               </span>
             ) : (
-              <NavButtonSkeleton />
+              <SkeletonBlock className="h-6 w-6 shrink-0 rounded" />
             )}
           </div>
         </div>
