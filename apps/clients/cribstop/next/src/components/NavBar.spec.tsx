@@ -249,14 +249,14 @@ describe('NavBar right side', () => {
     });
   });
 
-  it('opens the sign-up modal from the More menu', () => {
+  it('opens the auth modal from the More menu', () => {
     mockUseApp.mockReturnValue(appValue(null));
     render(<NavBar />);
 
     fireEvent.click(screen.getByRole('button', { name: 'More options' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign up' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in or sign up' }));
 
-    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=signup'), {
+    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=login'), {
       scroll: false,
     });
   });

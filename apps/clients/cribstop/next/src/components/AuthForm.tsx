@@ -50,6 +50,7 @@ export default function AuthForm({
 }) {
   const [step, setStep] = useState<Step>(initialMode === 'forgot' ? 'forgot' : 'email');
   const [email, setEmail] = useState('');
+  const [emailFocused, setEmailFocused] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
@@ -237,7 +238,8 @@ export default function AuthForm({
     else router.push('/');
   };
 
-  const showSocial = step === 'email';
+  // The label floats, and the helper line shows, once the field has focus or a value.
+  const emailRaised = emailFocused || email !== '';
   const emailChip = (
     <span className="break-words font-medium text-ink [overflow-wrap:anywhere]">{email}</span>
   );
@@ -259,15 +261,14 @@ export default function AuthForm({
           tabIndex={-1}
           className="text-center font-display text-2xl font-bold tracking-tight"
         >
-          {step === 'email' && "What's your email?"}
+          {step === 'email' && 'Sign in or sign up'}
           {step === 'password' && 'Welcome back'}
           {step === 'code' && 'Check your email'}
           {step === 'setPassword' && 'Last step'}
           {step === 'forgot' && 'Reset your password'}
           {step === 'resetPassword' && 'Set a new password'}
         </h2>
-        <p className="mt-2 text-center text-sm text-ink-muted">
-          {step === 'email' && 'Sign in or join Cribstop. One email, no fuss.'}
+        <p className="mt-2 text-center text-sm text-ink-muted empty:hidden">
           {step === 'password' && <>Enter your password for {emailChip}.</>}
           {step === 'code' && codeFlow === 'signup' && <>We sent a 6-digit code to {emailChip}.</>}
           {step === 'code' && codeFlow === 'reset' && (
@@ -278,65 +279,54 @@ export default function AuthForm({
           {step === 'resetPassword' && <>Pick a new password for {emailChip}.</>}
         </p>
 
-        {showSocial && (
-          <div className="mt-6 flex flex-col gap-3">
-            <button className="btn-secondary min-h-11 gap-2">
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-              Continue with Google
-            </button>
-            <button className="btn-secondary min-h-11 gap-2">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-              </svg>
-              Continue with Apple
-            </button>
-            <div className="my-2 flex items-center gap-3">
-              <div className="h-px flex-1 bg-surface-border" />
-              <span className="text-xs text-ink-subtle">or</span>
-              <div className="h-px flex-1 bg-surface-border" />
-            </div>
-          </div>
-        )}
-
         {step === 'email' && (
-          <form onSubmit={handleEmailSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleEmailSubmit} className="mt-6 flex flex-col gap-4">
             <div>
-              <label htmlFor="auth-email" className="mb-1 block text-sm font-medium text-ink-muted">
-                Email
-              </label>
-              <input
-                id="auth-email"
-                type="email"
-                required
-                autoComplete="username"
-                inputMode="email"
-                autoCapitalize="none"
-                spellCheck={false}
-                className="input-field min-h-11"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  id="auth-email"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="input-field h-14 pb-1 pt-5 placeholder:text-transparent focus:placeholder:text-ink-subtle"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                  aria-describedby={
+                    [formError ? 'auth-email-error' : null, emailRaised ? 'auth-email-help' : null]
+                      .filter(Boolean)
+                      .join(' ') || undefined
+                  }
+                />
+                <label
+                  htmlFor="auth-email"
+                  className={`pointer-events-none absolute left-4 text-ink-muted transition-all duration-150 ${
+                    emailRaised ? 'top-1.5 text-xs' : 'top-1/2 -translate-y-1/2 text-sm'
+                  }`}
+                >
+                  Email
+                </label>
+              </div>
+              {emailRaised && (
+                <p id="auth-email-help" className="mt-2 text-xs text-ink-muted">
+                  We&apos;ll email you a code to continue.{' '}
+                  <Link href="/privacy" className="font-medium text-brand hover:underline">
+                    Privacy Policy
+                  </Link>
+                </p>
+              )}
             </div>
 
-            <div aria-live="polite" className="empty:hidden text-center text-sm">
+            <div
+              id="auth-email-error"
+              aria-live="polite"
+              className="empty:hidden text-center text-sm"
+            >
               {formError && (
                 <p role="alert" className="text-red-600">
                   {formError}
@@ -352,6 +342,52 @@ export default function AuthForm({
             >
               {isSubmitting ? 'Please wait...' : 'Continue'}
             </button>
+
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-surface-border" />
+              <span className="text-xs text-ink-subtle">or</span>
+              <div className="h-px flex-1 bg-surface-border" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                aria-label="Continue with Google"
+                title="Continue with Google"
+                className="btn-secondary min-h-11 gap-2 px-2"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                Google
+              </button>
+              <button
+                type="button"
+                aria-label="Continue with Apple"
+                title="Continue with Apple"
+                className="btn-secondary min-h-11 gap-2 px-2"
+              >
+                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
+                </svg>
+                Apple
+              </button>
+            </div>
 
             <p className="text-center text-xs text-ink-muted">
               By continuing, you agree to our{' '}

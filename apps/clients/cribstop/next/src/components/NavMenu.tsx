@@ -8,7 +8,7 @@ import { MORE_ICON } from './ToolbarIconButton';
 
 export type NavMenuItem =
   | { kind: 'link'; label: string; href: string }
-  | { kind: 'action'; label: string; action: 'login' | 'signup' | 'logout' };
+  | { kind: 'action'; label: string; action: 'auth' | 'logout' };
 
 /**
  * Secondary items. Each has a real destination today. Language and Settings are absent on
@@ -33,10 +33,7 @@ export function getNavMenuItems(signedIn: boolean): {
         { kind: 'link', label: 'Saved homes', href: '/favorites' },
         { kind: 'action', label: 'Log out', action: 'logout' },
       ]
-    : [
-        { kind: 'action', label: 'Log in', action: 'login' },
-        { kind: 'action', label: 'Sign up', action: 'signup' },
-      ];
+    : [{ kind: 'action', label: 'Sign in or sign up', action: 'auth' }];
   return { primary, secondary: SECONDARY_ITEMS };
 }
 
@@ -50,7 +47,7 @@ export default function NavMenu({
   onLogout,
 }: {
   signedIn: boolean;
-  onAuth: (mode: 'login' | 'signup') => void;
+  onAuth: () => void;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -87,7 +84,7 @@ export default function NavMenu({
     close();
     if (item.kind !== 'action') return;
     if (item.action === 'logout') onLogout();
-    else onAuth(item.action);
+    else onAuth();
   };
 
   const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -140,7 +137,7 @@ export default function NavMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center text-ink before:absolute before:-inset-2.5 before:content-[''] hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 rounded"
+        className="relative -mr-1 inline-flex h-6 w-[4.5px] shrink-0 cursor-pointer items-center justify-center text-ink before:absolute before:-inset-y-2.5 before:-left-10 before:right-0 before:content-[''] hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 rounded"
       >
         {MORE_ICON}
       </button>

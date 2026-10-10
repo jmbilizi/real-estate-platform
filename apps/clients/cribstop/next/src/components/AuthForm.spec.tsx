@@ -77,11 +77,49 @@ describe('AuthForm', () => {
     it('shows one email field and Continue, with no sign-in or sign-up tabs', () => {
       render(<AuthForm />);
 
-      expect(screen.getByRole('heading', { name: "What's your email?" })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Sign in or sign up' })).toBeInTheDocument();
       expect(screen.getAllByRole('textbox')).toHaveLength(1);
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
       expect(screen.queryByRole('tab')).not.toBeInTheDocument();
       expect(screen.queryByPlaceholderText('••••••••')).not.toBeInTheDocument();
+    });
+
+    it('puts the email field first, then "or", then Google and Apple on one row', () => {
+      render(<AuthForm />);
+
+      const email = screen.getByPlaceholderText('you@example.com');
+      const or = screen.getByText('or');
+      const google = screen.getByRole('button', { name: 'Continue with Google' });
+      const apple = screen.getByRole('button', { name: 'Continue with Apple' });
+      const follows = (x: Node, y: Node) =>
+        Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(email, or)).toBe(true);
+      expect(follows(or, google)).toBe(true);
+      expect(google.parentElement).toBe(apple.parentElement);
+      expect(google.parentElement).toHaveClass('grid-cols-2', 'gap-2');
+      expect(google).toHaveAttribute('title', 'Continue with Google');
+      expect(apple).toHaveAttribute('title', 'Continue with Apple');
+      expect(screen.queryByText('Welcome back')).not.toBeInTheDocument();
+    });
+
+    it('labels the field inside it and shows the helper line only on focus or a value', () => {
+      render(<AuthForm />);
+
+      const field = screen.getByLabelText('Email');
+      expect(field).toBe(screen.getByPlaceholderText('you@example.com'));
+      // The step focuses the field on mount, so blur it to read the idle state.
+      fireEvent.blur(field);
+      expect(screen.queryByText(/email you a code to continue/i)).not.toBeInTheDocument();
+
+      fireEvent.focus(field);
+      expect(screen.getByText(/email you a code to continue/i)).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'Privacy Policy' })).toHaveLength(2);
+      expect(field).toHaveAttribute('aria-describedby', 'auth-email-help');
+
+      fireEvent.blur(field);
+      expect(screen.queryByText(/email you a code to continue/i)).not.toBeInTheDocument();
+      fireEvent.change(field, { target: { value: 'a@b.co' } });
+      expect(screen.getByText(/email you a code to continue/i)).toBeInTheDocument();
     });
 
     it('sets the email field attributes for mobile keyboards and password managers', () => {
@@ -102,10 +140,9 @@ describe('AuthForm', () => {
         'href',
         '/terms',
       );
-      expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
-        'href',
-        '/privacy',
-      );
+      for (const link of screen.getAllByRole('link', { name: 'Privacy Policy' })) {
+        expect(link).toHaveAttribute('href', '/privacy');
+      }
       expect(screen.getByText(/By continuing, you agree to our/i)).toBeInTheDocument();
       expect(screen.queryByText(/draft|pending/i)).not.toBeInTheDocument();
     });

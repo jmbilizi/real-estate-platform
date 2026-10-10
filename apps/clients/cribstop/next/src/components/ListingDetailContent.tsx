@@ -251,13 +251,16 @@ export default function ListingDetailContent({
   const priceChange = describePriceChange(listing);
 
   // #716. The MLS day count when the feed carries it. Otherwise the oldest list date of the home.
-  // Never a number we worked out ourselves.
-  const marketTimeTile =
+  // Never a number we worked out ourselves. The API sends null when the record's #146 flag
+  // (`daysOnMarketDisplayAllowed`) is false, so a null count shows no line.
+  const marketTimeText =
     listing.daysOnMarket !== null
-      ? [{ label: 'Days on Market', value: formatNumber(listing.daysOnMarket) }]
+      ? listing.daysOnMarket === 0
+        ? 'Listed today'
+        : `On market ${formatNumber(listing.daysOnMarket)} ${listing.daysOnMarket === 1 ? 'day' : 'days'}`
       : listing.listedSince !== null
-        ? [{ label: 'Listed since', value: formatCalendarDate(listing.listedSince) }]
-        : [];
+        ? `Listed ${formatCalendarDate(listing.listedSince)}`
+        : null;
 
   // Non-parcel dwelling stat tiles — each part is omitted rather than rendered as a dash or a
   // zero when the API sends null, and the whole block is suppressed for a parcel (rule #4).
@@ -271,7 +274,6 @@ export default function ListingDetailContent({
         ...(listing.sqft !== null ? [{ label: 'Sqft', value: formatNumber(listing.sqft) }] : []),
         { label: 'Type', value: listing.propertyType },
         ...(listing.yearBuilt !== null ? [{ label: 'Year Built', value: listing.yearBuilt }] : []),
-        ...marketTimeTile,
         ...(listing.lotSqft !== null
           ? [{ label: 'Lot Size', value: `${formatNumber(listing.lotSqft)} sf` }]
           : []),
@@ -386,6 +388,12 @@ export default function ListingDetailContent({
                 {priceChange && !closePriceText && (
                   <p className="mt-1 text-sm text-ink-body" data-testid="price-change">
                     {formatDetailPriceChange(priceChange)}
+                  </p>
+                )}
+
+                {marketTimeText && (
+                  <p className="mt-1 text-sm text-ink-muted" data-testid="market-time">
+                    {marketTimeText}
                   </p>
                 )}
 
