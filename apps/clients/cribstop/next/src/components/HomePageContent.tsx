@@ -1,7 +1,12 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
-import type { NeighborhoodRow as NeighborhoodApiRow } from '@cribstop/property-contracts';
+import type {
+  NeighborhoodRow as NeighborhoodApiRow,
+  PropertyType,
+} from '@cribstop/property-contracts';
+import { useApp } from '@/lib/context';
+import { listRecentSavedHomes } from '@/lib/api/saved-homes';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
@@ -440,6 +445,92 @@ function NearYouRow({
   );
 }
 
+/** The newest saves to read for the latest one that still has a listing. An off-market home has
+ *  no listing type to query by, so one read of a few covers it without a second call. */
+const SAVED_LOOKBACK = 5;
+
+type LatestSave = {
+  city: string;
+  state: string;
+  propertyType: PropertyType;
+  listingType: ListingSide;
+};
+
+/**
+ * The most recent saved home that has a listing, read once while signed in (#364). Signed out
+ * never calls the API. A failed read leaves `null`, so the row hides and never blanks the page.
+ */
+function useLatestSave(signedIn: boolean): LatestSave | null {
+  const [save, setSave] = useState<LatestSave | null>(null);
+
+  useEffect(() => {
+    setSave(null);
+    if (!signedIn) return undefined;
+    const controller = new AbortController();
+    listRecentSavedHomes(SAVED_LOOKBACK, controller.signal)
+      .then((homes) => {
+        const card = homes.find((h) => h.listing)?.listing;
+        setSave(
+          card
+            ? {
+                city: card.city,
+                state: card.state,
+                propertyType: card.propertyType,
+                listingType: card.listingType === 'rent' ? 'rent' : 'sale',
+              }
+            : null,
+        );
+      })
+      .catch(() => {
+        // Chrome, not a task: the row simply does not render.
+      });
+    return () => controller.abort();
+  }, [signedIn]);
+
+  return save;
+}
+
+/** "More homes like the ones you saved" (#364): follows the latest save, not the intent control.
+ *  Hidden with no save, no matching listings, or a failed fetch. The copy states the reason only. */
+function SavedLikeRow({
+  save,
+  savedPropertyIds,
+}: {
+  save: LatestSave | null;
+  savedPropertyIds: Set<string>;
+}) {
+  const { listings, total, loading } = useCarouselListings(
+    {
+      city: save?.city,
+      state: save?.state,
+      propertyType: save ? [save.propertyType] : undefined,
+      listingType: save?.listingType,
+      pageSize: CAROUSEL_PAGE_SIZE,
+    },
+    !save,
+    false,
+  );
+
+  // The search contract has no exclude filter, so already-saved homes drop out here.
+  const visible = listings.filter((l) => !savedPropertyIds.has(l.propertyId));
+  if (!save || (!loading && (total === 0 || visible.length === 0))) return null;
+
+  return (
+    <ListingRow
+      title="More homes like the ones you saved"
+      href={searchTargetUrl(
+        { kind: 'place', place: { kind: 'city', city: save.city, state: save.state } },
+        save.listingType,
+        new URLSearchParams({ propertyType: save.propertyType }),
+      )}
+      listings={visible}
+      loading={loading}
+      max={7}
+      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+    />
+  );
+}
+
 /**
  * Per-side "coming soon" copy (#416, #418): a short, concrete call to action — the good feeling
  * of being first, without claiming exclusivity the product doesn't have. "Be the first to see"
@@ -700,6 +791,11 @@ function TrustBlock() {
 export default function HomePageContent() {
   const rentFirst = useRentFirst();
   const { region, loading: regionLoading } = useRegion();
+  const { user, savedPropertyIds } = useApp();
+  const latestSave = useLatestSave(Boolean(user));
+  const savedLike = user ? (
+    <SavedLikeRow key="saved-like" save={latestSave} savedPropertyIds={savedPropertyIds} />
+  ) : null;
 
   const nearYouSale = (
     <NearYouRow key="near-you-sale" side="sale" region={region} regionLoading={regionLoading} />
@@ -721,6 +817,7 @@ export default function HomePageContent() {
     ? [
         nearYouRent,
         nearYouSale,
+        savedLike,
         justListedSale,
         justListedRent,
         comingSoonRent,
@@ -730,6 +827,7 @@ export default function HomePageContent() {
     : [
         nearYouSale,
         nearYouRent,
+        savedLike,
         justListedSale,
         comingSoonSale,
         priceDrops,

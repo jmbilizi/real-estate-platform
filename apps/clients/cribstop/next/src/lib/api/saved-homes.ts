@@ -60,6 +60,19 @@ export function unsaveHomeById(propertyId: string): Promise<SavedState> {
   return request<SavedState>(`/api/saved-homes/${encodeURIComponent(propertyId)}`, 'DELETE');
 }
 
+/** The newest saves, newest first. One small read, for surfaces that need only the latest few. */
+export async function listRecentSavedHomes(
+  limit: number,
+  signal?: AbortSignal,
+): Promise<SavedHome[]> {
+  const envelope = await request<SavedHomesEnvelope>(
+    `/api/saved-homes?page=1&pageSize=${limit}`,
+    'GET',
+    signal,
+  );
+  return envelope.results;
+}
+
 const PAGE_SIZE = 100;
 /** A bound on the loop, so a misbehaving total cannot spin the client. */
 const MAX_PAGES = 50;

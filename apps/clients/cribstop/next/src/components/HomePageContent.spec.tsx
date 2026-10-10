@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
+import { listRecentSavedHomes } from '@/lib/api/saved-homes';
 import HomePageContent from './HomePageContent';
 
 jest.mock('@/lib/api/listings', () => ({
@@ -12,11 +13,17 @@ jest.mock('@/lib/api/listings', () => ({
 // HomePageContent itself does not read useApp()/listingType (#361, #392) — but ListingCard,
 // rendered inside every carousel row, still calls useApp() for save/unsave. Without this mock the
 // cards throw for lack of a react-redux Provider, unrelated to what this file is testing.
+jest.mock('@/lib/api/saved-homes', () => ({ listRecentSavedHomes: jest.fn() }));
+
+let mockUser: { email: string } | null = null;
+let mockSavedIds = new Set<string>();
 jest.mock('@/lib/context', () => ({
   useApp: () => ({
     listingType: 'sale',
     toggleSave: jest.fn(),
     isSaved: () => false,
+    user: mockUser,
+    savedPropertyIds: mockSavedIds,
   }),
 }));
 
@@ -27,6 +34,7 @@ jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
 const mockedSearchListings = searchListings as jest.Mock;
 const mockedGetListingsMeta = getListingsMeta as jest.Mock;
 const mockedGetNeighborhoods = getNeighborhoods as jest.Mock;
+const mockedRecentSaved = listRecentSavedHomes as jest.Mock;
 
 function neighborhoodRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -102,6 +110,9 @@ describe('HomePageContent', () => {
     mockedGetListingsMeta.mockReset();
     mockedGetNeighborhoods.mockReset();
     (global.fetch as jest.Mock).mockReset();
+    mockedRecentSaved.mockReset();
+    mockUser = null;
+    mockSavedIds = new Set();
     window.localStorage.clear();
   });
 
@@ -761,6 +772,73 @@ describe('HomePageContent', () => {
       await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+    });
+  });
+
+  describe('saved listings row (#364)', () => {
+    const TITLE = 'More homes like the ones you saved';
+    const savedHome = (listing: ReturnType<typeof aListingCardRow> | null) => ({
+      propertyId: 'p-saved',
+      listing,
+    });
+
+    it('renders for a signed-in user with saves, queried from the latest save', async () => {
+      mockUser = { email: 'a@b.co' };
+      mockSavedIds = new Set(['p-saved']);
+      mockedRecentSaved.mockResolvedValue([
+        savedHome(
+          aListingCardRow({
+            city: 'Rockville',
+            state: 'MD',
+            propertyType: 'Condo',
+            listingType: 'rent',
+          }),
+        ),
+        savedHome(aListingCardRow({ city: 'Older', state: 'VA' })),
+      ]);
+
+      render(<HomePageContent />);
+
+      expect(await screen.findByText(TITLE)).toBeInTheDocument();
+      const call = mockedSearchListings.mock.calls.find(([q]) => q.city === 'Rockville');
+      expect(call?.[0]).toMatchObject({
+        city: 'Rockville',
+        state: 'MD',
+        propertyType: ['Condo'],
+        listingType: 'rent',
+        pageSize: 8,
+        skipTotal: true,
+      });
+    });
+
+    it('is absent and makes no saved call when signed out', async () => {
+      render(<HomePageContent />);
+
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
+      expect(mockedRecentSaved).not.toHaveBeenCalled();
+    });
+
+    it('is absent with zero saves and runs no fallback query', async () => {
+      mockUser = { email: 'a@b.co' };
+      mockedRecentSaved.mockResolvedValue([]);
+
+      render(<HomePageContent />);
+
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      await waitFor(() => expect(mockedRecentSaved).toHaveBeenCalled());
+      expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
+      expect(mockedSearchListings.mock.calls.some(([q]) => q.propertyType && !q.sort)).toBe(false);
+    });
+
+    it('hides the row, not the page, when the saved read fails', async () => {
+      mockUser = { email: 'a@b.co' };
+      mockedRecentSaved.mockRejectedValue(new Error('503'));
+
+      render(<HomePageContent />);
+
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
     });
   });
 });
