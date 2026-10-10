@@ -799,6 +799,7 @@ describe('HomePageContent', () => {
 
       render(<HomePageContent />);
 
+      await waitFor(() => expect(mockedRecentSaved).toHaveBeenCalled());
       expect(await screen.findByText(TITLE)).toBeInTheDocument();
       const call = mockedSearchListings.mock.calls.find(([q]) => q.city === 'Rockville');
       expect(call?.[0]).toMatchObject({
@@ -815,7 +816,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
-      expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
       expect(mockedRecentSaved).not.toHaveBeenCalled();
     });
 
@@ -827,7 +828,7 @@ describe('HomePageContent', () => {
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       await waitFor(() => expect(mockedRecentSaved).toHaveBeenCalled());
-      expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
       expect(mockedSearchListings.mock.calls.some(([q]) => q.propertyType && !q.sort)).toBe(false);
     });
 
@@ -838,7 +839,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
-      expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
     });
   });
 });

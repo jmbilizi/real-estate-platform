@@ -460,18 +460,26 @@ type LatestSave = {
  * The most recent saved home that has a listing, read once while signed in (#364). Signed out
  * never calls the API. A failed read leaves `null`, so the row hides and never blanks the page.
  */
-function useLatestSave(signedIn: boolean): LatestSave | null {
-  const [save, setSave] = useState<LatestSave | null>(null);
+function useLatestSave(signedIn: boolean): { save: LatestSave | null; loading: boolean } {
+  const [state, setState] = useState<{ save: LatestSave | null; loading: boolean }>({
+    save: null,
+    loading: signedIn,
+  });
 
   useEffect(() => {
-    setSave(null);
-    if (!signedIn) return undefined;
+    if (!signedIn) {
+      setState({ save: null, loading: false });
+      return undefined;
+    }
+    setState({ save: null, loading: true });
     const controller = new AbortController();
     listRecentSavedHomes(SAVED_LOOKBACK, controller.signal)
       .then((homes) => {
-        const card = homes.find((h) => h.listing)?.listing;
-        setSave(
-          card
+        // A sold home has no side to browse by, so the latest rent or sale save wins.
+        const card = homes.find((h) => h.listing && h.listing.listingType !== 'sold')?.listing;
+        setState({
+          loading: false,
+          save: card
             ? {
                 city: card.city,
                 state: card.state,
@@ -479,27 +487,34 @@ function useLatestSave(signedIn: boolean): LatestSave | null {
                 listingType: card.listingType === 'rent' ? 'rent' : 'sale',
               }
             : null,
-        );
+        });
       })
-      .catch(() => {
-        // Chrome, not a task: the row simply does not render.
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setState({ save: null, loading: false });
       });
     return () => controller.abort();
   }, [signedIn]);
 
-  return save;
+  return state;
 }
 
 /** "More homes like the ones you saved" (#364): follows the latest save, not the intent control.
  *  Hidden with no save, no matching listings, or a failed fetch. The copy states the reason only. */
 function SavedLikeRow({
   save,
+  saveLoading,
   savedPropertyIds,
 }: {
   save: LatestSave | null;
+  saveLoading: boolean;
   savedPropertyIds: Set<string>;
 }) {
-  const { listings, total, loading } = useCarouselListings(
+  const {
+    listings,
+    total,
+    loading: searching,
+  } = useCarouselListings(
     {
       city: save?.city,
       state: save?.state,
@@ -508,21 +523,26 @@ function SavedLikeRow({
       pageSize: CAROUSEL_PAGE_SIZE,
     },
     !save,
-    false,
+    saveLoading,
   );
+  const loading = saveLoading || searching;
 
   // The search contract has no exclude filter, so already-saved homes drop out here.
   const visible = listings.filter((l) => !savedPropertyIds.has(l.propertyId));
-  if (!save || (!loading && (total === 0 || visible.length === 0))) return null;
+  if (!loading && (!save || total === 0 || visible.length === 0)) return null;
 
   return (
     <ListingRow
       title="More homes like the ones you saved"
-      href={searchTargetUrl(
-        { kind: 'place', place: { kind: 'city', city: save.city, state: save.state } },
-        save.listingType,
-        new URLSearchParams({ propertyType: save.propertyType }),
-      )}
+      href={
+        save
+          ? searchTargetUrl(
+              { kind: 'place', place: { kind: 'city', city: save.city, state: save.state } },
+              save.listingType,
+              new URLSearchParams({ propertyType: save.propertyType }),
+            )
+          : undefined
+      }
       listings={visible}
       loading={loading}
       max={7}
@@ -792,9 +812,14 @@ export default function HomePageContent() {
   const rentFirst = useRentFirst();
   const { region, loading: regionLoading } = useRegion();
   const { user, savedPropertyIds } = useApp();
-  const latestSave = useLatestSave(Boolean(user));
+  const { save: latestSave, loading: saveLoading } = useLatestSave(Boolean(user));
   const savedLike = user ? (
-    <SavedLikeRow key="saved-like" save={latestSave} savedPropertyIds={savedPropertyIds} />
+    <SavedLikeRow
+      key="saved-like"
+      save={latestSave}
+      saveLoading={saveLoading}
+      savedPropertyIds={savedPropertyIds}
+    />
   ) : null;
 
   const nearYouSale = (
