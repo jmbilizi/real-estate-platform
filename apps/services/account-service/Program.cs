@@ -304,6 +304,9 @@ internal static class Program
         // Waitlist: GET/POST /account/waitlist, DELETE /account/waitlist/{interest}
         app.MapWaitlistRoutes();
 
+        // What I'm looking for: GET /account/looking-for, PUT/DELETE /account/looking-for/{id}
+        app.MapLookingForRoutes();
+
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
         app.MapContactLookupRoutes();

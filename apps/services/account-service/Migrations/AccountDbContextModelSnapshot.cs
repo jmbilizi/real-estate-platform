@@ -602,6 +602,55 @@ namespace AccountService.Migrations
                     b.ToTable("SecureAccountTokens", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.LookingForPreference", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("BathsMin")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BedsMin")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<List<string>>("HomeTypes")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Intent")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlacesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("PriceMax")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PriceMin")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("WhenEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("WhenStart")
+                        .HasColumnType("date");
+
+                    b.HasKey("UserId", "Id");
+
+                    b.ToTable("LookingForPreferences", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.PendingRegistration", b =>
                 {
                     b.Property<Guid>("Id")
