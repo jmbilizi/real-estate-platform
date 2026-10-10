@@ -81,15 +81,19 @@ guide.
 
 9. **A lane writes only inside its own worktree.** `.agents/hooks/lane-boundary.js` refuses an edit
    outside the lane root, an edit into another lane's worktree, and a `git -C` that points at
-   another tree. It also refuses a direct `git worktree remove|move|prune`. Remove a stale worktree
-   with `pnpm run dev:worktree:reclaim`. That script is a dry run by default. It never removes a
-   worktree that has uncommitted changes, holds unpushed commits, was touched in the last 24 hours,
-   or carries a git lock that names a live agent process. Use `--apply` to act and
-   `--older-than <hours>` to change the window. The hook fails open, so it is a guardrail and not a
-   security boundary. A worktree whose branch is merged into `origin/dev`, or whose PR is merged or
-   closed, has no age limit. Reclaim also deletes the local branch of a merged worktree.
-   `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background at every
-   session start (throttled to once per 10 minutes). Run it after a PR merges.
+   another tree. It also refuses a literal `cd` into another lane's worktree. It refuses a shell
+   redirect, `tee`, `cp`, `mv`, `rm`, `touch`, `mkdir` or `sed -i` that names a path in another
+   lane's worktree. A redirect, `tee`, `cp` or `mv` destination outside the lane root is refused
+   too. The hook does not see a path that the shell expands at run time (`$VAR`, `~`, globs) or a
+   write that a script computes itself. It also refuses a direct `git worktree remove|move|prune`.
+   Remove a stale worktree with `pnpm run dev:worktree:reclaim`. That script is a dry run by
+   default. It never removes a worktree that has uncommitted changes, holds unpushed commits, was
+   touched in the last 24 hours, or carries a git lock that names a live agent process. Use
+   `--apply` to act and `--older-than <hours>` to change the window. The hook fails open, so it is a
+   guardrail and not a security boundary. A worktree whose branch is merged into `origin/dev`, or
+   whose PR is merged or closed, has no age limit. Reclaim also deletes the local branch of a merged
+   worktree. `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background
+   at every session start (throttled to once per 10 minutes). Run it after a PR merges.
 
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
