@@ -100,6 +100,10 @@ guide.
    `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
    `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
 
+   A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
+   `pnpm run infra:local:certs:ensure` first. The second command copies the bundle from the main
+   checkout. A local image build fails fast with the same instruction if the bundle is missing.
+
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
     descriptions, commit messages, and replies to the user. See
@@ -155,6 +159,7 @@ pnpm run pre-commit                    # Fast validation (format+lint+type-check
 pnpm run pre-push                      # Full validation (+ test + build)
 pnpm run dev:worktree:reclaim          # Classify and remove stale worktrees (dry run by default)
 pnpm install && pnpm run hooks:setup   # First-time setup
+pnpm run infra:local:certs:ensure      # New worktree: copy the enterprise CA bundle before an image build
 pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:disk | :images:list
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
 pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
