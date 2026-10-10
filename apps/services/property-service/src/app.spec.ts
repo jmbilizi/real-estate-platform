@@ -534,6 +534,34 @@ describe('GET /listings', () => {
   });
 });
 
+describe('GET /listings/suggest (#781)', () => {
+  it('answers a prefix with the shared-cache TTL, ahead of /listings/:id', async () => {
+    const pool = createFakePool(() => [
+      { name: 'ROCKVILLE', city: 'ROCKVILLE', state: 'md', zip: null },
+    ]);
+
+    const response = await request(createApp({ pool })).get('/listings/suggest?q=rock').expect(200);
+
+    expect(response.body.suggestions[0]).toEqual({
+      kind: 'city',
+      name: 'Rockville',
+      city: 'Rockville',
+      state: 'MD',
+    });
+    expect(response.headers['cache-control']).toBe(
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=60',
+    );
+  });
+
+  it.each(['', '?q=r', '?q=rock&limit=99', '?q=rock&x=1'])('rejects %p with 400', async (qs) => {
+    const response = await request(createApp({ pool: createSearchPool() })).get(
+      `/listings/suggest${qs}`,
+    );
+
+    expect(response.status).toBe(400);
+  });
+});
+
 describe('GET /listings/meta', () => {
   it('is reachable without running a search and carries the longer shared-cache TTL', async () => {
     const response = await request(createApp({ pool: createSearchPool([], 12) }))
@@ -972,6 +1000,7 @@ describe('GET /openapi.json', () => {
       '/listings/map',
       '/listings/meta',
       '/listings/neighborhoods',
+      '/listings/suggest',
       '/listings/zips',
       '/listings/{id}',
       '/listings/{id}/card',

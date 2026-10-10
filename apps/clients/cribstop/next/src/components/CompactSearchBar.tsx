@@ -10,6 +10,7 @@ import {
   formatLocationLabel,
   highlightMatch,
 } from '@/lib/search-utils';
+import { fetchWhereSuggestions, SUGGESTIONS_UNAVAILABLE_MESSAGE } from '@/lib/where-suggest';
 import { searchableSuggestions, searchTargetFor, searchTargetUrl } from '@/lib/search-place';
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { SearchPanel } from '@/lib/store/types';
@@ -780,6 +781,8 @@ export default function CompactSearchBar({
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  /** The suggestion request failed (#781). Distinct from a request that found nothing. */
+  const [suggestionsUnavailable, setSuggestionsUnavailable] = useState(false);
   const [recentSearches, setRecentSearches] = useState<any[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -1118,6 +1121,7 @@ export default function CompactSearchBar({
                 if (typeof setLocation === 'function') setLocation(val);
                 setSelectedSuggestion(null);
                 if (debounceRef.current) clearTimeout(debounceRef.current);
+                setSuggestionsUnavailable(false);
                 if (!val.trim() || val.trim().length < 2) {
                   setSuggestions([]);
                   setIsDropdownOpen(true);
@@ -1126,10 +1130,11 @@ export default function CompactSearchBar({
                 setLoadingSuggestions(true);
                 debounceRef.current = setTimeout(async () => {
                   try {
-                    const resp = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
-                    setSuggestions(resp.ok ? searchableSuggestions(await resp.json()) : []);
-                  } catch {
-                    setSuggestions([]);
+                    const result = await fetchWhereSuggestions(val);
+                    setSuggestionsUnavailable(result.status === 'unavailable');
+                    setSuggestions(
+                      result.status === 'ok' ? searchableSuggestions(result.suggestions) : [],
+                    );
                   } finally {
                     setLoadingSuggestions(false);
                     setIsDropdownOpen(true);
@@ -1216,7 +1221,9 @@ export default function CompactSearchBar({
             <div className="px-5 py-3 text-ink-subtle text-sm">Loading?</div>
           )}
           {location.trim().length >= 2 && !loadingSuggestions && suggestions.length === 0 && (
-            <div className="px-5 py-3 text-ink-subtle text-sm">No locations found</div>
+            <div className="px-5 py-3 text-ink-subtle text-sm">
+              {suggestionsUnavailable ? SUGGESTIONS_UNAVAILABLE_MESSAGE : 'No locations found'}
+            </div>
           )}
           {suggestions.map((s) => (
             <button
@@ -1685,6 +1692,7 @@ export default function CompactSearchBar({
                         if (typeof setLocation === 'function') setLocation(val);
                         setSelectedSuggestion(null);
                         if (debounceRef.current) clearTimeout(debounceRef.current);
+                        setSuggestionsUnavailable(false);
                         if (!val.trim() || val.trim().length < 2) {
                           setSuggestions([]);
                           setIsDropdownOpen(true);
@@ -1693,10 +1701,13 @@ export default function CompactSearchBar({
                         setLoadingSuggestions(true);
                         debounceRef.current = setTimeout(async () => {
                           try {
-                            const r = await fetch(`/api/geocode?q=${encodeURIComponent(val)}`);
-                            setSuggestions(r.ok ? searchableSuggestions(await r.json()) : []);
-                          } catch {
-                            setSuggestions([]);
+                            const result = await fetchWhereSuggestions(val);
+                            setSuggestionsUnavailable(result.status === 'unavailable');
+                            setSuggestions(
+                              result.status === 'ok'
+                                ? searchableSuggestions(result.suggestions)
+                                : [],
+                            );
                           } finally {
                             setLoadingSuggestions(false);
                             setIsDropdownOpen(true);
@@ -1792,7 +1803,11 @@ export default function CompactSearchBar({
                 {(location || '').trim().length >= 2 &&
                   !loadingSuggestions &&
                   suggestions.length === 0 && (
-                    <div className="px-5 py-3 text-ink-subtle text-sm">No locations found</div>
+                    <div className="px-5 py-3 text-ink-subtle text-sm">
+                      {suggestionsUnavailable
+                        ? SUGGESTIONS_UNAVAILABLE_MESSAGE
+                        : 'No locations found'}
+                    </div>
                   )}
                 {suggestions.map((s) => (
                   <button

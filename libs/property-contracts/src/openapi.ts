@@ -4,6 +4,7 @@ import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
+import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
 import { listingsMetaSchema } from './listings-meta';
 import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
 import {
@@ -109,6 +110,7 @@ function componentSchemas() {
   registry.add(propertyPageSchema, { id: 'PropertyPage' });
   registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(suggestResponseSchema, { id: 'SuggestResponse' });
   registry.add(neighborhoodsResponseSchema, { id: 'NeighborhoodsResponse' });
   registry.add(zipsResponseSchema, { id: 'ZipsResponse' });
   registry.add(brokersResponseSchema, { id: 'BrokersResponse' });
@@ -335,6 +337,32 @@ export function toOpenApiDocument() {
               description: 'Dataset freshness and provenance.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ListingsMeta' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/suggest': {
+        get: {
+          operationId: 'getListingSuggestions',
+          summary: 'Place suggestions',
+          description:
+            'Prefix match on the city, ZIP and neighborhood of publishable listings, for the ' +
+            'Where field. A ZIP is suggested only for a digit prefix. Cities rank first by ' +
+            'listing count. At most `limit` rows come back.',
+          parameters: searchParameters(suggestRequestSchema),
+          responses: {
+            '200': {
+              description: 'Matching places.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SuggestResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
             '500': serverErrorResponse,

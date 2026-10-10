@@ -1,5 +1,7 @@
 import type { BuiltUrl } from './nominatim';
 import { BRAND } from '@/lib/brand';
+import { createNominatimGate } from './nominatim-gate';
+import { createReadCache } from './read-cache';
 
 /**
  * The one way this app talks to Nominatim.
@@ -32,9 +34,36 @@ const NOMINATIM_TIMEOUT_MS = 10_000;
  */
 const CACHE_SECONDS = 86_400;
 
-export async function proxyNominatim(built: BuiltUrl, label: string): Promise<Response> {
+/**
+ * Policy compliance (#781): at most 1 upstream request per second, a cache, an identifying
+ * User-Agent. Where autocomplete does not reach here: see `lib/where-suggest.ts`.
+ */
+const defaultGate = createNominatimGate();
+const cache = createReadCache();
+
+/** Test seam: drops stored answers. */
+export function clearNominatimCache(): void {
+  cache.clear();
+}
+
+export async function proxyNominatim(
+  built: BuiltUrl,
+  label: string,
+  gate: { acquire: () => Promise<boolean> } = defaultGate,
+): Promise<Response> {
   if (!built.ok) {
     return Response.json({ error: built.error }, { status: 400 });
+  }
+
+  const hit = cache.get(built.url);
+  if (hit) {
+    return Response.json(hit.read.body, {
+      headers: { 'Cache-Control': `public, max-age=${hit.remainingSeconds}` },
+    });
+  }
+
+  if (!(await gate.acquire())) {
+    return softFailure(label, 'rate limit: queue full', 429);
   }
 
   try {
@@ -58,7 +87,9 @@ export async function proxyNominatim(built: BuiltUrl, label: string): Promise<Re
       return softFailure(label, `upstream ${upstream.status}`);
     }
 
-    return Response.json(await upstream.json(), {
+    const body = await upstream.json();
+    cache.set(built.url, { body, browserMaxAgeSeconds: CACHE_SECONDS }, CACHE_SECONDS);
+    return Response.json(body, {
       headers: { 'Cache-Control': `public, max-age=${CACHE_SECONDS}` },
     });
   } catch (e) {
@@ -74,7 +105,7 @@ export async function proxyNominatim(built: BuiltUrl, label: string): Promise<Re
  * throwing, matching `/api/zcta` and `/api/overpass`. It is deliberately **not** cached: a
  * transient upstream failure must not be reused for a day.
  */
-function softFailure(label: string, cause: unknown): Response {
+function softFailure(label: string, cause: unknown, status = 502): Response {
   console.error(`[Nominatim] ${label} failed`, cause);
-  return Response.json({ error: 'Upstream unavailable' }, { status: 502 });
+  return Response.json({ error: 'Upstream unavailable' }, { status });
 }
