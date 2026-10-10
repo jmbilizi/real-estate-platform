@@ -82,13 +82,18 @@ export function createAnalyticsPool(): Pool {
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set.');
   }
-  return new Pool({
+  const analyticsPool = new Pool({
     connectionString,
     max: 2,
     statement_timeout: 1000,
     idle_in_transaction_session_timeout: 2000,
     connectionTimeoutMillis: 1000,
   });
+  // An idle connection that drops emits 'error'. Without a handler the process would crash.
+  analyticsPool.on('error', (error) => {
+    console.error('Analytics pool error:', error);
+  });
+  return analyticsPool;
 }
 
 export async function closePool(): Promise<void> {

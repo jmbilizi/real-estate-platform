@@ -52,11 +52,35 @@ export async function recordAnalyticsEvent(
   );
 }
 
+const PURGE_BATCH = 5000;
+
+/** Deletes in batches, so each statement stays inside the analytics pool's 1 s statement timeout. */
 export async function purgeRawAnalyticsEvents(db: ReadClient): Promise<void> {
-  await db.query(
-    "DELETE FROM analytics_events WHERE occurred_at < now() - ($1 || ' days')::interval",
-    [String(RAW_RETENTION_DAYS)],
-  );
+  for (;;) {
+    const { rows } = await db.query<{ id: string }>(
+      `DELETE FROM analytics_events WHERE id IN (
+         SELECT id FROM analytics_events
+         WHERE occurred_at < now() - make_interval(days => $1::int) LIMIT $2
+       ) RETURNING id`,
+      [RAW_RETENTION_DAYS, PURGE_BATCH],
+    );
+    if (rows.length < PURGE_BATCH) return;
+  }
+}
+
+let purgeTimerStarted = false;
+
+function startPurgeTimer(db: ReadClient): void {
+  if (purgeTimerStarted) return;
+  purgeTimerStarted = true;
+  const run = (): void => {
+    purgeRawAnalyticsEvents(db).catch((error: unknown) => {
+      console.error('Analytics purge failed:', error);
+    });
+  };
+  // The first run is soon after start, so a pod that restarts often still purges.
+  setTimeout(run, 30_000).unref();
+  setInterval(run, PURGE_INTERVAL_MS).unref();
 }
 
 export interface AnalyticsRouterDeps {
@@ -70,11 +94,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   const enabled = deps.enabled ?? (() => analyticsEnabled());
   let inFlight = 0;
   // A timer, not a per-write check, so an idle pod still deletes rows older than 30 days.
-  setInterval(() => {
-    purgeRawAnalyticsEvents(deps.pool).catch((error: unknown) => {
-      console.error('Analytics purge failed:', error);
-    });
-  }, PURGE_INTERVAL_MS).unref();
+  startPurgeTimer(deps.pool);
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');
@@ -102,6 +122,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
       return;
     }
     if (inFlight >= MAX_IN_FLIGHT) {
+      console.warn('Analytics event dropped: too many in flight.');
       res.status(204).end();
       return;
     }
