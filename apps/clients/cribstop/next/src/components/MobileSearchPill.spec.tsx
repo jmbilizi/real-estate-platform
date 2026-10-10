@@ -15,7 +15,6 @@ function appValue(searchLocation = '', searchListingType = 'sale') {
     searchLocation,
     searchListingType,
     activeTab: 'homes',
-    searchDateRange: { start: null, end: null },
     setMobileSearchOpen: jest.fn(),
   };
 }
@@ -59,10 +58,10 @@ describe('MobileSearchPill after hydration', () => {
 
   // #519: the pill names the listing type the results apply, including the `type=all` override.
   it.each([
-    ['sale', 'For Sale · Any dates'],
-    ['rent', 'For Rent · Any dates'],
-    ['all', 'All listings · Any dates'],
-    ['sold', 'Sold · Any dates'],
+    ['sale', 'For Sale'],
+    ['rent', 'For Rent'],
+    ['all', 'All listings'],
+    ['sold', 'Sold'],
   ])('shows the %s listing type', (searchListingType, text) => {
     mockUseApp.mockReturnValue(appValue('Ashburn, VA', searchListingType));
     const { getByText } = render(<MobileSearchPill />);
