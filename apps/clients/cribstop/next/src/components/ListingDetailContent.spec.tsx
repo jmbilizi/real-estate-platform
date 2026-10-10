@@ -641,35 +641,33 @@ describe('ListingDetailContent — one home, several MLS records (#716)', () => 
     expect(screen.queryByText(/Also listed as/i)).toBeNull();
   });
 
-  it('shows the MLS day count when the feed carries it', async () => {
+  it('shows the MLS day count near the price, not in the facts block', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: 12, listedSince: '2026-08-01T00:00:00.000Z' } }),
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.getByText('Days on Market')).toBeInTheDocument();
+    expect(screen.getByTestId('market-time')).toHaveTextContent('12 days on Cribstop');
+    expect(screen.queryByText('Days on Market')).toBeNull();
     expect(screen.queryByText('Listed since')).toBeNull();
   });
 
-  it('shows "Listed since" with the oldest list date when the day count is null', async () => {
+  it('shows the oldest list date when the day count is null', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: null, listedSince: '2026-08-01T00:00:00.000Z' } }),
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.getByText('Listed since')).toBeInTheDocument();
-    expect(screen.getByText('Aug 1, 2026')).toBeInTheDocument();
-    expect(screen.queryByText('Days on Market')).toBeNull();
+    expect(screen.getByTestId('market-time')).toHaveTextContent('Listed Aug 1, 2026');
   });
 
-  it('shows neither tile when the feed gives no day count and no list date', async () => {
+  it('shows no line when the day count is hidden (#146) and there is no list date', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: null, listedSince: null } }),
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.queryByText('Days on Market')).toBeNull();
-    expect(screen.queryByText('Listed since')).toBeNull();
+    expect(screen.queryByTestId('market-time')).toBeNull();
   });
 });
 

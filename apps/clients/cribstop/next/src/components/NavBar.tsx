@@ -133,9 +133,9 @@ export default function NavBar() {
     return () => window.removeEventListener('keydown', handler);
   }, [headerExpanded, setHeaderExpanded]);
 
-  const openModal = (mode: 'login' | 'signup') => {
+  const openModal = () => {
     const params = new URLSearchParams(window.location.search);
-    params.set('modal', mode);
+    params.set('modal', 'login');
     router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -421,7 +421,7 @@ export default function NavBar() {
                   surface="nav"
                   label="Sign in or sign up"
                   icon={ACCOUNT_ICON}
-                  onClick={() => openModal('login')}
+                  onClick={() => openModal()}
                 />
               )}
             </div>
@@ -431,7 +431,7 @@ export default function NavBar() {
                 <NavMenu signedIn={!!user} onAuth={openModal} onLogout={logout} />
               </span>
             ) : (
-              <SkeletonBlock className="h-6 w-6 shrink-0 rounded" />
+              <SkeletonBlock className="h-6 w-[4.5px] shrink-0 rounded" />
             )}
           </div>
         </div>

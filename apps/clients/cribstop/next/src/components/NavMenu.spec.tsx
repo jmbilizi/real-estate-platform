@@ -22,11 +22,11 @@ describe('NavMenu', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('lists Log in and Sign up first when signed out', () => {
+  it('lists one Sign in or sign up item first when signed out', () => {
     const { trigger } = setup(false);
     fireEvent.click(trigger);
 
-    expect(labels().slice(0, 3)).toEqual(['Log in', 'Sign up', 'Help']);
+    expect(labels().slice(0, 3)).toEqual(['Sign in or sign up', 'Help', 'About']);
     expect(labels()).not.toContain('Log out');
   });
 
@@ -35,15 +35,15 @@ describe('NavMenu', () => {
     fireEvent.click(trigger);
 
     expect(labels().slice(0, 4)).toEqual(['Account', 'Saved homes', 'Log out', 'Help']);
-    expect(labels()).not.toContain('Log in');
+    expect(labels()).not.toContain('Sign in or sign up');
   });
 
-  it('opens the auth modal in the chosen mode and closes the menu', () => {
+  it('opens the auth modal and closes the menu', () => {
     const { trigger, onAuth } = setup(false);
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign up' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in or sign up' }));
 
-    expect(onAuth).toHaveBeenCalledWith('signup');
+    expect(onAuth).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 

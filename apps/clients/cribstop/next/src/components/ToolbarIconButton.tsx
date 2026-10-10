@@ -101,9 +101,12 @@ export const HEART_ICON = (
   </svg>
 );
 
-/** The more (3 vertical dots) icon. */
+/**
+ * The more (3 vertical dots) icon. The viewBox is cropped to the dots, so the box has no empty
+ * space on its right: the navbar trigger sits flush with the page padding.
+ */
 export const MORE_ICON = (
-  <svg {...ICON_PROPS} fill="currentColor" stroke="none">
+  <svg width={4.5} height={22} viewBox="10.2 3.2 3.6 17.6" fill="currentColor" aria-hidden="true">
     <circle cx="12" cy="5" r="1.8" />
     <circle cx="12" cy="12" r="1.8" />
     <circle cx="12" cy="19" r="1.8" />

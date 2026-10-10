@@ -314,6 +314,9 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                 <p className="text-xl font-semibold tracking-[-0.18px]">
                   <Bar className="w-1/2" />
                 </p>
+                <p className="mt-1 text-sm">
+                  <Bar className="w-1/4" />
+                </p>
                 <h1 className="mt-2 text-base font-semibold tracking-tight text-ink">
                   <Bar className="w-3/5" />
                 </h1>
