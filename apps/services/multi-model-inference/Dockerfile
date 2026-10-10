@@ -1,5 +1,8 @@
 # Build stage - install dependencies
 ARG PYTHON_VERSION=3.11
+# The one declaration of the bake decision (#301). Both stages re-declare it with no default, so
+# they cannot disagree. Change the default HERE or pass --build-arg. Never add a default in a stage.
+ARG PRE_DOWNLOAD_MODEL=true
 FROM python:${PYTHON_VERSION}-slim AS build
 ARG COPY_CERTS=false
 WORKDIR /build
@@ -40,8 +43,9 @@ RUN pip install --no-cache-dir .
 # Pre-download the ML model during build so the container starts offline.
 # fastembed caches to /opt/models; at runtime it finds the files and skips
 # the network call to HuggingFace entirely.
-# Set PRE_DOWNLOAD_MODEL=false for local dev when HuggingFace is unreachable
+# Pass --build-arg PRE_DOWNLOAD_MODEL=false for local dev when HuggingFace is unreachable
 # (e.g. behind a corporate proxy). The model will be downloaded at first startup instead.
+# The runtime stage reads the same value for MODEL_LOAD_REQUIRED.
 #
 # This deliberately sits BEFORE the application source is copied. It depends only on the
 # dependency install, so an app-code change no longer invalidates it — previously it was the
@@ -51,7 +55,7 @@ RUN pip install --no-cache-dir .
 # MODEL_ID must match sentence_embedder.py's MODEL_ID, and the cache dir must match
 # config.py's model_cache_dir default: if either drifts, the weights are baked into the image
 # but not found at runtime, and the service silently falls back to downloading at startup.
-ARG PRE_DOWNLOAD_MODEL=true
+ARG PRE_DOWNLOAD_MODEL
 ARG MODEL_ID=BAAI/bge-small-en-v1.5
 # HuggingFace rate-limits anonymous downloads per source IP, and GitHub-hosted runners share
 # their egress IPs with the rest of the world — so a 429 here is a routine event, not a defect
@@ -112,8 +116,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 # closed (#37), while an image that downloads at first startup can legitimately fail on a
 # network that blocks HuggingFace and must come up degraded instead of blocking a local
 # deploy (#287). An overlay-level switch would be a second source of truth for one fact.
-# ARG is re-declared here because the earlier one belongs to the build stage.
-ARG PRE_DOWNLOAD_MODEL=true
+# Re-declared with no default, so the value is the global ARG above or the --build-arg.
+ARG PRE_DOWNLOAD_MODEL
 ENV MODEL_LOAD_REQUIRED=${PRE_DOWNLOAD_MODEL}
 
 # Security: Create non-root user
