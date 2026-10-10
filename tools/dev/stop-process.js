@@ -77,6 +77,71 @@ function findListenerPid(port, options = {}) {
 }
 
 /**
+ * Parse `tasklist /FO CSV /NH` output into the set of live Windows PIDs.
+ *
+ * @param {string} output
+ * @returns {Set<number>}
+ */
+function parseTasklistPids(output) {
+  const pids = new Set();
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^"[^"]*","(\d+)"/.exec(line.trim());
+    if (match) pids.add(Number(match[1]));
+  }
+  return pids;
+}
+
+/**
+ * Map MSYS PIDs to Windows PIDs from `ps -W` output. Column 1 is the MSYS PID and column 4 is
+ * WINPID. `taskkill` only knows WINPID. See ticket #288.
+ *
+ * @param {string} output
+ * @returns {Map<number, number>}
+ */
+function parseMsysPsOutput(output) {
+  const map = new Map();
+  for (const line of output.split(/\r?\n/)) {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length < 4) continue;
+    const [msys, , , win] = columns;
+    if (/^\d+$/.test(msys) && /^\d+$/.test(win)) map.set(Number(msys), Number(win));
+  }
+  return map;
+}
+
+/**
+ * Decide which Windows PID an input PID names. A live Windows PID wins. Otherwise a live MSYS PID
+ * maps to its WINPID. Anything else is not found. Never reports success for a PID it cannot name.
+ *
+ * @param {number} pid
+ * @param {{ windowsPids: Set<number>, msysMap: Map<number, number> }} state
+ * @returns {{ pid: number, via: 'windows' | 'msys' } | null}
+ */
+function resolveWindowsPid(pid, state) {
+  if (state.windowsPids.has(pid)) return { pid, via: 'windows' };
+  const mapped = state.msysMap.get(pid);
+  if (mapped !== undefined && state.windowsPids.has(mapped)) return { pid: mapped, via: 'msys' };
+  return null;
+}
+
+/** Read live Windows PIDs and the MSYS map from the host. MSYS data is empty when `ps` is absent. */
+function readWindowsPidState() {
+  const windowsPids = parseTasklistPids(
+    execFileSync('tasklist', ['/FO', 'CSV', '/NH'], {
+      encoding: 'utf-8',
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+  );
+  let msysMap = new Map();
+  try {
+    msysMap = parseMsysPsOutput(execFileSync('ps', ['-W'], { encoding: 'utf-8' }));
+  } catch {
+    // Not running under MSYS. Only Windows PIDs apply.
+  }
+  return { windowsPids, msysMap };
+}
+
+/**
  * Kill one PID and its child processes. Never touches any other process.
  *
  * @param {number} pid
@@ -148,8 +213,29 @@ function main() {
       process.exitCode = 1;
       continue;
     }
-    const killed = killPidTree(pid);
-    console.log(killed ? `Stopped PID ${pid}.` : `PID ${pid}: already stopped.`);
+    let target = pid;
+    if (process.platform === 'win32') {
+      const resolved = resolveWindowsPid(pid, readWindowsPidState());
+      if (resolved === null) {
+        console.error(
+          `PID ${pid}: not found. Nothing was stopped. ` +
+            'On Windows, use the WINPID value (column 4 of `ps -W`), or use --port.',
+        );
+        process.exitCode = 1;
+        continue;
+      }
+      target = resolved.pid;
+      if (resolved.via === 'msys') {
+        console.log(`PID ${pid} is an MSYS PID. Using WINPID ${target}.`);
+      }
+    }
+    const killed = killPidTree(target);
+    if (killed) {
+      console.log(`Stopped PID ${target}.`);
+    } else {
+      console.error(`PID ${target}: not found or could not be stopped.`);
+      process.exitCode = 1;
+    }
   }
 
   for (const port of ports) {
@@ -170,6 +256,9 @@ module.exports = {
   parseWindowsListenerPid,
   parsePosixListenerPid,
   findListenerPid,
+  parseTasklistPids,
+  parseMsysPsOutput,
+  resolveWindowsPid,
   killPidTree,
   stopByPort,
 };

@@ -3,7 +3,55 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseWindowsListenerPid, parsePosixListenerPid, killPidTree } = require('./stop-process');
+const {
+  parseWindowsListenerPid,
+  parsePosixListenerPid,
+  parseTasklistPids,
+  parseMsysPsOutput,
+  resolveWindowsPid,
+  killPidTree,
+} = require('./stop-process');
+
+const TASKLIST_SAMPLE =
+  '"skaffold.exe","37796","Console","1","62,396 K"\r\n"node.exe","100","Console","1","9 K"\r\n';
+const PS_SAMPLE = [
+  '      PID    PPID    PGID     WINPID  TTY  UID    STIME COMMAND',
+  '  4232100       1 4232100      37796 cons0 197609 10:00:00 /c/tools/skaffold',
+].join('\n');
+
+test('parseTasklistPids reads live Windows PIDs from CSV output', () => {
+  assert.deepEqual([...parseTasklistPids(TASKLIST_SAMPLE)], [37796, 100]);
+});
+
+test('parseMsysPsOutput maps the MSYS PID to WINPID', () => {
+  assert.equal(parseMsysPsOutput(PS_SAMPLE).get(4232100), 37796);
+});
+
+test('resolveWindowsPid returns null for an unknown PID', () => {
+  const state = {
+    windowsPids: parseTasklistPids(TASKLIST_SAMPLE),
+    msysMap: parseMsysPsOutput(PS_SAMPLE),
+  };
+  assert.equal(resolveWindowsPid(555, state), null);
+});
+
+test('resolveWindowsPid accepts a live Windows PID', () => {
+  const state = { windowsPids: parseTasklistPids(TASKLIST_SAMPLE), msysMap: new Map() };
+  assert.deepEqual(resolveWindowsPid(37796, state), { pid: 37796, via: 'windows' });
+});
+
+test('resolveWindowsPid maps an MSYS PID to its WINPID (#288)', () => {
+  const state = {
+    windowsPids: parseTasklistPids(TASKLIST_SAMPLE),
+    msysMap: parseMsysPsOutput(PS_SAMPLE),
+  };
+  assert.deepEqual(resolveWindowsPid(4232100, state), { pid: 37796, via: 'msys' });
+});
+
+test('resolveWindowsPid rejects an MSYS PID whose WINPID is gone', () => {
+  const state = { windowsPids: new Set([100]), msysMap: parseMsysPsOutput(PS_SAMPLE) };
+  assert.equal(resolveWindowsPid(4232100, state), null);
+});
 
 const NETSTAT_SAMPLE = [
   '',

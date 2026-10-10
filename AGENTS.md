@@ -77,7 +77,10 @@ guide.
    (`tools/dev/stop-process.js`). It resolves one PID, from the value you pass or from whatever
    listens on the port, and kills only that process tree. It works the same way on Windows, macOS,
    and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
-   workaround that Git Bash's MSYS path conversion otherwise forces.
+   workaround that Git Bash's MSYS path conversion otherwise forces. `ps -W` prints the MSYS PID in
+   column 1 and the Windows PID in column 4 (`WINPID`). `dev:stop` maps an MSYS PID to its WINPID.
+   It exits 1 with "not found" for a PID that does not exist. Prefer `--port` when a port names the
+   process.
 
 9. **A lane writes only inside its own worktree.** `.agents/hooks/lane-boundary.js` refuses an edit
    outside the lane root, an edit into another lane's worktree, and a `git -C` that points at
