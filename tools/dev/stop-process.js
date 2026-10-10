@@ -146,21 +146,23 @@ function readWindowsPidState() {
  *
  * @param {number} pid
  * @param {{ platform?: string }} [options]
- * @returns {boolean} whether a kill was attempted
+ * @returns {{ status: 'stopped' | 'gone' | 'failed', message?: string }}
  */
-function killPidTree(pid, options = {}) {
+function killPidDetailed(pid, options = {}) {
   const platform = options.platform || process.platform;
-  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (!Number.isInteger(pid) || pid <= 0) return { status: 'gone' };
 
   if (platform === 'win32') {
     try {
       // /T kills the process tree; /F forces termination. Scoped to this PID only.
-      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
-    } catch {
-      // Already gone. Cleanup already achieved its goal.
-      return false;
+      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'pipe' });
+    } catch (error) {
+      const text = String(error.stderr || error.stdout || error.message || '').trim();
+      // Exit code 128 is taskkill's "process not found".
+      if (error.status === 128) return { status: 'gone', message: text };
+      return { status: 'failed', message: text };
     }
-    return true;
+    return { status: 'stopped' };
   }
 
   try {
@@ -172,10 +174,15 @@ function killPidTree(pid, options = {}) {
   try {
     process.kill(pid, 'SIGKILL');
   } catch (error) {
-    if (error.code === 'ESRCH') return false; // Already gone.
-    throw error;
+    if (error.code === 'ESRCH') return { status: 'gone' };
+    return { status: 'failed', message: error.message };
   }
-  return true;
+  return { status: 'stopped' };
+}
+
+/** Boolean view of killPidDetailed: true only when a process was stopped. */
+function killPidTree(pid, options = {}) {
+  return killPidDetailed(pid, options).status === 'stopped';
 }
 
 /** Stop whatever is listening on `port`. Returns the PID killed, or null if nothing was there. */
@@ -199,57 +206,76 @@ function parseArgs(argv) {
   return result;
 }
 
-function main() {
-  const { pids, ports } = parseArgs(process.argv.slice(2));
+/**
+ * Stop the PIDs and ports named in `argv`. Returns the exit code.
+ * An already-gone PID exits 0, because cleanup chains depend on it. Only a real kill failure or a
+ * bad argument exits 1.
+ */
+function run(argv, deps = {}) {
+  const platform = deps.platform || process.platform;
+  const readState = deps.readState || readWindowsPidState;
+  const kill = deps.kill || killPidDetailed;
+  const byPort = deps.stopByPort || stopByPort;
+  const log = deps.log || console.log;
+  const warn = deps.warn || console.error;
+
+  const { pids, ports } = parseArgs(argv);
   if (pids.length === 0 && ports.length === 0) {
-    console.error('Usage: stop-process.js [--pid <pid>]... [--port <port>]...');
-    process.exitCode = 1;
-    return;
+    warn('Usage: stop-process.js [--pid <pid>]... [--port <port>]...');
+    return 1;
   }
 
+  let exitCode = 0;
   for (const pid of pids) {
     if (!Number.isInteger(pid) || pid <= 0) {
-      console.error(`Invalid --pid value: ${pid}`);
-      process.exitCode = 1;
+      warn(`Invalid --pid value: ${pid}`);
+      exitCode = 1;
       continue;
     }
     let target = pid;
-    if (process.platform === 'win32') {
-      const resolved = resolveWindowsPid(pid, readWindowsPidState());
+    if (platform === 'win32') {
+      const state = readState();
+      const resolved = resolveWindowsPid(pid, state);
       if (resolved === null) {
-        console.error(
-          `PID ${pid}: not found. Nothing was stopped. ` +
-            'On Windows, use the WINPID value (column 4 of `ps -W`), or use --port.',
-        );
-        process.exitCode = 1;
+        if (state.msysMap.has(pid)) {
+          log(`PID ${pid}: already stopped.`);
+        } else {
+          warn(
+            `PID ${pid}: not found. It never existed or it already exited. Nothing was stopped. ` +
+              'On Windows, use the WINPID value (column 4 of `ps -W`), or use --port.',
+          );
+        }
         continue;
       }
       target = resolved.pid;
       if (resolved.via === 'msys') {
-        console.log(`PID ${pid} is an MSYS PID. Using WINPID ${target}.`);
+        log(`PID ${pid} is an MSYS PID. Using WINPID ${target}.`);
       }
     }
-    const killed = killPidTree(target);
-    if (killed) {
-      console.log(`Stopped PID ${target}.`);
+    const result = kill(target, { platform });
+    if (result.status === 'stopped') {
+      log(`Stopped PID ${target}.`);
+    } else if (result.status === 'gone') {
+      log(`PID ${target}: already stopped.`);
     } else {
-      console.error(`PID ${target}: not found or could not be stopped.`);
-      process.exitCode = 1;
+      warn(`PID ${target}: could not be stopped. ${result.message || ''}`.trim());
+      exitCode = 1;
     }
   }
 
   for (const port of ports) {
-    const pid = stopByPort(port);
+    const pid = byPort(port);
     if (pid === null) {
-      console.log(`Port ${port}: nothing listening.`);
+      log(`Port ${port}: nothing listening.`);
     } else {
-      console.log(`Port ${port}: stopped PID ${pid}.`);
+      log(`Port ${port}: stopped PID ${pid}.`);
     }
   }
+  return exitCode;
 }
 
 if (require.main === module) {
-  main();
+  process.exitCode = run(process.argv.slice(2));
 }
 
 module.exports = {
@@ -260,5 +286,7 @@ module.exports = {
   parseMsysPsOutput,
   resolveWindowsPid,
   killPidTree,
+  killPidDetailed,
+  run,
   stopByPort,
 };
