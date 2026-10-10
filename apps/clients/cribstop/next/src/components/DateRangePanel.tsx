@@ -76,6 +76,7 @@ export function DateRangePanel({
   onClose,
   listingType,
   inline = false,
+  showFlexibility = true,
 }: {
   dateRange: DateRange;
   setDateRange: (v: DateRange) => void;
@@ -90,6 +91,8 @@ export function DateRangePanel({
   onClose: () => void;
   listingType?: 'for-sale' | 'for-rent';
   inline?: boolean;
+  /** Hides the "± days" chips and "Any time". The profile preference stores no flexibility. */
+  showFlexibility?: boolean;
 }) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -293,35 +296,37 @@ export function DateRangePanel({
         {renderMonth(1, false, true, 'hidden sm:block')}
       </div>
 
-      <div className="mt-5 pt-4 border-t border-surface-border">
-        <div className="flex flex-wrap gap-2">
-          {flexOptions.map((opt) => (
+      {showFlexibility && (
+        <div className="mt-5 pt-4 border-t border-surface-border">
+          <div className="flex flex-wrap gap-2">
+            {flexOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDateRange({ ...dateRange, flexibility: opt.value })}
+                className={`rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors whitespace-nowrap ${
+                  dateRange.flexibility === opt.value
+                    ? 'border-ink bg-ink text-white'
+                    : 'border-surface-border text-ink hover:border-ink'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
             <button
-              key={opt.value}
               type="button"
-              onClick={() => setDateRange({ ...dateRange, flexibility: opt.value })}
-              className={`rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors whitespace-nowrap ${
-                dateRange.flexibility === opt.value
-                  ? 'border-ink bg-ink text-white'
-                  : 'border-surface-border text-ink hover:border-ink'
-              }`}
+              onClick={() => {
+                setDateRange({ start: '', end: '', flexibility: 'exact' });
+                setRangePickStep('start');
+                onClose();
+              }}
+              className="rounded-full border border-surface-border px-3.5 py-1.5 text-[13px] font-medium text-ink-muted hover:border-ink hover:text-ink transition-colors whitespace-nowrap"
             >
-              {opt.label}
+              Any time
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              setDateRange({ start: '', end: '', flexibility: 'exact' });
-              setRangePickStep('start');
-              onClose();
-            }}
-            className="rounded-full border border-surface-border px-3.5 py-1.5 text-[13px] font-medium text-ink-muted hover:border-ink hover:text-ink transition-colors whitespace-nowrap"
-          >
-            Any time
-          </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 
