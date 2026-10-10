@@ -53,6 +53,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/notifications/unsubscribe",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/notifications/unsubscribe",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "account-service-svc",
+          "Port": 8080
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 10000,
+        "MinimumThroughput": 4,
+        "SamplingDuration": 60000,
+        "BreakDuration": 10000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/account/{everything}",
       "UpstreamHttpMethod": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       "DownstreamPathTemplate": "/account/{everything}",

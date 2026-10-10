@@ -72,6 +72,10 @@ namespace AccountService.Tests.Integration
             ["POST /account/webhooks/postmark"] = false,
             ["POST /internal/account/introspect"] = false,
             ["POST /internal/account/contacts"] = false,
+            ["POST /internal/account/notification-policy"] = false,
+            ["GET /account/notification-preferences"] = false,
+            ["PUT /account/notification-preferences"] = false,
+            ["POST /notifications/unsubscribe"] = false,
             ["GET /openapi/{documentName}.json"] = false,
         };
 

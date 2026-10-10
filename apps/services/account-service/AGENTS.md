@@ -322,3 +322,39 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - The `LookingForPreferences` migration creates a new empty table, so a plain `CREATE` is safe. An
   index on a populated table needs `CONCURRENTLY` (property-service rule).
 - The limit of 5 is checked in code, not by the database. Two parallel creates can pass 5.
+
+## Notification consent (#694, #783, #769)
+
+- Tables `NotificationPreferences` (key AccountId, Channel, Category) and
+  `NotificationPreferenceAudits` (append-only). The ticket names them `notification_preferences`.
+  The service keeps its PascalCase table names. Neither table has a FK or an address column.
+- A missing row means not opted in. Email `non_transactional` and `sms` default to OFF.
+  `ApplicationUser.EmailNotificationsEnabled` is a profile field. The policy lookup ignores it.
+- The row is the consent record: `Enabled`, `Source` (`user`, `unsubscribe_link`), `UpdatedAt`,
+  `ConsentText` (the wording shown) and `ConsentedAt`. An opt-in needs `consentText`. The text stays
+  after an opt-out. Each change writes an audit row. A repeat that changes nothing writes none.
+- `GET` and `PUT /account/notification-preferences` (`Routes/NotificationPreferences.cs`). Cookie or
+  bearer session. The gateway catch-all carries both. `PUT` takes
+  `{ items: [{ channel, category, enabled, consentText }] }`, 1 to 4 items, all or nothing. Errors:
+  `400` `transactional_not_storable`, `invalid_channel`, `invalid_category`,
+  `consent_text_required`. `409` `sms_requires_consent` for an SMS opt-in.
+- Categories (`Models/NotificationCategories.cs`): `non_transactional` is the only stored category.
+  The policy lookup also accepts `marketing` and `alert` and maps both to it. `transactional` has no
+  row and always answers `allowed: true`. Align these names with `@events/contracts` (#791).
+- `POST /notifications/unsubscribe?t=<token>` (RFC 8058 one-click). No login. The token is the only
+  credential. The route has its own gateway entry with a rate limit. A valid token answers `200`,
+  also on a repeat call and for a deleted account. A bad token answers `400 invalid_token`.
+- Token (`Helpers/UnsubscribeTokenService.cs`): `base64url(v1|accountId|category).base64url(HMAC)`.
+  No address inside. No expiry, so an old mail keeps working. The key is
+  `ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY` (its own key). Only Development and Testing use a fixed dev
+  key. With no key, no token is signed and the lookup answers `allowed: false` for email that needs
+  consent.
+- `POST /internal/account/notification-policy` (`Routes/NotificationPolicy.cs`). Body
+  `{ items: [{ accountId, channel, category }] }`, 1 to 100 items. An unknown channel or category
+  fails the call with `400`. Unknown and soft-deleted accounts are omitted. Each answer holds
+  `allowed`, `suppressed` (the #664 list, email only), `emailConfirmed` and `unsubscribeToken`
+  (email that needs consent only). No gateway route. Hidden from OpenAPI.
+- Tests: `Tests/Integration/NotificationPreferencesEndpointTests.cs`,
+  `Tests/Helpers/UnsubscribeTokenServiceTests.cs`, gateway `AccountNotificationRoutesTests`.
+- Open work: `ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY` is not wired in `infra/` or CI yet. See the
+  ticket comment on #694.

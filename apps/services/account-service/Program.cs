@@ -103,6 +103,18 @@ internal static class Program
             })
             .Validate(options => options.Validate() is null, "EmailCodes configuration is invalid. See EmailCodeOptions.Validate.")
             .ValidateOnStart();
+        builder.Services
+            .AddOptions<UnsubscribeOptions>()
+            .PostConfigure(options =>
+            {
+                // Its own key, never the sign-in key. Any other environment with no key signs no token (#694).
+                var key = builder.Configuration[UnsubscribeOptions.KeyVariable];
+                options.HmacKey = !string.IsNullOrWhiteSpace(key) ? key
+                    : builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing") ? UnsubscribeOptions.DevelopmentKey
+                    : string.Empty;
+            });
+        builder.Services.AddSingleton<UnsubscribeTokenService>();
+        builder.Services.AddScoped<NotificationPreferenceService>();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
 
@@ -307,9 +319,13 @@ internal static class Program
         // What I'm looking for: GET /account/looking-for, PUT/DELETE /account/looking-for/{id}
         app.MapLookingForRoutes();
 
+        // Notification consent: GET/PUT /account/notification-preferences, POST /notifications/unsubscribe (#694)
+        app.MapNotificationPreferenceRoutes();
+
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
         app.MapContactLookupRoutes();
+        app.MapNotificationPolicyRoutes();
 
         // Postmark bounce, spam complaint and subscription-change webhook (#664).
         app.MapPostmarkWebhookRoutes();

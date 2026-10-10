@@ -46,6 +46,10 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<LookingForPreference> LookingForPreferences => Set<LookingForPreference>();
 
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+
+    public DbSet<NotificationPreferenceAudit> NotificationPreferenceAudits => Set<NotificationPreferenceAudit>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -228,6 +232,26 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(p => p.Intent).IsRequired();
             entity.Property(p => p.PlacesJson).HasColumnType("jsonb").IsRequired();
             entity.Property(p => p.HomeTypes).HasColumnType("text[]").IsRequired();
+        });
+
+        // No FK to AspNetUsers, so the consent record outlives the account. The key leads with AccountId.
+        // A missing row means "not opted in". Times are set in code, so the in-memory tests need no SQL default.
+        builder.Entity<NotificationPreference>(entity =>
+        {
+            entity.ToTable("NotificationPreferences");
+            entity.HasKey(p => new { p.AccountId, p.Channel, p.Category });
+            entity.Property(p => p.Source).IsRequired();
+        });
+
+        // Append-only. No FK to AspNetUsers. Holds no email address.
+        builder.Entity<NotificationPreferenceAudit>(entity =>
+        {
+            entity.ToTable("NotificationPreferenceAudits");
+            entity.Property(a => a.AccountId).IsRequired();
+            entity.Property(a => a.Channel).IsRequired();
+            entity.Property(a => a.Category).IsRequired();
+            entity.Property(a => a.Source).IsRequired();
+            entity.HasIndex(a => new { a.AccountId, a.OccurredAt });
         });
 
         // Append-only. No FK to AspNetUsers, so the record outlives a deleted grantor or grantee.
