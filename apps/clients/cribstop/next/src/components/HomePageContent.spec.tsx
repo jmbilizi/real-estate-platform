@@ -776,7 +776,7 @@ describe('HomePageContent', () => {
   });
 
   describe('saved listings row (#364)', () => {
-    const TITLE = 'More homes like the ones you saved';
+    const TITLE = 'More homes in Rockville';
     const savedHome = (listing: ReturnType<typeof aListingCardRow> | null) => ({
       propertyId: 'p-saved',
       listing,

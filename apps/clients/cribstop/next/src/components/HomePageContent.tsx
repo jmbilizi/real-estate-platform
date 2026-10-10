@@ -460,14 +460,14 @@ type LatestSave = {
  * The most recent saved home that has a listing, read once while signed in (#364). Signed out
  * never calls the API. A failed read leaves `null`, so the row hides and never blanks the page.
  */
-function useLatestSave(signedIn: boolean): { save: LatestSave | null; loading: boolean } {
+function useLatestSave(accountKey: string | null): { save: LatestSave | null; loading: boolean } {
   const [state, setState] = useState<{ save: LatestSave | null; loading: boolean }>({
     save: null,
-    loading: signedIn,
+    loading: accountKey !== null,
   });
 
   useEffect(() => {
-    if (!signedIn) {
+    if (!accountKey) {
       setState({ save: null, loading: false });
       return undefined;
     }
@@ -476,7 +476,9 @@ function useLatestSave(signedIn: boolean): { save: LatestSave | null; loading: b
     listRecentSavedHomes(SAVED_LOOKBACK, controller.signal)
       .then((homes) => {
         // A sold home has no side to browse by, so the latest rent or sale save wins.
-        const card = homes.find((h) => h.listing && h.listing.listingType !== 'sold')?.listing;
+        const card = homes.find(
+          (h) => h.listing?.city && h.listing.state && h.listing.listingType !== 'sold',
+        )?.listing;
         setState({
           loading: false,
           save: card
@@ -489,17 +491,19 @@ function useLatestSave(signedIn: boolean): { save: LatestSave | null; loading: b
             : null,
         });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
+        // The row stays hidden. Log a real failure so a broken endpoint is visible.
+        console.warn('Saved homes row: read failed', err);
         setState({ save: null, loading: false });
       });
     return () => controller.abort();
-  }, [signedIn]);
+  }, [accountKey]);
 
   return state;
 }
 
-/** "More homes like the ones you saved" (#364): follows the latest save, not the intent control.
+/** "More homes in {city}" (#364): follows the latest save, not the intent control.
  *  Hidden with no save, no matching listings, or a failed fetch. The copy states the reason only. */
 function SavedLikeRow({
   save,
@@ -533,7 +537,8 @@ function SavedLikeRow({
 
   return (
     <ListingRow
-      title="More homes like the ones you saved"
+      // The saved read has not settled yet, so no city exists. The skeleton shows the generic title.
+      title={save ? `More homes in ${save.city}` : 'More homes like the ones you saved'}
       href={
         save
           ? searchTargetUrl(
@@ -812,7 +817,7 @@ export default function HomePageContent() {
   const rentFirst = useRentFirst();
   const { region, loading: regionLoading } = useRegion();
   const { user, savedPropertyIds } = useApp();
-  const { save: latestSave, loading: saveLoading } = useLatestSave(Boolean(user));
+  const { save: latestSave, loading: saveLoading } = useLatestSave(user?.email ?? null);
   const savedLike = user ? (
     <SavedLikeRow
       key="saved-like"
