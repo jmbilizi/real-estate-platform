@@ -222,6 +222,11 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a
   committed base and misses uncommitted work.
+- `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
+  for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
+  `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
+  `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
+  `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
