@@ -740,7 +740,7 @@ differentiated by scope and role.
 
 - Account service manages users, roles, and auth credentials (cookies, opaque bearer tokens, API
   keys).
-- Listings service provides CRUD for communities, properties, units, listings with hierarchical
+- Property service provides CRUD for communities, properties, units, listings with hierarchical
   queries, plus property relationship claims (Section 3.2), Bright MLS ingestion/sync, and saved
   searches.
 - Messaging service exposes REST and WebSocket endpoints for chat lifecycle, message CRUD, and

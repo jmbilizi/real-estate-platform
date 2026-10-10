@@ -102,6 +102,22 @@ guide.
     the tool works, do nothing. If it fails, stop and report a `human-action` item. The scripts are
     idempotent: they read the current state and write only what is missing.
 
+12. **Service-owned libraries carry domain-scoped package names; apps carry unscoped deployment identities.**
+    A **contracts library** belongs in `libs/` only if another deployable would duplicate the file to talk
+    to that service correctly. Placement test: does a **caller** need this to **construct a request or
+    interpret a response** on the wire? Belongs in library. Does only the owning service enforce it? Stays
+    in the service. The library owns request/response **data shapes**, enums, and derived types. It never
+    owns HTTP routing, OpenAPI documents, SQL, config, clocks, randomness, or anything that only the
+    owning service needs. Exactly one service owns each contracts library. If two services share a shape,
+    one owns it and the other depends on it — do not create a shared `common` library. **Naming:** a
+    service-owned library is scoped by the **domain** it describes (`@property/contracts`,
+    `@account/contracts`), not by the service name or brand. An app is **never** a scoped package and
+    carries a single unscoped name (`property-service`, `api-gateway`, `cribstop-web`) byte-identical
+    across Nx project name, `package.json` name, container image, `skaffold.yaml` artifact, and
+    `infra/deploy-control.yaml` key. Everything is `"private": true`; internal dependencies are
+    `workspace:*`. See [Workspace Naming & Shared Libraries](#workspace-naming--shared-libraries) in
+    the Deep Reference for the full decision and alternatives.
+
 ## Writing Standard (ASD-STE100)
 
 Every agent writes in Simplified Technical English. The rules that matter most here:
@@ -909,6 +925,65 @@ Automatically cancels outdated runs when new commits pushed.
 
 **CRITICAL**: `auto-tag-projects.js` and `setup-dotnet-projects.js` preserve original BOM and line
 endings when modifying JSON files. If you modify these scripts, maintain this behavior.
+
+## Workspace Naming & Shared Libraries
+
+Service-owned libraries and applications follow distinct naming conventions because they serve different roles.
+
+### Service-Owned Libraries: Domain Scope
+
+A **contracts library** belongs in `libs/` only if another deployable needs to read it to talk to that service correctly. **Placement test:** Does a caller need this to construct a request or interpret a response on the wire? Place it in the library. Does only the owning service enforce it? Keep it in the service.
+
+**Library content rules:**
+
+- **Belongs in library:** Request/response/error **data shapes**, enums, and types derived from them.
+- **Does not belong in library:** HTTP routing, OpenAPI documents, SQL, config, environment access, clocks, randomness, and anything only the owning service needs to enforce its own invariants. A caller that cannot observe it on the wire does not need it.
+
+**Ownership:** Exactly one service owns each contracts library. If two services need the same shape, one of them owns it and the other depends on it — do not create a shared `common` library to avoid choosing an owner.
+
+**Naming:** Service-owned libraries are scoped by the **domain they describe**, not the service name or consumer:
+
+- `@property/contracts` — Property service library (domain = Property)
+- `@account/contracts` — Account service library (domain = Account)
+- `@connect/contracts` — Connect service library (domain = Connect)
+
+The domain is the stable concept; the service that implements it is a deployment detail that can be split or renamed without invalidating the contract's name.
+
+**Three scoping alternatives were considered and rejected:**
+
+1. **Rejected: `@property-service/contracts`** (service scope) — Names the deployable rather than domain. Splitting or renaming the service invalidates the contract's name.
+2. **Rejected: `@cribstop/property-contracts`** (organisation scope) — Conventional npm practice, but `cribstop` is a **consumer brand** and also names the web client, so the scope misreads as "contracts for Cribstop client". Eliminates that misreading.
+
+**Arguments raised and accepted against domain scope:**
+
+- It departs from npm convention (scope = publisher, not subject). Accepted: nothing here is published, so that axis carries no information anyway.
+- It multiplies scopes in `.npmrc`, access control, Renovate, and Dependabot configs. Accepted: those do not apply while every internal dependency is `workspace:*` and nothing is published. Revisit only if publication becomes real.
+- Generic single-word scopes weaken dependency-confusion defenses. Mitigated: `workspace:*` makes pnpm resolve internally and fail if the package is missing, and `"private": true` keeps us off registries in both directions. If publication ever becomes required, renaming scopes is the cost.
+
+**Residual risk:** If these packages are ever published, a generic scope like `@property` may not be obtainable—it is not verified as available. This convention defers that bill to that moment: packages are `workspace-private` by rule, so publication is not a scenario this convention needs to survive.
+
+### Deployable Applications: Unscoped Identity
+
+An app is **never** a scoped package. Its name is a **deployment identity**, and it must be **one string, byte-identical in every place that keys on it:**
+
+- Nx project name
+- `package.json` name
+- Container image
+- `skaffold.yaml` artifact
+- `infra/deploy-control.yaml` key
+- Kubernetes resource prefix
+
+Unscoped, kebab-case, named for what the thing is: `property-service`, `api-gateway`, `cribstop-web`.
+
+Two names for one deployable is the same silent-omission class as a service missing from `skaffold.yaml` — nothing errors, it just does not line up.
+
+### Naming Rules Both Apply To
+
+- **Nx project name == `package.json` name, always.** When these differ, `prune-lockfile` drops a library's own dependencies from a consumer's pruned lockfile (Nx 22.0.1 limitation), breaking `--frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+- **Everything is `"private": true`.** These are internal identifiers, not registry entries. Nothing in this workspace is published, and the naming rule above is only sound while that stays true.
+- **Every internal dependency is declared `workspace:*`.** Never a semver range. `workspace:*` makes pnpm resolve from the workspace and fail loudly if the package is missing, instead of silently reaching a public registry for a scope we do not own. This is the structural guard that makes generic scopes safe; it is not optional.
+- **The brand never appears in a partner-visible artifact.** OpenAPI `info.title`, gateway Swagger keys, and gateway URL namespaces are named for the **service domain** (`Property Service`, key `Property`, `/property/*`), never `Cribstop…`.
+- **After the next library rename (#64), there are no `@cribstop/*` packages left.** The brand lives in the web client's deployment identity (`cribstop-web`) and in consumer-facing UI, nowhere else. Do not reintroduce it as a scope.
 
 ### Formatting Commands
 
