@@ -49,10 +49,18 @@ namespace AccountService.Tests.Routes
         public void ApplicationUser_DefaultNotificationPreferences_ShouldMatchSpec()
         {
             var user = new ApplicationUser();
-            user.EmailNotificationsEnabled.Should().BeTrue();
+            user.EmailNotificationsEnabled.Should().BeFalse();
             user.SmsNotificationsEnabled.Should().BeFalse();
             user.PushNotificationsEnabled.Should().BeTrue();
             user.MarketingOptIn.Should().BeFalse();
+        }
+
+        [Fact]
+        public void EmailNotificationsEnabled_ColumnDefault_ShouldBeFalse()
+        {
+            var property = db.Model.FindEntityType(typeof(ApplicationUser))!
+                .FindProperty(nameof(ApplicationUser.EmailNotificationsEnabled))!;
+            property.GetDefaultValue().Should().Be(false);
         }
 
         [Fact]

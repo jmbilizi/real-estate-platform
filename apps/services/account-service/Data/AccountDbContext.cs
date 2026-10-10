@@ -120,7 +120,7 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
                 .IsRequired(false);
 
             // Notification channel toggles — stored directly on the user row
-            entity.Property(u => u.EmailNotificationsEnabled).HasDefaultValue(true);
+            entity.Property(u => u.EmailNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.SmsNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.PushNotificationsEnabled).HasDefaultValue(true);
             entity.Property(u => u.MarketingOptIn).HasDefaultValue(false);

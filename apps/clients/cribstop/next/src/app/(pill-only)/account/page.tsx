@@ -176,7 +176,7 @@ function ProfileSection() {
   const [bio, setBio] = useState(user?.bio || '');
   const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth || '');
   const [emailNotifications, setEmailNotifications] = useState(
-    user?.emailNotificationsEnabled ?? true,
+    user?.emailNotificationsEnabled ?? false,
   );
   const [pushNotifications, setPushNotifications] = useState(
     user?.pushNotificationsEnabled ?? true,
@@ -189,7 +189,7 @@ function ProfileSection() {
     setLastName(p.lastName || '');
     setBio(p.bio || '');
     setDateOfBirth(p.dateOfBirth || '');
-    setEmailNotifications(p.emailNotificationsEnabled ?? true);
+    setEmailNotifications(p.emailNotificationsEnabled ?? false);
     setPushNotifications(p.pushNotificationsEnabled ?? true);
     setSmsNotifications(p.smsNotificationsEnabled ?? false);
     setMarketingOptIn(p.marketingOptIn ?? false);
@@ -261,7 +261,7 @@ function ProfileSection() {
     setLastName(user?.lastName || '');
     setBio(user?.bio || '');
     setDateOfBirth(user?.dateOfBirth || '');
-    setEmailNotifications(user?.emailNotificationsEnabled ?? true);
+    setEmailNotifications(user?.emailNotificationsEnabled ?? false);
     setPushNotifications(user?.pushNotificationsEnabled ?? true);
     setSmsNotifications(user?.smsNotificationsEnabled ?? false);
     setMarketingOptIn(user?.marketingOptIn ?? false);
@@ -345,7 +345,7 @@ function ProfileSection() {
           <div className="space-y-3">
             <ToggleField
               label="Email notifications"
-              description="New listings, price drops, saved search alerts"
+              description="Email with new listings, price drops and saved search alerts. Unsubscribe in any email or turn this off here."
               checked={emailNotifications}
               onChange={setEmailNotifications}
               disabled={!editing}
