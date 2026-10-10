@@ -305,3 +305,20 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - `DnsMailDomainResolver` (DnsClient) checks the domain. A timeout or DNS error fails open. It does
   not block disposable domains. Tests use `FakeMailDomainResolver` and never query DNS.
 - Nothing logs the address or the body.
+
+## What I'm looking for (#768)
+
+- `GET /account/looking-for`, `PUT` and `DELETE /account/looking-for/{id}` (`Routes/LookingFor.cs`,
+  `Helpers/LookingForValidator.cs`). Cookie or bearer session. The account id comes from the
+  principal.
+- An account holds at most 5 preferences. The 6th new id answers `409 limit_reached`. `PUT` creates
+  (`201`) or replaces (`200`). The client picks the id (a GUID). The key is (UserId, Id), so two
+  accounts can use the same id. `DELETE` of an absent id answers `204`.
+- Fields: `intent` (`buy`, `rent`), 1 to 5 `places`, `priceMin/Max`, `bedsMin`, `bathsMin`,
+  `homeTypes`, `whenStart`, `whenEnd`. A bad value answers `400`. A start date before yesterday
+  (UTC) is a past date. The body has no free-text field (PRD §6).
+- `GET` returns `{ items, max }`, newest change first. #364 reads this shape.
+- The preference sends no email. #505 and #769 add alerts with their own opt-in.
+- The `LookingForPreferences` migration creates a new empty table, so a plain `CREATE` is safe. An
+  index on a populated table needs `CONCURRENTLY` (property-service rule).
+- The limit of 5 is checked in code, not by the database. Two parallel creates can pass 5.

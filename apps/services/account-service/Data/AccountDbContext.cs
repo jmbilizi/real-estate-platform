@@ -44,6 +44,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<SecureAccountToken> SecureAccountTokens => Set<SecureAccountToken>();
 
+    public DbSet<LookingForPreference> LookingForPreferences => Set<LookingForPreference>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -118,7 +120,7 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
                 .IsRequired(false);
 
             // Notification channel toggles — stored directly on the user row
-            entity.Property(u => u.EmailNotificationsEnabled).HasDefaultValue(true);
+            entity.Property(u => u.EmailNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.SmsNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.PushNotificationsEnabled).HasDefaultValue(true);
             entity.Property(u => u.MarketingOptIn).HasDefaultValue(false);
@@ -215,6 +217,17 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
             // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
             // with a DB CHECK constraint — same approach as the onboarding intents above.
+        });
+
+        // No FK to AspNetUsers, like SecureAccountTokens. The key leads with UserId, so it serves the
+        // only query shape: "this account's preferences". New table, so no CONCURRENTLY is needed.
+        builder.Entity<LookingForPreference>(entity =>
+        {
+            entity.ToTable("LookingForPreferences");
+            entity.HasKey(p => new { p.UserId, p.Id });
+            entity.Property(p => p.Intent).IsRequired();
+            entity.Property(p => p.PlacesJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(p => p.HomeTypes).HasColumnType("text[]").IsRequired();
         });
 
         // Append-only. No FK to AspNetUsers, so the record outlives a deleted grantor or grantee.

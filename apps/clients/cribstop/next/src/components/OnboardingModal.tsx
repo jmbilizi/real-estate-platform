@@ -27,7 +27,7 @@ export default function OnboardingModal({ open }: { open: boolean }) {
   const [stepIdx, setStepIdx] = useState(0);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -224,7 +224,7 @@ function PreferencesStep({
       <ToggleRow
         emoji="📧"
         label="Email updates"
-        description="New listings matching your searches"
+        description="Email with new listings matching your searches. Turn this off in your account at any time."
         checked={emailNotifications}
         onChange={onEmailChange}
       />

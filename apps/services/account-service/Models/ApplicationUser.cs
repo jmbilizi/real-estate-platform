@@ -64,7 +64,7 @@ internal class ApplicationUser : IdentityUser
     public int? PreferredLocaleId { get; set; }
 
     /// <summary>Gets or sets a value indicating whether the user wants email notifications.</summary>
-    public bool EmailNotificationsEnabled { get; set; } = true;
+    public bool EmailNotificationsEnabled { get; set; }
 
     /// <summary>Gets or sets a value indicating whether the user wants SMS notifications.</summary>
     public bool SmsNotificationsEnabled { get; set; }
