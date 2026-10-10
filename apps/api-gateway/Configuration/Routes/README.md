@@ -19,18 +19,23 @@ This folder holds the route configuration files that the gateway loads at startu
 
 No `/gateway` prefix — the gateway base URL supplies it.
 
-**Downstream paths** match the service's actual endpoints and do not require upstream matching. Example: `/property/listings` maps to `/listings` at the property service.
+**Downstream paths** match the service's actual endpoints and do not require upstream matching.
+Example: `/property/listings` maps to `/listings` at the property service.
 
-When upstream and downstream differ, set `SwaggerEndPoints[].TransformByOcelotConfig` to `true` so the aggregated Swagger UI publishes correct paths.
+When upstream and downstream differ, set `SwaggerEndPoints[].TransformByOcelotConfig` to `true` so
+the aggregated Swagger UI publishes correct paths.
 
-**SwaggerEndPoints** carry one entry per **service domain**, keyed on the domain (`Account`, `Property`, `Inference`), never on individual resources — the key forms a segment of the aggregated docs URL (`/swagger/docs/v1/<Domain>`).
+**SwaggerEndPoints** carry one entry per **service domain**, keyed on the domain (`Account`,
+`Property`, `Inference`), never on individual resources — the key forms a segment of the aggregated
+docs URL (`/swagger/docs/v1/<Domain>`).
 
 ## Adding Routes
 
 Copy the pattern from an existing live route file:
 
 - `account-service-routes.json` — upstream and downstream paths match (same domain)
-- `property-service-routes.json` — upstream and downstream paths differ (gateway namespace differs from service path)
+- `property-service-routes.json` — upstream and downstream paths differ (gateway namespace differs
+  from service path)
 
 ```bash
 # Copy from existing route file as a template
@@ -42,7 +47,8 @@ cp account-service-routes.json your-service-routes.json
 
 ## Route File Naming
 
-Name each file `<service-name>-routes.json`, matching the service's deployment identity and corresponding entry in `infra/deploy-control.yaml`.
+Name each file `<service-name>-routes.json`, matching the service's deployment identity and
+corresponding entry in `infra/deploy-control.yaml`.
 
 ## Important Notes
 

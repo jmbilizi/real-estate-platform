@@ -34,14 +34,14 @@ directly.
 ## The Lean-List / Rich-Detail Payload Split
 
 This service returns **two distinct payloads** for listings, and the split is non-negotiable. The
-**list/search endpoint** (`GET /listings`) returns `ListingCard` — flat fields a card renders (price,
-beds, baths, address, neighborhood) plus a single primary image. The **detail endpoint**
+**list/search endpoint** (`GET /listings`) returns `ListingCard` — flat fields a card renders
+(price, beds, baths, address, neighborhood) plus a single primary image. The **detail endpoint**
 (`GET /listings/{id}`) returns `PropertyPage` with the full graph (all photos, description, open
-houses, full NAR attribution, unit detail). Search results on the client side render ~20 cards,
-so every field on that card is paid twenty times per page, on the first screen a new visitor sees.
-The card row must stay small. See PRD §3.1's "List vs. Detail Payloads" for the compliance rules:
-attribution is required on both list and detail, while description and media galleries are detail-only.
-No field-selection parameter exists that could strip attribution.
+houses, full NAR attribution, unit detail). Search results on the client side render ~20 cards, so
+every field on that card is paid twenty times per page, on the first screen a new visitor sees. The
+card row must stay small. See PRD §3.1's "List vs. Detail Payloads" for the compliance rules:
+attribution is required on both list and detail, while description and media galleries are
+detail-only. No field-selection parameter exists that could strip attribution.
 
 Consequence to budget in #22: **Express generates no OpenAPI**, while the gateway's
 `MMLib.SwaggerForOcelot` fetches a spec URL per service (account-service serves `/openapi/v1.json`,

@@ -23,16 +23,20 @@ attribution field that quietly stops being sent.
 
 ## What belongs here and does not belong here
 
-This package follows the placement rule in AGENTS.md → [Workspace Naming & Shared Libraries](#workspace-naming--shared-libraries): a file belongs in this library only if another deployable needs to read it to talk to the property service correctly.
+This package follows the placement rule in AGENTS.md →
+[Workspace Naming & Shared Libraries](#workspace-naming--shared-libraries): a file belongs in this
+library only if another deployable needs to read it to talk to the property service correctly.
 
 **Specifically here:**
 
 - Zod schemas (request, response, error shapes) and the types derived from them via `z.infer`.
-- Pure, side-effect-free code only. No I/O, no state, no clock, no randomness beyond what a caller passes in.
+- Pure, side-effect-free code only. No I/O, no state, no clock, no randomness beyond what a caller
+  passes in.
 
 **Never add:**
 
-- **No OpenAPI document** (moved to property-service by #63 — the service owns the document, not the contract).
+- **No OpenAPI document** (moved to property-service by #63 — the service owns the document, not the
+  contract).
 - **No SQL.** No `pg`, no query builders, no anything that assumes a database exists.
 - **No HTTP.** No `express`, no route handlers, no request/response objects — only the data shapes.
 - **No environment access.** No `process.env`, no config loading, no secrets.
@@ -84,8 +88,8 @@ pnpm exec nx format @cribstop/property-contracts       # also: format-check
 - **Nx project name equals package name.** Link to AGENTS.md → Repo-Wide Rules #12 for the
   enforcement rule and the reason: `@nx/js:prune-lockfile` (Nx 22.0.1) looks up a workspace
   dependency by **package** name in a map keyed by **project** name; when the two differ the lookup
-  misses and `zod` is silently dropped from a consumer's pruned lockfile, breaking `--frozen-lockfile`
-  with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+  misses and `zod` is silently dropped from a consumer's pruned lockfile, breaking
+  `--frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
 - **Workspace scope convention:** This package is named `@cribstop/property-contracts` today. The
   repo-wide rule in AGENTS.md says domain-scoped libraries should use `@property/contracts` (domain,
   not brand or service name); #64 updates this package to that name. Do not pre-empt the rename from
