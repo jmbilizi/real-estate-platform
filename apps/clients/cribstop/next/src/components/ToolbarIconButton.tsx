@@ -188,7 +188,14 @@ export interface ToolbarIconButtonProps
   surface?: 'page' | 'map' | 'nav';
   /** React 19 passes a ref as a prop. */
   ref?: React.Ref<HTMLButtonElement>;
+  /** `sm` is a 32px circle with a 44px tap area, for inline row controls such as carousel arrows. */
+  size?: 'md' | 'sm';
 }
+
+const SIZE_CLASSES = {
+  md: 'h-11 w-11',
+  sm: "h-8 w-8 before:absolute before:-inset-1.5 before:content-['']",
+} as const;
 
 export const SURFACE_CLASSES = {
   page: 'bg-transparent hover:bg-surface-soft disabled:hover:bg-transparent aria-expanded:bg-surface-soft',
@@ -209,6 +216,7 @@ export default function ToolbarIconButton({
   active,
   countTestId,
   surface = 'page',
+  size = 'md',
   className = '',
   type = 'button',
   ...rest
@@ -227,7 +235,7 @@ export default function ToolbarIconButton({
       aria-label={label}
       title={tooltip ?? label}
       aria-pressed={pressed}
-      className={`${position} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border ${surface === 'nav' ? 'border-transparent max-md:h-10 max-md:w-10' : 'border-gray-300'} ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
+      className={`${position} inline-flex ${SIZE_CLASSES[size]} shrink-0 cursor-pointer items-center justify-center rounded-full border ${surface === 'nav' ? 'border-transparent max-md:h-10 max-md:w-10' : 'border-gray-300'} ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
         dark || surface === 'nav' ? 'text-ink' : 'text-ink-muted'
       } ${className}`}
       {...rest}
