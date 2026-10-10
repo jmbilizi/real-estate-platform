@@ -260,6 +260,12 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   never by CI. Cost a dev outage on #22/#71. When adding a gateway route, check the service's
   `enabled`/`auto_deploy` in **every** environment block, not just the one you're testing.
   Guard-rail check tracked in #72.
+- **Service lists drift apart without an error.** `infra/deploy-control.yaml`,
+  `infra/smart-deployment-config.yaml`, `skaffold.yaml` artifacts, Nx `container-build` projects and
+  the gateway route files each name the same services. CI selects a targeted deploy from the
+  `smart-deployment-config.yaml` keys only. A service missing there never gets a targeted deploy.
+  `tools/infra/service-registries.js` compares them, and `pnpm run infra:validate` runs it. A new
+  service needs an entry in each list. Test: `tools/infra/service-registries.test.js`.
 - **An image is rebuilt only when its own Dockerfile inputs change.** Nx marks _every_ project
   affected when `pnpm-lock.yaml`, `nx.json` or the root `package.json` changes, which any
   service-adding branch does — so `tools/ci/affected-images.js` narrows the matrix using each

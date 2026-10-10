@@ -123,6 +123,22 @@ services:
     kubectl_labels:
       app: account-service
 
+  property-service:
+    type: application
+    description: "Property API service (Node.js, #71)"
+    resources:
+      # Base resources (provider/environment-agnostic)
+      - infra/k8s/base/deployments/property-service.deployment.yaml
+      - infra/k8s/base/services/property-service.service.yaml
+      - infra/k8s/base/poddisruptionbudgets/property-service.poddisruptionbudget.yaml
+      # Environment patches (provider/environment-specific)
+      - infra/k8s/hetzner/dev/patches/deployments/property-service.deployment.yaml
+      - infra/k8s/hetzner/test/patches/deployments/property-service.deployment.yaml
+      - infra/k8s/hetzner/prod/patches/deployments/property-service.deployment.yaml
+      - infra/k8s/podman/local/patches/deployments/property-service.deployment.yaml
+    kubectl_labels:
+      app: property-service
+
   bright-sync-worker:
     type: application
     description: "Bright MLS sync worker Deployment (property-service image, #338, replaces #91/#331)"
@@ -157,6 +173,25 @@ services:
       - infra/k8s/hetzner/prod/patches/ingresses/cribstop-web.ingress.yaml
     kubectl_labels:
       app: cribstop-web
+
+  ingress-nginx:
+    type: infrastructure
+    description: "Nginx ingress controller (upstream manifest plus local patches)"
+    resources:
+      - infra/k8s/base/patches/ingress-nginx-controller.configmap.yaml
+      - infra/k8s/hetzner/dev/patches/services/ingress-nginx-controller.service.yaml
+      - infra/k8s/hetzner/test/patches/services/ingress-nginx-controller.service.yaml
+      - infra/k8s/hetzner/prod/patches/services/ingress-nginx-controller.service.yaml
+    kubectl_labels:
+      app.kubernetes.io/name: ingress-nginx
+
+  ingress:
+    type: infrastructure
+    description: "Shared basic-auth Secret for the Ingress resources (#255)"
+    resources:
+      - infra/k8s/base/secrets/ingress.secret.yaml
+    kubectl_labels:
+      app: ingress
 
 # =============================================================================
 # DEPLOYMENT SETTINGS

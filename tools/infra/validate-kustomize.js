@@ -20,6 +20,7 @@ const fs = require('fs');
 const yaml = require('js-yaml');
 const { resolveDeployScope, describeProblems } = require('./deploy-scope');
 const { checkSecretDrift } = require('./secret-drift');
+const { checkServiceRegistries } = require('./service-registries');
 
 const colors = {
   reset: '\x1b[0m',
@@ -257,6 +258,33 @@ function validateSecretKeys() {
   return false;
 }
 
+/**
+ * Cross-check the service lists: deploy-control, smart-deployment-config, skaffold, Nx
+ * `container-build` projects and gateway route files (#99). Single files shared by every
+ * environment, so this runs once per invocation.
+ */
+function validateServiceRegistries() {
+  log('\nValidating service registries...', 'cyan');
+  const problems = checkServiceRegistries();
+
+  if (problems.length === 0) {
+    logSuccess('service registries agree');
+    return true;
+  }
+
+  logError('service registry drift detected');
+  for (const problem of problems) {
+    log(`  ${problem.headline}:`, 'red');
+    for (const item of problem.items) {
+      log(`    - ${item}`, 'red');
+    }
+    for (const line of problem.detail) {
+      log(`    ${line}`, 'yellow');
+    }
+  }
+  return false;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const targetEnv = args[0]; // dev, test, prod, or undefined (all)
@@ -271,6 +299,8 @@ function main() {
   // Run before provider discovery, so a workspace with no rendered environment still gates the
   // secret keys. The manifests and the deploy action exist independently of any overlay.
   const secretKeysPassed = validateSecretKeys();
+  const registriesPassed = validateServiceRegistries();
+  const fileGatesPassed = secretKeysPassed && registriesPassed;
 
   // Discover all providers
   const providers = discoverProviders();
@@ -278,7 +308,7 @@ function main() {
   if (providers.length === 0) {
     logWarning('No cloud providers found in infra/k8s/');
     logWarning('Expected structure: infra/k8s/{provider}/{env}/kustomization.yaml');
-    process.exit(secretKeysPassed ? 0 : 1);
+    process.exit(fileGatesPassed ? 0 : 1);
   }
 
   log(`\nDiscovered providers: ${providers.join(', ')}\n`, 'blue');
@@ -331,7 +361,7 @@ function main() {
   if (Object.keys(results).length === 0) {
     logWarning('No environments found to validate');
     logWarning(`Providers checked: ${providers.join(', ')}`);
-    process.exit(secretKeysPassed ? 0 : 1);
+    process.exit(fileGatesPassed ? 0 : 1);
   }
 
   // Summary
@@ -339,11 +369,16 @@ function main() {
   log('  Validation Summary', 'bright');
   log('='.repeat(80), 'cyan');
 
-  let allPassed = secretKeysPassed;
+  let allPassed = secretKeysPassed && registriesPassed;
   if (secretKeysPassed) {
     logSuccess('secret keys: PASSED');
   } else {
     logError('secret keys: FAILED');
+  }
+  if (registriesPassed) {
+    logSuccess('service registries: PASSED');
+  } else {
+    logError('service registries: FAILED');
   }
   for (const [key, passed] of Object.entries(results)) {
     if (passed) {
