@@ -2165,7 +2165,9 @@ export default function CompactSearchBar({
             />
           )}
           {/* WHERE */}
-          <div className={`relative w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}>
+          <div
+            className={`relative w-3/5 sm:w-2/3 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
+          >
             <button
               ref={whereRef}
               type="button"
@@ -2376,7 +2378,9 @@ export default function CompactSearchBar({
                 />
               )}
               {/* WHERE slot */}
-              <div className={`relative w-1/2 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}>
+              <div
+                className={`relative w-3/5 sm:w-2/3 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
+              >
                 <button
                   ref={whereRef}
                   type="button"
