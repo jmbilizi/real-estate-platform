@@ -297,11 +297,9 @@ export default function AuthForm({
                   onChange={(e) => setEmail(e.target.value)}
                   onFocus={() => setEmailFocused(true)}
                   onBlur={() => setEmailFocused(false)}
-                  aria-describedby={
-                    [formError ? 'auth-email-error' : null, emailRaised ? 'auth-email-help' : null]
-                      .filter(Boolean)
-                      .join(' ') || undefined
-                  }
+                  aria-describedby={[formError ? 'auth-email-error' : null, 'auth-email-help']
+                    .filter(Boolean)
+                    .join(' ')}
                 />
                 <label
                   htmlFor="auth-email"
@@ -312,14 +310,16 @@ export default function AuthForm({
                   Email
                 </label>
               </div>
-              {emailRaised && (
-                <p id="auth-email-help" className="mt-2 text-xs text-ink-muted">
-                  We&apos;ll email you a code to continue.{' '}
-                  <Link href="/privacy" className="font-medium text-brand hover:underline">
-                    Privacy Policy
-                  </Link>
-                </p>
-              )}
+              {/* Always in the layout, so focus and blur never change the modal height. Only opacity changes. */}
+              <p
+                id="auth-email-help"
+                aria-hidden={!emailRaised}
+                className={`mt-2 min-h-4 text-xs text-ink-muted transition-opacity duration-150 ${
+                  emailRaised ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                We may send you a code to confirm your email.
+              </p>
             </div>
 
             <div
