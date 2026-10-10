@@ -122,8 +122,24 @@ def test_ready_returns_503_when_model_not_loaded():
         response = c.get("/ready")
     assert response.status_code == 503
     data = response.json()
-    assert data["status"] == "loading"
+    assert data["status"] == "failed"
     assert data["models"] == {"fake": "not_loaded"}
+
+
+def test_ready_reports_loading_only_while_a_load_is_running():
+    """`loading` is truthful only while `load_all` runs (#300)."""
+    with (
+        patch.object(settings, "model_load_required", True),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_not_loaded,
+        ),
+        TestClient(app) as c,
+        patch.object(type(registry), "is_loading", True),
+    ):
+        response = c.get("/ready")
+    assert response.status_code == 503
+    assert response.json()["status"] == "loading"
 
 
 def test_model_load_required_defaults_to_true():
@@ -226,8 +242,8 @@ def test_embeddings_say_failed_not_loading_when_degraded():
     assert "failed to load" in response.json()["detail"]
 
 
-def test_embeddings_say_loading_when_load_is_required():
-    """A required build keeps the loading wording, so #37's contract is unchanged."""
+def test_embeddings_say_failed_not_loading_when_a_required_load_failed():
+    """A failed required load must not claim it is still loading (#300)."""
     with (
         patch.object(settings, "model_load_required", True),
         patch(
@@ -235,6 +251,24 @@ def test_embeddings_say_loading_when_load_is_required():
             side_effect=_register_real_name_not_loaded,
         ),
         TestClient(app) as c,
+    ):
+        response = c.post("/api/v1/embeddings", json={"input": ["hello"]})
+        info = c.get("/")
+    assert response.status_code == 503
+    assert "failed to load" in response.json()["detail"]
+    assert "still loading" not in response.json()["detail"]
+    assert info.json()["status"] == "failed"
+
+
+def test_embeddings_say_loading_while_a_load_is_running():
+    with (
+        patch.object(settings, "model_load_required", True),
+        patch(
+            "multi_model_inference.main._register_models",
+            side_effect=_register_real_name_not_loaded,
+        ),
+        TestClient(app) as c,
+        patch.object(type(registry), "is_loading", True),
     ):
         response = c.post("/api/v1/embeddings", json={"input": ["hello"]})
     assert response.status_code == 503

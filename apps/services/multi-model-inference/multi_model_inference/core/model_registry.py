@@ -17,6 +17,7 @@ class ModelRegistry:
 
     def __init__(self) -> None:
         self._models: dict[str, InferenceModel] = {}
+        self._loading = False
 
     def register(self, name: str, model: InferenceModel) -> None:
         """Register a model instance.
@@ -46,15 +47,24 @@ class ModelRegistry:
             raise KeyError(f"Model '{name}' is not registered.")
         return self._models[name]
 
+    @property
+    def is_loading(self) -> bool:
+        """True only while `load_all` is running."""
+        return self._loading
+
     def load_all(self) -> None:
         """Load all registered models. Called during app startup."""
-        for name, model in self._models.items():
-            logger.info("Loading model: %s", name)
-            try:
-                model.load()
-                logger.info("Model '%s' loaded successfully.", name)
-            except Exception:
-                logger.exception("Failed to load model '%s'.", name)
+        self._loading = True
+        try:
+            for name, model in self._models.items():
+                logger.info("Loading model: %s", name)
+                try:
+                    model.load()
+                    logger.info("Model '%s' loaded successfully.", name)
+                except Exception:
+                    logger.exception("Failed to load model '%s'.", name)
+        finally:
+            self._loading = False
 
     def unload_all(self) -> None:
         """Unload all registered models. Called during app shutdown."""
