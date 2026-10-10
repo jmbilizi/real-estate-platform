@@ -182,6 +182,7 @@
     "container:build:affected": "pnpm run nx:reset && pnpm exec nx affected --target=container-build",
     "// Local Cluster Lifecycle": "",
     "infra:local:cluster:setup": "node tools/infra/setup-local-cluster.js",
+    "infra:local:certs:ensure": "node tools/infra/workspace-certs.js",
     "infra:local:cluster:delete": "node tools/infra/delete-local-cluster.js",
     "infra:local:cluster:reset:disk": "node tools/infra/dev-reset-disk.js",
     "infra:local:cluster:images:list": "node tools/infra/list-kind-images.js",

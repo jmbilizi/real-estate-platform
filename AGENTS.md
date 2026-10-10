@@ -222,6 +222,10 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a
   committed base and misses uncommitted work.
+- A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
+  `pnpm run infra:local:certs:ensure` before an image build. The second command copies the bundle
+  from the main checkout. A host with no bundle anywhere gets a warning and the build continues. If
+  the copy fails, the build stops and names this command.
 - `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
   for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
   `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
