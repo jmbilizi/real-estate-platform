@@ -1,6 +1,6 @@
 {
   "title": "Privacy Policy",
-  "effectiveDate": "2026-10-08",
+  "effectiveDate": "2026-10-09",
   "isDraft": false,
   "sections": [
     {
@@ -16,7 +16,8 @@
         "Account information: your email address, your name and your phone number if you give one.",
         "Inquiry information: the message you send about a home, the home you ask about, and a record of your consent to be contacted, with the date and time you gave it.",
         "Activity information: the homes you save and the areas or services you join a waitlist for.",
-        "Device and usage information: your IP address, browser type, device type, pages you view and the date and time of your visit."
+        "Device and usage information: your IP address, browser type, device type, pages you view and the date and time of your visit.",
+        "Site activity counts: when you load or change a search, view a home, save a home or send a request, we record the type of action, the page area, the home it concerns and the time. We tag each record with a random code that exists only in your open browser tab. The record holds no name, email address, account, IP address, device detail or search words. We do not link these records to your account. They use no cookie and no browser storage, so blocking cookies does not stop them."
       ]
     },
     {
@@ -48,6 +49,7 @@
       "body": [
         "We keep consent records for 5 years.",
         "We keep inquiry and lead information for 3 years after your last activity. Then we delete it or make it anonymous.",
+        "We keep each site activity record for 30 days. We keep daily totals of these records with no home or person attached.",
         "We keep account information while your account is open. We may keep some information longer when the law requires it."
       ]
     },

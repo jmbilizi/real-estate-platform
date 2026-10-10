@@ -967,6 +967,7 @@ describe('GET /openapi.json', () => {
       '/agent/leads/{id}/accept',
       '/agent/leads/{id}/decline',
       '/agent/leads/{id}/status',
+      '/analytics/events',
       '/listings',
       '/listings/brokers',
       '/listings/map',

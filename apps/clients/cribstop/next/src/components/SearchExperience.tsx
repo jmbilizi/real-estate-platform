@@ -65,6 +65,7 @@ import {
   scopeOf,
   type ViewType,
 } from '@/lib/neighborhood-url';
+import { trackEvent } from '@/lib/analytics';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 export interface SearchExperienceProps {
@@ -265,6 +266,14 @@ export default function SearchExperience({
     const { bounds: _bounds, ...rest } = requestFilters;
     return rest;
   }, [requestFilters]);
+  /**
+   * One `search` event per change of the filters. A map pan changes only `bounds`, which `mapFilters`
+   * leaves out, so a pan counts nothing. The event carries no filter value (#725).
+   */
+  const searchKey = JSON.stringify(mapFilters);
+  useEffect(() => {
+    trackEvent('search', { surface: 'search' });
+  }, [searchKey]);
   /** The neighborhood the view is drilled into: from the neighborhood path, else from the query. */
   const drilledName = requestFilters.neighborhood;
   // Two-phase geocode:

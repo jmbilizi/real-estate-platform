@@ -44,6 +44,7 @@ import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
 import { searchTargetUrl } from '@/lib/search-place';
 import type { ListingCardRow } from '@/lib/types';
+import { trackEvent } from '@/lib/analytics';
 
 interface Props {
   listing: ListingDetailView;
@@ -150,6 +151,10 @@ export default function ListingDetailContent({
   const [fetched, setFetched] = useState<NearbyState>({ status: 'loading', results: [] });
 
   const serverNearby = nearby !== undefined;
+
+  useEffect(() => {
+    trackEvent('listing_view', { surface: 'detail', listingId: listing.id });
+  }, [listing.id]);
 
   useEffect(() => {
     if (serverNearby) return;
