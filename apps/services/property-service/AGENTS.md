@@ -789,6 +789,23 @@ the Property API document. Never publish a second document.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
 
+## What I'm looking for (`src/looking-for/`)
+
+`GET /looking-for`, `PUT|DELETE /looking-for/{id}` (#768). The gateway exposes them as
+`/property/looking-for*`. account-service stays identity and authorization only (ruling 2026-10-10),
+so this data lives here, keyed by account id like `saved_homes`.
+
+- `store.ts` is the only module that touches `looking_for_preferences`. The key is
+  `(account_id, id)`. The client picks `id`. The account id comes from introspection, never from the
+  request.
+- The limit is 5 per account. `upsertLookingFor` takes `pg_advisory_xact_lock` per account before it
+  counts, so parallel creates cannot pass the limit. A known id replaces its row, even at the limit.
+- Places are `city` and `zip` only. Unknown keys, including free text, answer 400. A start date
+  before yesterday (UTC) answers 400. The 400 body names the fields in `error.fields`, never values.
+- A preference sends no email. Alerts need their own opt-in (#505, #769).
+- Nothing removes these rows when account-service deletes an account. `saved_homes` has the same
+  gap.
+
 ## Staff roles (#628)
 
 - `src/staff/roles.ts` holds `requireRole(introspection, ...roles)`. It is any-of. `SuperAdmin`

@@ -15,6 +15,7 @@ import { createBrightSyncAdminRouter } from './admin/bright-sync-routes';
 import type { SyncQueryable } from './jobs/bright-sync/store';
 import { createAnalyticsRouter } from './analytics/routes';
 import { createInquiriesRouter } from './inquiries/routes';
+import { createLookingForRouter } from './looking-for/routes';
 import { createSavedStateReader } from './saved/identity';
 import { createSavedHomesRouter } from './saved/routes';
 import { createStaffRouter } from './staff/routes';
@@ -242,6 +243,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     ),
   );
   app.use(createSavedHomesRouter({ pool, introspection }));
+  app.use(createLookingForRouter({ pool, introspection }));
   app.use(
     createAnalyticsRouter({
       pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,

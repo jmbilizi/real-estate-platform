@@ -403,6 +403,56 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/looking-for",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/looking-for",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/looking-for/{id}",
+      "UpstreamHttpMethod": ["PUT", "DELETE"],
+      "DownstreamPathTemplate": "/looking-for/{id}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/staff/me",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/staff/me",
