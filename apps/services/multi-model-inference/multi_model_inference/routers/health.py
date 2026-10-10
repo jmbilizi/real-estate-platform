@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from multi_model_inference.core.model_registry import registry
-from multi_model_inference.core.readiness import LOADING, readiness_state
+from multi_model_inference.core.readiness import DEGRADED, READY, readiness_state
 
 router = APIRouter(tags=["health"])
 
@@ -37,13 +37,13 @@ async def ready() -> JSONResponse:
     that is not a priority (#287). The body still names the failed model, so the
     state is legible instead of a false claim of health.
 
-    Reporting 200 here cannot mask a slow start: `registry.load_all()` runs to
-    completion before the lifespan handler yields, so once this endpoint can be
-    reached at all, "not ready" means failed rather than still loading.
+    `registry.load_all()` runs to completion before the lifespan handler yields.
+    A not-ready model after startup is therefore `failed`, never `loading`, and
+    `failed` answers 503.
     """
     models_info = {info["name"]: info["status"] for info in registry.list_models()}
     state = readiness_state()
     return JSONResponse(
-        status_code=503 if state == LOADING else 200,
+        status_code=200 if state in (READY, DEGRADED) else 503,
         content={"status": state, "models": models_info},
     )
