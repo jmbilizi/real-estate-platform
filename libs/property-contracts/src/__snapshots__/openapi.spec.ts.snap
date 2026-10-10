@@ -1759,6 +1759,349 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "LookingFor": {
+        "additionalProperties": false,
+        "properties": {
+          "bathsMin": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer",
+          },
+          "bedsMin": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer",
+          },
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "homeTypes": {
+            "items": {
+              "enum": [
+                "Single Family",
+                "Condo",
+                "Townhome",
+                "Multi-Family",
+                "Loft",
+                "Land",
+                "New Construction",
+                "Manufactured/Mobile",
+              ],
+              "type": "string",
+            },
+            "type": "array",
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string",
+          },
+          "intent": {
+            "enum": [
+              "buy",
+              "rent",
+            ],
+            "type": "string",
+          },
+          "places": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "city": {
+                      "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .'&-]{0,99}$",
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "city",
+                      ],
+                      "type": "string",
+                    },
+                    "state": {
+                      "pattern": "^[A-Z]{2}$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "state",
+                    "city",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "city": {
+                      "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .'&-]{0,99}$",
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "zip",
+                      ],
+                      "type": "string",
+                    },
+                    "state": {
+                      "pattern": "^[A-Z]{2}$",
+                      "type": "string",
+                    },
+                    "zip": {
+                      "pattern": "^\\d{5}$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "state",
+                    "city",
+                    "zip",
+                  ],
+                  "type": "object",
+                },
+              ],
+            },
+            "type": "array",
+          },
+          "priceMax": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer",
+          },
+          "priceMin": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer",
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string",
+          },
+          "whenEnd": {
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string",
+          },
+          "whenStart": {
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "id",
+          "intent",
+          "places",
+          "priceMin",
+          "priceMax",
+          "bedsMin",
+          "bathsMin",
+          "homeTypes",
+          "whenStart",
+          "whenEnd",
+          "createdAt",
+          "updatedAt",
+        ],
+        "type": "object",
+      },
+      "LookingForInvalidBody": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "invalid_request",
+                ],
+                "type": "string",
+              },
+              "fields": {
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "message": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "code",
+              "message",
+              "fields",
+            ],
+            "type": "object",
+          },
+        },
+        "required": [
+          "error",
+        ],
+        "type": "object",
+      },
+      "LookingForList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LookingFor",
+            },
+            "type": "array",
+          },
+          "max": {
+            "enum": [
+              5,
+            ],
+            "type": "number",
+          },
+        },
+        "required": [
+          "items",
+          "max",
+        ],
+        "type": "object",
+      },
+      "LookingForRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bathsMin": {
+            "maximum": 20,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "bedsMin": {
+            "maximum": 20,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "homeTypes": {
+            "items": {
+              "enum": [
+                "Single Family",
+                "Condo",
+                "Townhome",
+                "Multi-Family",
+                "Loft",
+                "Land",
+                "New Construction",
+                "Manufactured/Mobile",
+              ],
+              "type": "string",
+            },
+            "nullable": true,
+            "type": "array",
+          },
+          "intent": {
+            "enum": [
+              "buy",
+              "rent",
+            ],
+            "type": "string",
+          },
+          "places": {
+            "items": {
+              "oneOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "city": {
+                      "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .'&-]{0,99}$",
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "city",
+                      ],
+                      "type": "string",
+                    },
+                    "state": {
+                      "pattern": "^[A-Z]{2}$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "state",
+                    "city",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "city": {
+                      "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .'&-]{0,99}$",
+                      "type": "string",
+                    },
+                    "kind": {
+                      "enum": [
+                        "zip",
+                      ],
+                      "type": "string",
+                    },
+                    "state": {
+                      "pattern": "^[A-Z]{2}$",
+                      "type": "string",
+                    },
+                    "zip": {
+                      "pattern": "^\\d{5}$",
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "kind",
+                    "state",
+                    "city",
+                    "zip",
+                  ],
+                  "type": "object",
+                },
+              ],
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array",
+          },
+          "priceMax": {
+            "maximum": 100000000,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "priceMin": {
+            "maximum": 100000000,
+            "minimum": 0,
+            "nullable": true,
+            "type": "integer",
+          },
+          "whenEnd": {
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string",
+          },
+          "whenStart": {
+            "nullable": true,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "intent",
+          "places",
+        ],
+        "type": "object",
+      },
       "MapResponse": {
         "additionalProperties": false,
         "properties": {
@@ -6332,6 +6675,218 @@ Rate-limited per client and per listing; a request over either limit gets 429 wi
           },
         },
         "summary": "Save the home that one listing is on",
+      },
+    },
+    "/looking-for": {
+      "get": {
+        "description": "Requires sign-in. Returns only the calling account’s preferences, newest change first, with the per-account limit in \`max\`. A preference sends no email. The response is \`private, no-store\`.",
+        "operationId": "listLookingFor",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookingForList",
+                },
+              },
+            },
+            "description": "The preferences of the account.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "The "What I’m looking for" preferences of the signed-in account",
+      },
+    },
+    "/looking-for/{id}": {
+      "delete": {
+        "description": "Requires sign-in. Removing an id that is absent, or that belongs to another account, succeeds and changes nothing.",
+        "operationId": "deleteLookingFor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "responses": {
+          "204": {
+            "description": "The preference is gone.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The id is not a well-formed id.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Remove one preference",
+      },
+      "put": {
+        "description": "Requires sign-in. The client picks the id. A new id creates the preference (201) unless the account already holds the limit (409). A known id of the same account replaces it (200). Places are city and zip only. A start date in the past is refused. The account comes from the credential, never from the request.",
+        "operationId": "putLookingFor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string",
+            },
+          },
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookingForRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookingFor",
+                },
+              },
+            },
+            "description": "The preference was replaced.",
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookingFor",
+                },
+              },
+            },
+            "description": "The preference was created.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookingForInvalidBody",
+                },
+              },
+            },
+            "description": "A refused field (\`invalid_request\`), named in \`fields\`.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "The account holds the limit (\`conflict\`).",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Create or replace one preference",
       },
     },
     "/properties/lookup": {

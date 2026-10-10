@@ -7,6 +7,12 @@ import { analyticsEventRequestSchema } from './analytics-event';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
 import { listingsMetaSchema } from './listings-meta';
+import {
+  lookingForInvalidBodySchema,
+  lookingForListSchema,
+  lookingForRequestSchema,
+  lookingForSchema,
+} from './looking-for';
 import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
 import {
   brokersRequestSchema,
@@ -121,6 +127,10 @@ function componentSchemas() {
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
+  registry.add(lookingForRequestSchema, { id: 'LookingForRequest' });
+  registry.add(lookingForSchema, { id: 'LookingFor' });
+  registry.add(lookingForListSchema, { id: 'LookingForList' });
+  registry.add(lookingForInvalidBodySchema, { id: 'LookingForInvalidBody' });
   registry.add(staffMeSchema, { id: 'StaffMe' });
   registry.add(staffLeadsEnvelopeSchema, { id: 'StaffLeadsEnvelope' });
   registry.add(staffLeadDetailSchema, { id: 'StaffLeadDetail' });
@@ -792,6 +802,102 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/looking-for': {
+        get: {
+          operationId: 'listLookingFor',
+          summary: 'The "What I’m looking for" preferences of the signed-in account',
+          description:
+            'Requires sign-in. Returns only the calling account’s preferences, newest change ' +
+            'first, with the per-account limit in `max`. A preference sends no email. The ' +
+            'response is `private, no-store`.',
+          responses: {
+            '200': {
+              description: 'The preferences of the account.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingForList' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/looking-for/{id}': {
+        put: {
+          operationId: 'putLookingFor',
+          summary: 'Create or replace one preference',
+          description:
+            'Requires sign-in. The client picks the id. A new id creates the preference (201) ' +
+            'unless the account already holds the limit (409). A known id of the same account ' +
+            'replaces it (200). Places are city and zip only. A start date in the past is ' +
+            'refused. The account comes from the credential, never from the request.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/LookingForRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The preference was replaced.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingFor' } },
+              },
+            },
+            '201': {
+              description: 'The preference was created.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingFor' } },
+              },
+            },
+            '400': {
+              description: 'A refused field (`invalid_request`), named in `fields`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/LookingForInvalidBody' },
+                },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '409': {
+              description: 'The account holds the limit (`conflict`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        delete: {
+          operationId: 'deleteLookingFor',
+          summary: 'Remove one preference',
+          description:
+            'Requires sign-in. Removing an id that is absent, or that belongs to another ' +
+            'account, succeeds and changes nothing.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '204': { description: 'The preference is gone.' },
+            '400': {
+              description: 'The id is not a well-formed id.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },

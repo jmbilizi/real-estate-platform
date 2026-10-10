@@ -81,6 +81,7 @@ that for every route and for the global fallback.
 | Map read         | `/property/listings/map` (capped pins, #377, #546)                                           | 5000      | 5                   | 45000              | 5000            |
 | Inquiry write    | `/property/listings/{id}/inquiries` (#131)                                                   | 5000      | 5                   | 45000              | 5000            |
 | Saved homes      | `/property/listings/{id}/saved`, `/property/saved-homes`, `/property/saved-homes/{id}` (#23) | 5000      | 5                   | 45000              | 5000            |
+| Looking for      | `/property/looking-for`, `/property/looking-for/{id}` (#768)                                 | 5000      | 5                   | 45000              | 5000            |
 | Auth write       | `/account/*` (password hashing, outbound email)                                              | 10000     | 4                   | 60000              | 10000           |
 | Model inference  | `/inference/embeddings`                                                                      | 30000     | 2                   | 90000              | 15000           |
 | Inference read   | `/inference/models`                                                                          | 5000      | 5                   | 45000              | 10000           |
