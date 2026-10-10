@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchRegion } from '@/app/api/_lib/geo-region';
+import { clientIpOf } from '@/app/api/_lib/listings-gateway';
 
 /**
  * The home page's "near you" personalization region (#363), from the gateway's IP lookup (#362).
@@ -8,6 +9,6 @@ import { fetchRegion } from '@/app/api/_lib/geo-region';
  * city.
  */
 export async function GET(req: NextRequest) {
-  const region = await fetchRegion(req.headers.get('x-real-ip'));
+  const region = await fetchRegion(clientIpOf(req.headers));
   return NextResponse.json(region);
 }

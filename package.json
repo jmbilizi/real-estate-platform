@@ -169,6 +169,7 @@
     "tools:test": "node --test tools .agents",
     "// → Stop a background process this agent started. PID/port-scoped, never by image name:": "",
     "dev:stop": "node tools/dev/stop-process.js",
+    "dev:review-range": "node tools/dev/review-range.js",
     "dev:worktree:reclaim": "node tools/dev/worktree-reclaim.js",
     "dev:worktree:cleanup": "node tools/dev/worktree-reclaim.js --apply --merged-only",
     "// GeoIP Database (Optional)": "",

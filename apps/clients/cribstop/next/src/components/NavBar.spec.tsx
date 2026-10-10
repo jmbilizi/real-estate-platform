@@ -1,10 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import NavBar from './NavBar';
 import type { User } from '@/lib/store/types';
 
+const mockPush = jest.fn();
 jest.mock('nextjs-toploader/app', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 /* The global setup pins `usePathname` to '/'; the tab tests need to move it. */
@@ -89,7 +90,7 @@ describe('NavBar before hydration', () => {
     const html = serverHtml();
 
     expect(html).toContain('aria-label="Saved"');
-    // Three tab icons, three tab labels, Saved, Apps, account.
+    // Three tab icons, three tab labels, Apps, account, More.
     expect(html.match(/skeleton-fill/g) ?? []).toHaveLength(9);
   });
 
@@ -199,7 +200,7 @@ describe('NavBar after hydration', () => {
     mockUseApp.mockReturnValue(appValue(null));
     const { container } = render(<NavBar />);
 
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in or sign up' })).toBeInTheDocument();
     expect(container.querySelector('.skeleton-fill')).toBeNull();
   });
 
@@ -208,7 +209,7 @@ describe('NavBar after hydration', () => {
     const { container } = render(<NavBar />);
 
     expect(screen.getByLabelText('Profile menu')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in or sign up' })).not.toBeInTheDocument();
     expect(container.querySelector('.skeleton-fill')).toBeNull();
   });
 
@@ -222,5 +223,51 @@ describe('NavBar after hydration', () => {
 
     expect(screen.getByLabelText('Saved')).toBeInTheDocument();
     expect(screen.getByTestId('apps-dropdown')).toBeInTheDocument();
+  });
+});
+
+describe('NavBar right side', () => {
+  beforeEach(() => mockPush.mockClear());
+
+  it('gives every icon button a label and a tooltip', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+
+    for (const name of ['Saved', 'Sign in or sign up', 'More options']) {
+      expect(screen.getByLabelText(name)).toHaveAttribute('title', name);
+    }
+  });
+
+  it('opens the sign-in modal from the account button when signed out', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in or sign up' }));
+
+    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=login'), {
+      scroll: false,
+    });
+  });
+
+  it('opens the sign-up modal from the More menu', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign up' }));
+
+    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=signup'), {
+      scroll: false,
+    });
+  });
+
+  it('keeps the profile panel behind the account button when signed in', () => {
+    mockUseApp.mockReturnValue(appValue(A_USER));
+    render(<NavBar />);
+
+    expect(screen.getByRole('button', { name: 'Profile menu' })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    );
   });
 });

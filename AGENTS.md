@@ -77,7 +77,10 @@ guide.
    (`tools/dev/stop-process.js`). It resolves one PID, from the value you pass or from whatever
    listens on the port, and kills only that process tree. It works the same way on Windows, macOS,
    and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
-   workaround that Git Bash's MSYS path conversion otherwise forces.
+   workaround that Git Bash's MSYS path conversion otherwise forces. `ps -W` prints the MSYS PID in
+   column 1 and the Windows PID in column 4 (`WINPID`). `dev:stop` maps an MSYS PID to its WINPID.
+   It prints "not found" for a PID it cannot find and exits 0. It exits 1 only when a kill fails.
+   Prefer `--port` when a port names the process.
 
 9. **A lane writes only inside its own worktree.** `.agents/hooks/lane-boundary.js` refuses an edit
    outside the lane root, an edit into another lane's worktree, and a `git -C` that points at
@@ -223,6 +226,11 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   `pnpm run infra:local:certs:ensure` before an image build. The second command copies the bundle
   from the main checkout. A host with no bundle anywhere gets a warning and the build continues. If
   the copy fails, the build stops and names this command.
+- `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
+  for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
+  `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
+  `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
+  `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).

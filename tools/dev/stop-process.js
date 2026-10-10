@@ -77,25 +77,92 @@ function findListenerPid(port, options = {}) {
 }
 
 /**
+ * Parse `tasklist /FO CSV /NH` output into the set of live Windows PIDs.
+ *
+ * @param {string} output
+ * @returns {Set<number>}
+ */
+function parseTasklistPids(output) {
+  const pids = new Set();
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^"[^"]*","(\d+)"/.exec(line.trim());
+    if (match) pids.add(Number(match[1]));
+  }
+  return pids;
+}
+
+/**
+ * Map MSYS PIDs to Windows PIDs from `ps -W` output. Column 1 is the MSYS PID and column 4 is
+ * WINPID. `taskkill` only knows WINPID. See ticket #288.
+ *
+ * @param {string} output
+ * @returns {Map<number, number>}
+ */
+function parseMsysPsOutput(output) {
+  const map = new Map();
+  for (const line of output.split(/\r?\n/)) {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length < 4) continue;
+    const [msys, , , win] = columns;
+    if (/^\d+$/.test(msys) && /^\d+$/.test(win)) map.set(Number(msys), Number(win));
+  }
+  return map;
+}
+
+/**
+ * Decide which Windows PID an input PID names. A live Windows PID wins. Otherwise a live MSYS PID
+ * maps to its WINPID. Anything else is not found. Never reports success for a PID it cannot name.
+ *
+ * @param {number} pid
+ * @param {{ windowsPids: Set<number>, msysMap: Map<number, number> }} state
+ * @returns {{ pid: number, via: 'windows' | 'msys' } | null}
+ */
+function resolveWindowsPid(pid, state) {
+  if (state.windowsPids.has(pid)) return { pid, via: 'windows' };
+  const mapped = state.msysMap.get(pid);
+  if (mapped !== undefined && state.windowsPids.has(mapped)) return { pid: mapped, via: 'msys' };
+  return null;
+}
+
+/** Read live Windows PIDs and the MSYS map from the host. MSYS data is empty when `ps` is absent. */
+function readWindowsPidState() {
+  const windowsPids = parseTasklistPids(
+    execFileSync('tasklist', ['/FO', 'CSV', '/NH'], {
+      encoding: 'utf-8',
+      maxBuffer: 64 * 1024 * 1024,
+    }),
+  );
+  let msysMap = new Map();
+  try {
+    msysMap = parseMsysPsOutput(execFileSync('ps', ['-W'], { encoding: 'utf-8' }));
+  } catch {
+    // Not running under MSYS. Only Windows PIDs apply.
+  }
+  return { windowsPids, msysMap };
+}
+
+/**
  * Kill one PID and its child processes. Never touches any other process.
  *
  * @param {number} pid
  * @param {{ platform?: string }} [options]
- * @returns {boolean} whether a kill was attempted
+ * @returns {{ status: 'stopped' | 'gone' | 'failed', message?: string }}
  */
-function killPidTree(pid, options = {}) {
+function killPidDetailed(pid, options = {}) {
   const platform = options.platform || process.platform;
-  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (!Number.isInteger(pid) || pid <= 0) return { status: 'gone' };
 
   if (platform === 'win32') {
     try {
       // /T kills the process tree; /F forces termination. Scoped to this PID only.
-      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
-    } catch {
-      // Already gone. Cleanup already achieved its goal.
-      return false;
+      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'pipe' });
+    } catch (error) {
+      const text = String(error.stderr || error.stdout || error.message || '').trim();
+      // Exit code 128 is taskkill's "process not found".
+      if (error.status === 128) return { status: 'gone', message: text };
+      return { status: 'failed', message: text };
     }
-    return true;
+    return { status: 'stopped' };
   }
 
   try {
@@ -107,10 +174,15 @@ function killPidTree(pid, options = {}) {
   try {
     process.kill(pid, 'SIGKILL');
   } catch (error) {
-    if (error.code === 'ESRCH') return false; // Already gone.
-    throw error;
+    if (error.code === 'ESRCH') return { status: 'gone' };
+    return { status: 'failed', message: error.message };
   }
-  return true;
+  return { status: 'stopped' };
+}
+
+/** Boolean view of killPidDetailed: true only when a process was stopped. */
+function killPidTree(pid, options = {}) {
+  return killPidDetailed(pid, options).status === 'stopped';
 }
 
 /** Stop whatever is listening on `port`. Returns the PID killed, or null if nothing was there. */
@@ -134,42 +206,87 @@ function parseArgs(argv) {
   return result;
 }
 
-function main() {
-  const { pids, ports } = parseArgs(process.argv.slice(2));
+/**
+ * Stop the PIDs and ports named in `argv`. Returns the exit code.
+ * An already-gone PID exits 0, because cleanup chains depend on it. Only a real kill failure or a
+ * bad argument exits 1.
+ */
+function run(argv, deps = {}) {
+  const platform = deps.platform || process.platform;
+  const readState = deps.readState || readWindowsPidState;
+  const kill = deps.kill || killPidDetailed;
+  const byPort = deps.stopByPort || stopByPort;
+  const log = deps.log || console.log;
+  const warn = deps.warn || console.error;
+
+  const { pids, ports } = parseArgs(argv);
   if (pids.length === 0 && ports.length === 0) {
-    console.error('Usage: stop-process.js [--pid <pid>]... [--port <port>]...');
-    process.exitCode = 1;
-    return;
+    warn('Usage: stop-process.js [--pid <pid>]... [--port <port>]...');
+    return 1;
   }
 
+  let exitCode = 0;
   for (const pid of pids) {
     if (!Number.isInteger(pid) || pid <= 0) {
-      console.error(`Invalid --pid value: ${pid}`);
-      process.exitCode = 1;
+      warn(`Invalid --pid value: ${pid}`);
+      exitCode = 1;
       continue;
     }
-    const killed = killPidTree(pid);
-    console.log(killed ? `Stopped PID ${pid}.` : `PID ${pid}: already stopped.`);
+    let target = pid;
+    if (platform === 'win32') {
+      const state = readState();
+      const resolved = resolveWindowsPid(pid, state);
+      if (resolved === null) {
+        if (state.msysMap.has(pid)) {
+          log(`PID ${pid}: already stopped.`);
+        } else {
+          warn(
+            `PID ${pid}: not found. It never existed or it already exited. Nothing was stopped. ` +
+              'On Windows, use the WINPID value (column 4 of `ps -W`), or use --port.',
+          );
+        }
+        continue;
+      }
+      target = resolved.pid;
+      if (resolved.via === 'msys') {
+        log(`PID ${pid} is an MSYS PID. Using WINPID ${target}.`);
+      }
+    }
+    const result = kill(target, { platform });
+    if (result.status === 'stopped') {
+      log(`Stopped PID ${target}.`);
+    } else if (result.status === 'gone') {
+      log(`PID ${target}: already stopped.`);
+    } else {
+      warn(`PID ${target}: could not be stopped. ${result.message || ''}`.trim());
+      exitCode = 1;
+    }
   }
 
   for (const port of ports) {
-    const pid = stopByPort(port);
+    const pid = byPort(port);
     if (pid === null) {
-      console.log(`Port ${port}: nothing listening.`);
+      log(`Port ${port}: nothing listening.`);
     } else {
-      console.log(`Port ${port}: stopped PID ${pid}.`);
+      log(`Port ${port}: stopped PID ${pid}.`);
     }
   }
+  return exitCode;
 }
 
 if (require.main === module) {
-  main();
+  process.exitCode = run(process.argv.slice(2));
 }
 
 module.exports = {
   parseWindowsListenerPid,
   parsePosixListenerPid,
   findListenerPid,
+  parseTasklistPids,
+  parseMsysPsOutput,
+  resolveWindowsPid,
   killPidTree,
+  killPidDetailed,
+  run,
   stopByPort,
 };
