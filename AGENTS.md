@@ -260,6 +260,13 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   two lanes. **`enabled`/`auto_deploy` are not part of identity** — a switched-off service is
   reported out of scope, never confused with an unregistered one. Conflating the two is what made a
   single `auto_deploy: false` abort an entire deploy (#45).
+- **NetworkPolicy enforcement differs per cluster (#269).** `infra/k8s/base/networkpolicies/` limits
+  ingress to `property-service` (api-gateway only) and `account-service` (api-gateway and
+  property-service). The Hetzner K3s clusters enforce it: K3s ships an embedded policy controller
+  and no cluster config disables it. The local Kind cluster does not: Kind v1.28 uses kindnet, which
+  ignores NetworkPolicy. A policy that blocks a caller fails on Hetzner only. When a new in-cluster
+  caller reaches either service, add its `app` label to the policy. The policies set no egress rule,
+  so DNS egress is unchanged. Kubelet probes come from the node and the policy allows them.
 - **Deploy lanes are phased, derived from the manifests, not hardcoded.** A service owning an
   admission webhook that intercepts writes to a resource another service owns runs in an earlier
   phase. Today that means the `ingress-nginx` lane completes before the jaeger / api-gateway /
