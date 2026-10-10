@@ -61,6 +61,10 @@ resources:
   ## PodDisruptionBudgets (voluntary-disruption protection)
   - poddisruptionbudgets/property-service.poddisruptionbudget.yaml
 
+  ## NetworkPolicies (restrict direct pod access, #269)
+  - networkpolicies/account-service.networkpolicy.yaml
+  - networkpolicies/property-service.networkpolicy.yaml
+
   # Ingress rules (external routing - uses Nginx controller above)
   - ingresses/jaeger.ingress.yaml
   - ingresses/api-gateway.ingress.yaml
