@@ -34,7 +34,12 @@ const MESSAGE_FOR_STATUS = (status: number): string =>
 async function request<T>(path: string, method: string, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { method, signal, headers: { Accept: 'application/json' } });
+    res = await fetch(path, {
+      method,
+      signal,
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     throw new SavedHomesApiError(MESSAGE_FOR_STATUS(503), 503);

@@ -460,16 +460,16 @@ type LatestSave = {
  * The most recent saved home that has a listing, read once while signed in (#364). Signed out
  * never calls the API. A failed read leaves `null`, so the row hides and never blanks the page.
  */
-function useLatestSave(signedIn: boolean): LatestSave | null {
+function useLatestSave(accountKey: string | null): LatestSave | null {
   const [save, setSave] = useState<LatestSave | null>(null);
 
   useEffect(() => {
     setSave(null);
-    if (!signedIn) return undefined;
+    if (!accountKey) return undefined;
     const controller = new AbortController();
     listRecentSavedHomes(SAVED_LOOKBACK, controller.signal)
       .then((homes) => {
-        const card = homes.find((h) => h.listing)?.listing;
+        const card = homes.find((h) => h.listing?.city && h.listing.state)?.listing;
         setSave(
           card
             ? {
@@ -481,16 +481,19 @@ function useLatestSave(signedIn: boolean): LatestSave | null {
             : null,
         );
       })
-      .catch(() => {
-        // Chrome, not a task: the row simply does not render.
+      .catch((err: unknown) => {
+        // The row stays hidden. Log a real failure so a broken endpoint is visible.
+        if (!(err instanceof DOMException && err.name === 'AbortError')) {
+          console.warn('Saved homes row: read failed', err);
+        }
       });
     return () => controller.abort();
-  }, [signedIn]);
+  }, [accountKey]);
 
   return save;
 }
 
-/** "More homes like the ones you saved" (#364): follows the latest save, not the intent control.
+/** "More homes in {city}" (#364): follows the latest save, not the intent control.
  *  Hidden with no save, no matching listings, or a failed fetch. The copy states the reason only. */
 function SavedLikeRow({
   save,
@@ -517,7 +520,7 @@ function SavedLikeRow({
 
   return (
     <ListingRow
-      title="More homes like the ones you saved"
+      title={`More homes in ${save.city}`}
       href={searchTargetUrl(
         { kind: 'place', place: { kind: 'city', city: save.city, state: save.state } },
         save.listingType,
@@ -792,7 +795,7 @@ export default function HomePageContent() {
   const rentFirst = useRentFirst();
   const { region, loading: regionLoading } = useRegion();
   const { user, savedPropertyIds } = useApp();
-  const latestSave = useLatestSave(Boolean(user));
+  const latestSave = useLatestSave(user?.email ?? null);
   const savedLike = user ? (
     <SavedLikeRow key="saved-like" save={latestSave} savedPropertyIds={savedPropertyIds} />
   ) : null;
