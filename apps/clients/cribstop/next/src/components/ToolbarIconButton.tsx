@@ -101,6 +101,24 @@ export const HEART_ICON = (
   </svg>
 );
 
+/** The more (3 vertical dots) icon. */
+export const MORE_ICON = (
+  <svg {...ICON_PROPS} fill="currentColor" stroke="none">
+    <circle cx="12" cy="5" r="1.8" />
+    <circle cx="12" cy="12" r="1.8" />
+    <circle cx="12" cy="19" r="1.8" />
+  </svg>
+);
+
+/** The account (person in circle) icon. */
+export const ACCOUNT_ICON = (
+  <svg {...ICON_PROPS}>
+    <circle cx="12" cy="12" r="9.5" />
+    <circle cx="12" cy="10" r="3" />
+    <path d="M5.8 18.5c1.4-2.3 3.6-3.5 6.2-3.5s4.8 1.2 6.2 3.5" />
+  </svg>
+);
+
 /** The zoom-in icon. */
 export const PLUS_ICON = (
   <svg {...ICON_PROPS}>
@@ -164,15 +182,22 @@ export interface ToolbarIconButtonProps
   countTestId?: string;
   /**
    * Where the button sits. `page` (default) is transparent. `map` is white with a light shadow,
-   * for a button over map tiles (#764). Nothing else differs.
+   * for a button over map tiles (#764). `nav` is a light gray fill with no border, for the navbar.
+   * Nothing else differs.
    */
-  surface?: 'page' | 'map';
+  surface?: 'page' | 'map' | 'nav';
+  /** React 19 passes a ref as a prop. */
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export const SURFACE_CLASSES = {
   page: 'bg-transparent hover:bg-surface-soft disabled:hover:bg-transparent aria-expanded:bg-surface-soft',
   map: 'bg-white shadow-[0_1px_4px_rgba(34,34,34,0.25)] hover:bg-gray-100 disabled:hover:bg-white aria-expanded:bg-gray-100',
+  nav: 'bg-gray-100 hover:bg-gray-200 disabled:hover:bg-gray-100 aria-expanded:bg-gray-200',
 } as const;
+
+/** The round, gray, borderless look of a navbar control. A link uses it where a button does not fit. */
+export const NAV_BUTTON_CLASSES = `${SURFACE_CLASSES.nav} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 max-md:h-10 max-md:w-10`;
 
 /** The one round icon-only toolbar button: list toolbar and map (#748, #758). A transparent fill and a light border, on every surface. */
 export default function ToolbarIconButton({
@@ -202,8 +227,8 @@ export default function ToolbarIconButton({
       aria-label={label}
       title={tooltip ?? label}
       aria-pressed={pressed}
-      className={`${position} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-gray-300 ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
-        dark ? 'text-ink' : 'text-ink-muted'
+      className={`${position} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border ${surface === 'nav' ? 'border-transparent max-md:h-10 max-md:w-10' : 'border-gray-300'} ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
+        dark || surface === 'nav' ? 'text-ink' : 'text-ink-muted'
       } ${className}`}
       {...rest}
     >
