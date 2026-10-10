@@ -25,20 +25,27 @@
  * is a guardrail, not a security boundary.
  *
  * What this hook enforces, exactly: the Edit/Write/NotebookEdit/MultiEdit
- * tool family (Rules A and B), and a fixed set of `git` invocations run
- * through the Bash tool (Rules C and D). It does NOT intercept file writes
- * a Bash command performs by other means — `echo x > path`, `cp`, `mv`,
- * `sed -i`, `rm -rf`, and similar all pass unchecked today. Closing that
- * gap needs real shell semantics this hook does not have. Both gaps are
- * tracked in #307 and are not solved here.
+ * tool family (Rules A and B), a fixed set of `git` invocations run through
+ * the Bash tool (Rules C and D), and these shell forms (Rules E and F, #307):
+ *   - Rule E: a literal `cd`/`pushd` into another lane's worktree, from a
+ *     lane that is itself a worktree. The simulated working directory then
+ *     carries into the later segments of the same command.
+ *   - Rule F: a redirect (`>`, `>>`, `&>`, `2>`), `tee`, a `cp`/`mv`/
+ *     `install`/`ln` operand, or an `rm`/`rmdir`/`touch`/`mkdir`/`truncate`/
+ *     `sed -i` operand aimed at another lane's worktree. A redirect, `tee`,
+ *     `cp`, `mv`, `install` or `ln` destination outside the lane root is
+ *     blocked too, unless it is the OS temp dir, `~/.claude`, or a device
+ *     such as /dev/null.
+ * It does NOT see a path the shell expands at run time (`$VAR`, `~`, globs,
+ * command substitution), a write that a program computes itself, or a `cd`
+ * in a subshell. Those pass unchecked on purpose: a guess would refuse safe
+ * commands, and a guard that does so gets switched off. Quoted text is never
+ * read as a command, so prose that names a path stays allowed.
  *
- * Accepted limitation: Rule C finds a `git` token anywhere in a segment's
- * token list (see `checkGitTargetFlags`), so `pnpm exec git -C <path> ...`
- * and `env X=1 git -C <path> ...` are caught. A command that reaches `git`
- * only through shell control flow the tokenizer does not evaluate — for
- * example `cd ../other && git status`, where the second segment's `git` has
- * no `-C`/`--git-dir` flag to inspect at all — is out of reach without full
- * shell semantics and is not solved here.
+ * Rule C finds a `git` token anywhere in a segment's token list (see
+ * `checkGitTargetFlags`), so `pnpm exec git -C <path> ...` and
+ * `env X=1 git -C <path> ...` are caught. `cd ../other && git status` is
+ * caught by Rule E at the `cd`.
  */
 const path = require('path');
 const os = require('os');
@@ -312,6 +319,156 @@ function checkWorktreeAdmin(segment, env) {
   );
 }
 
+// ---- Rules E and F: shell working directory and shell file writes (#307) ----
+
+const SAFE_DEVICE = /^(\/dev\/|\/proc\/|nul$)/i;
+const UNRESOLVABLE = /[$`*?~(){}<>!]/;
+
+// Git Bash passes `/c/Src/x`. Node on win32 reads that as a path on the
+// current drive, so convert it first.
+function toNativePath(value) {
+  if (process.platform !== 'win32') return value;
+  const m = /^\/([a-zA-Z])(\/.*)?$/.exec(value);
+  return m ? `${m[1].toUpperCase()}:${m[2] || '/'}` : value;
+}
+
+// Returns an absolute path. Returns null when the shell expands the value at
+// run time (the hook cannot know the result) or the value is a device.
+function resolveShellPath(value, cwd, laneRoot) {
+  if (!value || UNRESOLVABLE.test(value) || SAFE_DEVICE.test(value)) return null;
+  const native = toNativePath(value);
+  return path.isAbsolute(native) ? path.resolve(native) : path.resolve(cwd || laneRoot, native);
+}
+
+function foreignWorktree(resolved, laneRoot) {
+  const root = findWorktreeRoot(resolved);
+  return root && normalize(root) !== normalize(laneRoot) ? root : null;
+}
+
+function commandWord(tokens) {
+  let i = 0;
+  while (
+    i < tokens.length &&
+    !isQuoted(tokens[i]) &&
+    /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i].value)
+  ) {
+    i += 1;
+  }
+  if (i >= tokens.length) return { name: null, args: [] };
+  const name = path
+    .basename(tokens[i].value)
+    .toLowerCase()
+    .replace(/\.exe$/, '');
+  return { name, args: tokens.slice(i + 1) };
+}
+
+// Rule E. Returns { reason, cwd }: `cwd` is the simulated directory for the
+// segments that follow. A lane whose root holds no worktree segment is the
+// primary orchestrator. It may enter any worktree.
+function checkDirectoryChange(tokens, laneRoot, cwd) {
+  const { name, args } = commandWord(tokens);
+  if (name !== 'cd' && name !== 'pushd') return { reason: null, cwd };
+  const operands = args.filter((t) => !t.value.startsWith('-'));
+  if (operands.length !== 1) return { reason: null, cwd };
+  const target = resolveShellPath(operands[0].value, cwd, laneRoot);
+  if (!target) return { reason: null, cwd };
+  const foreign = findWorktreeRoot(laneRoot) ? foreignWorktree(target, laneRoot) : null;
+  if (foreign) {
+    return {
+      reason:
+        `Blocked: "${name} ${operands[0].value}" enters another lane's worktree (${foreign}).\n` +
+        `Stay inside your own lane root (${laneRoot}).`,
+      cwd,
+    };
+  }
+  return { reason: null, cwd: target };
+}
+
+function checkShellTarget(value, laneRoot, cwd, requireInside) {
+  const target = resolveShellPath(value, cwd, laneRoot);
+  if (!target) return null;
+  const foreign = foreignWorktree(target, laneRoot);
+  if (foreign) {
+    return (
+      `Blocked: shell write to "${value}" is inside another lane's worktree (${foreign}).\n` +
+      `Write only inside your own lane root (${laneRoot}).`
+    );
+  }
+  if (requireInside && !isAllowlisted(target) && !isInside(target, laneRoot)) {
+    return (
+      `Blocked: shell write to "${value}" is outside this lane's root (${laneRoot}).\n` +
+      `Write only inside your own worktree, the OS temp directory, or ~/.claude.`
+    );
+  }
+  return null;
+}
+
+const FOREIGN_ONLY = new Set(['rm', 'rmdir', 'touch', 'mkdir', 'truncate']);
+const COPY_LIKE = new Set(['cp', 'mv', 'install', 'ln']);
+
+function positionals(args) {
+  return args.filter((t) => isQuoted(t) || !t.value.startsWith('-')).map((t) => t.value);
+}
+
+// Rule F. Redirect operators are read only from unquoted tokens, so prose in
+// a quoted argument never counts.
+function checkShellWrites(tokens, laneRoot, cwd) {
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (isQuoted(token) || !token.raw.includes('>')) continue;
+    const m = /^(?:[^"'>]*?[^-=\s"'>])?(?:&|\d)?>>?\|?(?![&(])(.*)$/.exec(token.raw);
+    if (!m) continue;
+    const operand = m[1] ? m[1].replace(/^["']|["']$/g, '') : tokens[i + 1] && tokens[i + 1].value;
+    const reason = checkShellTarget(operand, laneRoot, cwd, true);
+    if (reason) return reason;
+  }
+
+  const { name, args } = commandWord(tokens);
+  if (!name) return null;
+  const files = positionals(args);
+
+  if (name === 'tee') {
+    for (const file of files) {
+      const reason = checkShellTarget(file, laneRoot, cwd, true);
+      if (reason) return reason;
+    }
+  } else if (COPY_LIKE.has(name)) {
+    const hasTargetDirFlag = args.some((t) => /^(-t|--target-directory)/.test(t.value));
+    for (let i = 0; i < files.length; i += 1) {
+      const isDest = !hasTargetDirFlag && i === files.length - 1;
+      // Only `mv` changes its sources. `cp`, `install` and `ln` only read them.
+      if (!isDest && name !== 'mv') continue;
+      const reason = checkShellTarget(files[i], laneRoot, cwd, isDest);
+      if (reason) return reason;
+    }
+  } else if (
+    FOREIGN_ONLY.has(name) ||
+    (name === 'sed' && args.some((t) => /^(-i|--in-place)/.test(t.value)))
+  ) {
+    for (const file of files) {
+      const reason = checkShellTarget(file, laneRoot, cwd, false);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
+// Drops heredoc bodies so the text of a `cat <<EOF` block is never read as commands.
+function stripHeredocs(command) {
+  const out = [];
+  let end = null;
+  for (const line of command.split('\n')) {
+    if (end !== null) {
+      if (line.trim() === end) end = null;
+      continue;
+    }
+    out.push(line);
+    const m = /<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/.exec(line);
+    if (m) end = m[1] || m[2] || m[3];
+  }
+  return out.join('\n');
+}
+
 /**
  * Pick the lane root. A worktree containing `cwd` wins over the script's own
  * root, because it is always the narrower of the two.
@@ -342,11 +499,18 @@ function evaluate({ toolName, toolInput, laneRoot, env, cwd }) {
   if (toolName === 'Bash') {
     const command = input.command;
     if (!command) return null;
-    for (const segment of splitSegments(command)) {
+    let simulatedCwd = cwd;
+    for (const segment of splitSegments(stripHeredocs(command))) {
       const adminReason = checkWorktreeAdmin(segment, safeEnv);
       if (adminReason) return adminReason;
-      const flagReason = checkGitTargetFlags(segment, laneRoot, cwd);
+      const flagReason = checkGitTargetFlags(segment, laneRoot, simulatedCwd);
       if (flagReason) return flagReason;
+      const tokens = tokenize(segment);
+      const change = checkDirectoryChange(tokens, laneRoot, simulatedCwd);
+      if (change.reason) return change.reason;
+      simulatedCwd = change.cwd;
+      const writeReason = checkShellWrites(tokens, laneRoot, simulatedCwd);
+      if (writeReason) return writeReason;
     }
     return null;
   }
