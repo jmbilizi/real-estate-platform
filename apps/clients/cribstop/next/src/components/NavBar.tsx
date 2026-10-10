@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'nextjs-toploader/app';
 import { motion } from 'motion/react';
-import { Bell, Heart, LogOut, MessageCircle, UserPlus } from 'lucide-react';
+import { Heart, LogOut, UserPlus } from 'lucide-react';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
 import AppsDropdown from './AppsDropdown';
@@ -354,22 +354,6 @@ export default function NavBar() {
                       >
                         <Heart className="h-4 w-4 shrink-0 text-ink-muted" />
                         Saved homes
-                      </Link>
-                      <Link
-                        href="/alerts"
-                        className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
-                        onClick={() => setProfileOpen(false)}
-                      >
-                        <Bell className="h-4 w-4 shrink-0 text-ink-muted" />
-                        Alerts
-                      </Link>
-                      <Link
-                        href="/messages"
-                        className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
-                        onClick={() => setProfileOpen(false)}
-                      >
-                        <MessageCircle className="h-4 w-4 shrink-0 text-ink-muted" />
-                        Messages
                       </Link>
                     </div>
 
