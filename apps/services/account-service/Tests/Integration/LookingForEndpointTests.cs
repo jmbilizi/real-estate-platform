@@ -8,6 +8,7 @@ using System.Text.Json;
 using AccountService.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -124,6 +125,41 @@ namespace AccountService.Tests.Integration
             });
             response.StatusCode.Should().Be(HttpStatusCode.Created);
             (await response.Content.ReadAsStringAsync()).Should().NotContain("family");
+
+            // Read the stored row back with a fresh context.
+            using var scope = factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AccountService.Data.AccountDbContext>();
+            var row = await db.LookingForPreferences.AsNoTracking().SingleAsync(p => p.Id == id);
+            System.Text.Json.JsonSerializer.Serialize(row).Should().NotContain("family");
+        }
+
+        [Theory]
+        [InlineData("neighborhood")]
+        [InlineData("street")]
+        [InlineData("county")]
+        public async Task Put_Returns400_ForAPlaceKindTheFormDoesNotSupportYet(string kind)
+        {
+            var client = await NewClientAsync("lf-kind-" + kind);
+            var response = await client.PutAsJsonAsync($"/account/looking-for/{Guid.NewGuid()}", new
+            {
+                intent = "buy",
+                places = new[] { new { kind, name = "Del Ray", county = "Fairfax", city = "Alexandria", state = "VA" } },
+            });
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task ConcurrentPuts_OfTheSameNewId_NeverAnswer500_AndLeaveOneRow()
+        {
+            var client = await NewClientAsync("lf-race");
+            var id = Guid.NewGuid();
+
+            var responses = await Task.WhenAll(Enumerable.Range(0, 6)
+                .Select(_ => client.PutAsJsonAsync($"/account/looking-for/{id}", Body())));
+
+            responses.Select(r => (int)r.StatusCode).Should().OnlyContain(s => s == 200 || s == 201);
+            var list = await (await client.GetAsync("/account/looking-for")).Content.ReadFromJsonAsync<JsonElement>();
+            list.GetProperty("items").GetArrayLength().Should().Be(1);
         }
 
         [Fact]

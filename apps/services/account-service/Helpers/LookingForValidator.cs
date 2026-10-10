@@ -84,16 +84,13 @@ internal static partial class LookingForValidator
 
         var stateOk = place.State is not null && StateRegex().IsMatch(place.State);
         var city = place.City is not null && NameRegex().IsMatch(place.City);
-        var name = place.Name is not null && NameRegex().IsMatch(place.Name);
-        var county = place.County is not null && NameRegex().IsMatch(place.County);
         var zip = place.Zip is not null && ZipRegex().IsMatch(place.Zip);
 
-        return stateOk && place.Kind switch
+        // Only city and zip until the web form can show and edit the other kinds (#768).
+        return stateOk && place.Name is null && place.County is null && place.Kind switch
         {
-            "city" => city && place.Zip is null && place.Name is null && place.County is null,
-            "zip" => zip && city && place.Name is null && place.County is null,
-            "neighborhood" or "street" => name && city && (place.Zip is null || zip) && place.County is null,
-            "county" => county && place.City is null && place.Zip is null && place.Name is null,
+            "city" => city && place.Zip is null,
+            "zip" => zip && city,
             _ => false,
         };
     }
