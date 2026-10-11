@@ -82,6 +82,21 @@ describe('listingCardSchema', () => {
     expect(keys).not.toContain('hasOpenHouse');
   });
 
+  it('enforces the lean-list / rich-detail split: no detail-only fields', () => {
+    // The card row is the LEAN projection: single primary image, flat fields only. The full
+    // graph (photo gallery, description, open houses, nested property/unit detail) is fetched
+    // only when a user opens a listing. This test ensures that detail-only fields never creep
+    // onto the list row. See PRD §3.1 "List vs. Detail Payloads" and the docblock above.
+    const keys = Object.keys(listingCardSchema.shape);
+
+    // Detail-only fields that must stay OFF the card:
+    expect(keys).not.toContain('media'); // Card has only single primaryMedia
+    expect(keys).not.toContain('openHouses'); // Card has only single openHouse
+    expect(keys).not.toContain('description'); // Most Fair Housing risk; detail-only
+    expect(keys).not.toContain('property'); // Nested object; detail-only
+    expect(keys).not.toContain('unit'); // Nested object; detail-only
+  });
+
   it('requires the price change keys, and accepts two stored prices (#717)', () => {
     const { previousPrice: _p, ...withoutPrevious } = row;
     expect(listingCardSchema.safeParse(withoutPrevious).success).toBe(false);

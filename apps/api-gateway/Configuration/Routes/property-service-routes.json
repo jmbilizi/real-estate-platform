@@ -78,6 +78,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/listings/suggest",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/listings/suggest",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 240
+      },
+      "QoSOptions": {
+        "Timeout": 3000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 30000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/listings/brokers",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/listings/brokers",
@@ -303,6 +328,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/analytics/events",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/analytics/events",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 120
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/listings/{id}/saved",
       "UpstreamHttpMethod": ["PUT", "DELETE"],
       "DownstreamPathTemplate": "/listings/{id}/saved",
@@ -356,6 +406,56 @@
       "UpstreamPathTemplate": "/property/saved-homes/{id}",
       "UpstreamHttpMethod": ["DELETE"],
       "DownstreamPathTemplate": "/saved-homes/{id}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/looking-for",
+      "UpstreamHttpMethod": ["GET"],
+      "DownstreamPathTemplate": "/looking-for",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 1,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
+      "UpstreamPathTemplate": "/property/looking-for/{id}",
+      "UpstreamHttpMethod": ["PUT", "DELETE"],
+      "DownstreamPathTemplate": "/looking-for/{id}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {

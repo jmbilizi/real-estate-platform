@@ -31,6 +31,7 @@ const path = require('path');
 // `@cribstop/property-contracts`), which would mangle into a bogus nested path. Reading the
 // manifests also keeps the project name out of any shell — see tools/lib/project-root.js.
 const { resolveProjectRoot } = require('../lib/project-root');
+const { ensureWorkspaceCerts } = require('../infra/workspace-certs');
 
 // ANSI color codes
 const colors = {
@@ -267,6 +268,7 @@ function buildImage(projectName, options) {
   // Add cert handling
   if (options.copyCerts) {
     logInfo('Enterprise certificates will be included (local dev mode)');
+    ensureWorkspaceCerts(path.resolve(__dirname, '../..'));
     buildArgs.push('--build-arg', 'COPY_CERTS=true');
   } else {
     logInfo('Skipping enterprise certificates (CI/CD mode)');

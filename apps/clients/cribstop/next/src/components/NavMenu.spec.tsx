@@ -3,10 +3,9 @@ import NavMenu, { getNavMenuItems } from './NavMenu';
 
 function setup(signedIn: boolean) {
   const onAuth = jest.fn();
-  const onLogout = jest.fn();
-  render(<NavMenu signedIn={signedIn} onAuth={onAuth} onLogout={onLogout} />);
+  render(<NavMenu signedIn={signedIn} onAuth={onAuth} />);
   const trigger = screen.getByRole('button', { name: 'More options' });
-  return { trigger, onAuth, onLogout };
+  return { trigger, onAuth };
 }
 
 const labels = () => screen.getAllByRole('menuitem').map((el) => el.textContent);
@@ -22,37 +21,32 @@ describe('NavMenu', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('lists Log in and Sign up first when signed out', () => {
+  it('lists one Sign in or sign up item first when signed out', () => {
     const { trigger } = setup(false);
     fireEvent.click(trigger);
 
-    expect(labels().slice(0, 3)).toEqual(['Log in', 'Sign up', 'Help']);
+    expect(labels().slice(0, 3)).toEqual(['Sign in or sign up', 'Help', 'About']);
     expect(labels()).not.toContain('Log out');
   });
 
-  it('lists Account, Saved homes and Log out first when signed in', () => {
+  it('lists only the secondary items when signed in, with no separator', () => {
     const { trigger } = setup(true);
     fireEvent.click(trigger);
 
-    expect(labels().slice(0, 4)).toEqual(['Account', 'Saved homes', 'Log out', 'Help']);
-    expect(labels()).not.toContain('Log in');
+    expect(labels().slice(0, 2)).toEqual(['Help', 'About']);
+    for (const l of ['Account', 'Saved homes', 'Log out', 'Sign in or sign up']) {
+      expect(labels()).not.toContain(l);
+    }
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
   });
 
-  it('opens the auth modal in the chosen mode and closes the menu', () => {
+  it('opens the auth modal and closes the menu', () => {
     const { trigger, onAuth } = setup(false);
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign up' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in or sign up' }));
 
-    expect(onAuth).toHaveBeenCalledWith('signup');
+    expect(onAuth).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-  });
-
-  it('logs out', () => {
-    const { trigger, onLogout } = setup(true);
-    fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Log out' }));
-
-    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
   it('closes on Escape and returns focus to the trigger', () => {
@@ -85,6 +79,24 @@ describe('NavMenu', () => {
     expect(items[1]).toHaveFocus();
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'End' });
     expect(items[items.length - 1]).toHaveFocus();
+  });
+
+  it('uses the same SlidePanel width as the Apps dropdown', () => {
+    const { trigger } = setup(false);
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole('dialog')).toHaveStyle({ width: '314px' });
+  });
+
+  it('closes when the trigger is pressed again, without reopening', () => {
+    const { trigger } = setup(false);
+    fireEvent.click(trigger);
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    fireEvent.mouseDown(trigger);
+    fireEvent.click(trigger);
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
   it('gives every link a real destination', () => {

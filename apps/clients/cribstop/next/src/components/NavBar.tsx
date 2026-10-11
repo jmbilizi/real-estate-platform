@@ -133,9 +133,9 @@ export default function NavBar() {
     return () => window.removeEventListener('keydown', handler);
   }, [headerExpanded, setHeaderExpanded]);
 
-  const openModal = (mode: 'login' | 'signup') => {
+  const openModal = () => {
     const params = new URLSearchParams(window.location.search);
-    params.set('modal', mode);
+    params.set('modal', 'login');
     router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -307,10 +307,20 @@ export default function NavBar() {
                   <ToolbarIconButton
                     surface="nav"
                     label="Profile menu"
+                    className="overflow-hidden"
                     icon={
-                      <span className="text-sm font-semibold text-ink">
-                        {getUserInitials(user)}
-                      </span>
+                      user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt=""
+                          className="h-full w-full rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-ink">
+                          {getUserInitials(user)}
+                        </span>
+                      )
                     }
                     aria-expanded={profileOpen}
                     aria-haspopup="dialog"
@@ -324,9 +334,18 @@ export default function NavBar() {
 
                     {/* Avatar + name + email */}
                     <div className="flex flex-col items-center px-5 pt-6 pb-4 gap-2">
-                      <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
-                        {getUserInitials(user)}
-                      </span>
+                      {user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt=""
+                          className="h-16 w-16 flex-shrink-0 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
+                          {getUserInitials(user)}
+                        </span>
+                      )}
                       <div className="text-center min-w-0 w-full">
                         <p className="text-sm font-semibold text-ink truncate">
                           {getUserDisplayName(user)}
@@ -389,7 +408,7 @@ export default function NavBar() {
                       >
                         Privacy Policy
                       </Link>
-                      {' Â· '}
+                      {' · '}
                       <Link
                         href="/terms"
                         onClick={() => setProfileOpen(false)}
@@ -405,17 +424,17 @@ export default function NavBar() {
                   surface="nav"
                   label="Sign in or sign up"
                   icon={ACCOUNT_ICON}
-                  onClick={() => openModal('login')}
+                  onClick={() => openModal()}
                 />
               )}
             </div>
 
             {hydrated ? (
               <span className="content-resolved flex items-center">
-                <NavMenu signedIn={!!user} onAuth={openModal} onLogout={logout} />
+                <NavMenu signedIn={!!user} onAuth={openModal} />
               </span>
             ) : (
-              <NavButtonSkeleton />
+              <SkeletonBlock className="-mr-1 h-6 w-1 shrink-0 rounded" />
             )}
           </div>
         </div>

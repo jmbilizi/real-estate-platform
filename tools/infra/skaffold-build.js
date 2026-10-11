@@ -22,6 +22,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { applyLocalRetention } = require('./registry-retention');
+const { ensureWorkspaceCerts } = require('./workspace-certs');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
 
@@ -126,7 +127,9 @@ function detectDockerfile(projectName) {
 function ensureWorkspaceCertsDir() {
   // The Dockerfile uses a BuildKit bind mount for .workspace-certs/ (enterprise CA setup).
   // That mount fails the build if the directory does not exist in the build context.
-  // .workspace-certs/ is gitignored, so we ensure it exists here (an empty directory is fine).
+  // A worktree copies the bundle from the main checkout, or fails with the copy command (#107).
+  // A host with no bundle anywhere only warns. CI needs no bundle, only the directory.
+  ensureWorkspaceCerts(workspaceRoot);
   const certsDir = path.join(workspaceRoot, '.workspace-certs');
   if (!fs.existsSync(certsDir)) {
     fs.mkdirSync(certsDir, { recursive: true });

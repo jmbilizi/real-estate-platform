@@ -77,11 +77,82 @@ describe('AuthForm', () => {
     it('shows one email field and Continue, with no sign-in or sign-up tabs', () => {
       render(<AuthForm />);
 
-      expect(screen.getByRole('heading', { name: "What's your email?" })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Sign in or sign up' })).toBeInTheDocument();
       expect(screen.getAllByRole('textbox')).toHaveLength(1);
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
       expect(screen.queryByRole('tab')).not.toBeInTheDocument();
       expect(screen.queryByPlaceholderText('••••••••')).not.toBeInTheDocument();
+    });
+
+    it('puts the email field first, then "or", then Google and Apple on one row', () => {
+      render(<AuthForm />);
+
+      const email = screen.getByPlaceholderText('you@example.com');
+      const or = screen.getByText('or');
+      const google = screen.getByRole('button', { name: 'Continue with Google' });
+      const apple = screen.getByRole('button', { name: 'Continue with Apple' });
+      const follows = (x: Node, y: Node) =>
+        Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(email, or)).toBe(true);
+      expect(follows(or, google)).toBe(true);
+      expect(google.parentElement).toBe(apple.parentElement);
+      expect(google.parentElement).toHaveClass('grid-cols-2', 'gap-1.5');
+      // One pill split in two: full outer corners, small inner corners.
+      expect(google).toHaveClass('rounded-l-full', 'rounded-r-[6px]');
+      expect(apple).toHaveClass('rounded-l-[6px]', 'rounded-r-full');
+      expect(google.className).toContain('min-h-11');
+      expect(apple.className).toContain('min-h-11');
+      expect(google).toHaveAttribute('title', 'Continue with Google');
+      expect(apple).toHaveAttribute('title', 'Continue with Apple');
+      expect(screen.queryByText('Welcome back')).not.toBeInTheDocument();
+    });
+
+    it('labels the field inside it and shows the helper line only on focus or a value', () => {
+      render(<AuthForm />);
+
+      const field = screen.getByLabelText('Email');
+      const help = () => screen.getByText('We may send you a code to confirm your email.');
+      expect(field).toBe(screen.getByPlaceholderText('you@example.com'));
+      // The step focuses the field on mount, so blur it to read the idle state.
+      fireEvent.blur(field);
+      expect(help()).toHaveClass('opacity-0');
+
+      fireEvent.focus(field);
+      expect(help()).toHaveClass('opacity-100');
+      // The footer links the Privacy Policy once. The helper line has no link.
+      expect(screen.getAllByRole('link', { name: 'Privacy Policy' })).toHaveLength(1);
+      expect(field.getAttribute('aria-describedby')).toContain('auth-email-help');
+
+      fireEvent.blur(field);
+      expect(help()).toHaveClass('opacity-0');
+      fireEvent.change(field, { target: { value: 'a@b.co' } });
+      expect(help()).toHaveClass('opacity-100');
+    });
+
+    it('keeps the step layout identical before focus, on focus and after blur', () => {
+      render(<AuthForm />);
+      const field = screen.getByLabelText('Email');
+      const form = field.closest('form') as HTMLElement;
+      // Everything that can change a box size: tag, classes with the opacity and label-float
+      // classes removed, and the node count. Opacity and the absolute label never move layout.
+      const NON_LAYOUT = /\bopacity-\d+\b/g;
+      const signature = () =>
+        Array.from(form.querySelectorAll('*'))
+          .filter((el) => el.tagName !== 'LABEL')
+          .map((el) => `${el.tagName}.${(el.getAttribute('class') ?? '').replace(NON_LAYOUT, '')}`)
+          .join('|');
+
+      fireEvent.blur(field);
+      const before = signature();
+      const nodesBefore = form.querySelectorAll('*').length;
+      fireEvent.focus(field);
+      expect(signature()).toBe(before);
+      expect(form.querySelectorAll('*').length).toBe(nodesBefore);
+      fireEvent.blur(field);
+      expect(signature()).toBe(before);
+      expect(form.querySelectorAll('*').length).toBe(nodesBefore);
+      // A constant 1px border plus a ring: focus never thickens the border.
+      expect(field.className).not.toMatch(/focus:border-(2|4|\[)/);
     });
 
     it('sets the email field attributes for mobile keyboards and password managers', () => {
@@ -102,10 +173,9 @@ describe('AuthForm', () => {
         'href',
         '/terms',
       );
-      expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
-        'href',
-        '/privacy',
-      );
+      for (const link of screen.getAllByRole('link', { name: 'Privacy Policy' })) {
+        expect(link).toHaveAttribute('href', '/privacy');
+      }
       expect(screen.getByText(/By continuing, you agree to our/i)).toBeInTheDocument();
       expect(screen.queryByText(/draft|pending/i)).not.toBeInTheDocument();
     });

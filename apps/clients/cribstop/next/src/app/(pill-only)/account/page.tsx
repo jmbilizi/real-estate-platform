@@ -10,6 +10,7 @@ import { updateProfile } from '@/lib/store/slices/authSlice';
 import { addToast } from '@/lib/store/slices/toastSlice';
 import { selectUser } from '@/lib/store/selectors';
 import AccountSecuritySection from '@/components/AccountSecuritySection';
+import LookingForSection from '@/components/LookingForSection';
 
 export default function AccountPage() {
   const { user, logout } = useApp();
@@ -74,6 +75,8 @@ export default function AccountPage() {
       </div>
 
       <AccountSecuritySection />
+
+      <LookingForSection />
 
       {/* Editable profile section */}
       <ProfileSection />

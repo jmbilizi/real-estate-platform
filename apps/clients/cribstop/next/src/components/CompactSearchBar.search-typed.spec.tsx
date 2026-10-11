@@ -154,3 +154,39 @@ it('refuses the search and shows an inline message when the geocoder finds nothi
   expect(mockPush).not.toHaveBeenCalled();
   expect(await screen.findByRole('alert')).toHaveTextContent(/could not find that location/i);
 });
+
+describe('Where suggestions (#781)', () => {
+  async function typeInWhere(text: string) {
+    mockUseApp.mockReturnValue(appValue(text));
+    render(<CompactSearchBar />);
+    await act(async () => {
+      fireEvent.click(screen.getAllByText(/^Where/)[0] as HTMLElement);
+    });
+    const input = await screen.findByPlaceholderText(/Search city, zip/);
+    await act(async () => {
+      fireEvent.change(input, { target: { value: `${text}e` } });
+    });
+  }
+
+  it('shows the unavailable message when the suggestion request fails', async () => {
+    global.fetch = jest.fn(async () => ({ ok: false, json: async () => ({}) }) as Response);
+    await typeInWhere('rockv');
+    expect(
+      await screen.findByText(
+        'Suggestions unavailable, press Enter to search',
+        {},
+        { timeout: 2000 },
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('No locations found')).toBeNull();
+  });
+
+  it('shows "No locations found" when the request succeeds with no rows', async () => {
+    global.fetch = jest.fn(
+      async () => ({ ok: true, json: async () => ({ suggestions: [] }) }) as Response,
+    );
+    await typeInWhere('zzzzq');
+    expect(await screen.findByText('No locations found', {}, { timeout: 2000 })).toBeTruthy();
+    expect(screen.queryByText('Suggestions unavailable, press Enter to search')).toBeNull();
+  });
+});

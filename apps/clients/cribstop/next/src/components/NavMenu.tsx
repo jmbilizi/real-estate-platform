@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
-import { DropdownContainer } from './DropdownContainer';
-import ToolbarIconButton, { MORE_ICON } from './ToolbarIconButton';
+import SlidePanel from './SlidePanel';
+import { MORE_ICON } from './ToolbarIconButton';
 
 export type NavMenuItem =
   | { kind: 'link'; label: string; href: string }
-  | { kind: 'action'; label: string; action: 'login' | 'signup' | 'logout' };
+  | { kind: 'action'; label: string; action: 'auth' };
 
 /**
  * Secondary items. Each has a real destination today. Language and Settings are absent on
@@ -27,40 +27,30 @@ export function getNavMenuItems(signedIn: boolean): {
   primary: NavMenuItem[];
   secondary: NavMenuItem[];
 } {
+  // Signed in: the profile panel already has Account, Saved homes and Sign out. Do not repeat them.
   const primary: NavMenuItem[] = signedIn
-    ? [
-        { kind: 'link', label: 'Account', href: '/account' },
-        { kind: 'link', label: 'Saved homes', href: '/favorites' },
-        { kind: 'action', label: 'Log out', action: 'logout' },
-      ]
-    : [
-        { kind: 'action', label: 'Log in', action: 'login' },
-        { kind: 'action', label: 'Sign up', action: 'signup' },
-      ];
+    ? []
+    : [{ kind: 'action', label: 'Sign in or sign up', action: 'auth' }];
   return { primary, secondary: SECONDARY_ITEMS };
 }
 
 const ITEM_CLASS =
-  'block w-full px-4 py-2.5 text-left text-sm text-ink hover:bg-gray-100 focus:bg-gray-100 focus:outline-none';
+  'block w-full px-5 py-2.5 text-left text-sm text-ink hover:bg-gray-100 focus:bg-gray-100 focus:outline-none';
 
-/** The More (3 vertical dots) menu at the far right of the navbar. */
-export default function NavMenu({
-  signedIn,
-  onAuth,
-  onLogout,
-}: {
-  signedIn: boolean;
-  onAuth: (mode: 'login' | 'signup') => void;
-  onLogout: () => void;
-}) {
+/** The More (3 vertical dots) menu at the far right of the navbar. It uses the Apps panel. */
+export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAuth: () => void }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // SlidePanel closes on the trigger's mousedown. The click that follows must not reopen it.
+  const closedAt = useRef(0);
   const { primary, secondary } = getNavMenuItems(signedIn);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    closedAt.current = Date.now();
+    setOpen(false);
+  }, []);
 
-  // DropdownContainer closes on Esc and outside click. Only Esc returns focus to the trigger.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -82,13 +72,6 @@ export default function NavMenu({
   useEffect(() => {
     if (open) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
   }, [open]);
-
-  const select = (item: NavMenuItem) => {
-    close();
-    if (item.kind !== 'action') return;
-    if (item.action === 'logout') onLogout();
-    else onAuth(item.action);
-  };
 
   const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const els = Array.from(
@@ -123,7 +106,10 @@ export default function NavMenu({
         type="button"
         role="menuitem"
         className={ITEM_CLASS}
-        onClick={() => select(item)}
+        onClick={() => {
+          close();
+          onAuth();
+        }}
       >
         {item.label}
       </button>
@@ -131,30 +117,41 @@ export default function NavMenu({
 
   return (
     <>
-      <ToolbarIconButton
+      {/*
+       * A bare glyph with no empty box space. The navbar flex gap sets the space to Account. -mr-1 mirrors
+       * the logo's -ml-1, so the dots end as far from the page edge as the logo starts. The pseudo element makes a 44px high tap area. It reaches into the gap on the left
+       * and to the page edge on the right, so it overlaps no neighbour and never overflows.
+       */}
+      <button
         ref={triggerRef}
-        surface="nav"
-        label="More options"
-        icon={MORE_ICON}
+        type="button"
+        aria-label="More options"
+        title="More options"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      />
-      {open && (
-        <DropdownContainer onClose={close} alignRight triggerRef={triggerRef}>
-          <div
-            ref={menuRef}
-            role="menu"
-            aria-label="More options"
-            onKeyDown={onMenuKeyDown}
-            className="w-60 py-2"
-          >
-            {primary.map(renderItem)}
-            <div role="separator" className="my-2 border-t border-black/[0.08]" />
-            {secondary.map(renderItem)}
-          </div>
-        </DropdownContainer>
-      )}
+        onClick={() => {
+          if (Date.now() - closedAt.current < 300) return;
+          setOpen((v) => !v);
+        }}
+        className="relative -mr-1 inline-flex h-6 w-1 shrink-0 cursor-pointer items-center justify-end rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-2 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+      >
+        {MORE_ICON}
+      </button>
+      <SlidePanel open={open} onClose={close} width={314}>
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="More options"
+          onKeyDown={onMenuKeyDown}
+          className="py-2"
+        >
+          {primary.map(renderItem)}
+          {primary.length > 0 && (
+            <div role="separator" className="mx-4 my-2 border-t border-black/[0.06]" />
+          )}
+          {secondary.map(renderItem)}
+        </div>
+      </SlidePanel>
     </>
   );
 }

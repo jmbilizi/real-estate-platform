@@ -54,6 +54,8 @@ export interface ProxyListingsOptions {
   readonly cache?: boolean;
   /** The visitor's IP, so the gateway rate limit counts the visitor, not this pod (#755). */
   readonly clientIp?: string | null;
+  /** #781. Use the separate suggest store instead of the shared one. */
+  readonly store?: 'suggest';
 }
 
 /** One finished upstream read, as plain data: a `NextResponse` body can be read only once. */
@@ -82,9 +84,14 @@ const RETRY_ONLY_IF_FASTER_THAN_MS = 1_500;
 /** Shared by every request this server handles. */
 const listingsReadCache = createReadCache();
 
+/** #781. Suggest keys are one per typed prefix. Their own store keeps typing from evicting home rows. */
+export const SUGGEST_CACHE_MAX_ENTRIES = 1_000;
+const suggestReadCache = createReadCache(Date.now, SUGGEST_CACHE_MAX_ENTRIES);
+
 /** Test seam: drops every stored read. */
 export function clearListingsReadCache(): void {
   listingsReadCache.clear();
+  suggestReadCache.clear();
 }
 
 /**
@@ -235,8 +242,9 @@ export async function proxyListingsRead(
     return toResponse(await readUpstream(path, query, clientIp));
   }
 
+  const store = options.store === 'suggest' ? suggestReadCache : listingsReadCache;
   const key = `${path}?${query}`;
-  const hit = listingsReadCache.get(key);
+  const hit = store.get(key);
   if (hit) {
     const maxAge = Math.min(hit.read.browserMaxAgeSeconds, hit.remainingSeconds);
     return NextResponse.json(hit.read.body, {
@@ -244,12 +252,12 @@ export async function proxyListingsRead(
     });
   }
 
-  const read = await listingsReadCache.load(key, async (): Promise<ProxiedRead> => {
+  const read = await store.load(key, async (): Promise<ProxiedRead> => {
     const fetched = await readUpstream(path, query, clientIp);
     if (fetched.status !== 200 || fetched.sharedSeconds <= 0) return fetched;
 
     if (JSON.stringify(fetched.body).length <= READ_CACHE_MAX_BODY_CHARS) {
-      listingsReadCache.set(
+      store.set(
         key,
         { body: fetched.body, browserMaxAgeSeconds: fetched.browserSeconds },
         fetched.sharedSeconds,

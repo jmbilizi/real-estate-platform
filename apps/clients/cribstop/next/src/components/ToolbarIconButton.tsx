@@ -101,9 +101,19 @@ export const HEART_ICON = (
   </svg>
 );
 
-/** The more (3 vertical dots) icon. */
+/**
+ * The more (3 vertical dots) icon. Same drawing and scale as the other 22px icons, with the
+ * viewBox cropped to the dots, so the box has no empty space and the dots sit flush at the
+ * navbar edge.
+ */
 export const MORE_ICON = (
-  <svg {...ICON_PROPS} fill="currentColor" stroke="none">
+  <svg
+    width={3.3}
+    height={16.13}
+    viewBox="10.2 3.2 3.6 17.6"
+    fill="currentColor"
+    aria-hidden="true"
+  >
     <circle cx="12" cy="5" r="1.8" />
     <circle cx="12" cy="12" r="1.8" />
     <circle cx="12" cy="19" r="1.8" />

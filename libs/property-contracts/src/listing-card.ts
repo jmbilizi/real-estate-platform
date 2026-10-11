@@ -15,6 +15,15 @@ import {
  * The flat card projection. Every nullable field is `.nullable()` and never `.optional()`:
  * a `0` for a land parcel's beds asserts a fact that is false (PRD §6.3) and corrupts range
  * predicates, and an omitted key is indistinguishable from null to a JSON client.
+ *
+ * **Lean-list / rich-detail split (PRD §3.1):** A results page renders ~20 of these cards on the
+ * first screen a new visitor sees. Every field here is paid twenty times per page. This shape must
+ * stay lean: flat fields only, one primary image only. The full graph (photo gallery, description,
+ * open houses, unit detail) is returned only by the detail endpoint and fetched only when a user
+ * actually opens a listing. Attribution is required on both list and detail (NAR 7.58); description
+ * and media galleries are detail-only. No field-selection parameter may exist here that could
+ * strip attribution. Enforce the detail-only rules via an e2e test: this schema must never carry
+ * description, media arrays, openHouses arrays, or nested property/unit objects.
  */
 export const listingCardSchema = z
   .object({

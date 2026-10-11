@@ -1,0 +1,27 @@
+# #269: only api-gateway and property-service may reach account-service. The recovery rate limit
+# (#143) keys on X-Real-IP, which only the gateway sets. property-service calls
+# /internal/account/* (credential introspection and contacts). Kubelet probes come from the node
+# and the policy allows them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: account-service-ingress
+  labels:
+    app: account-service
+spec:
+  podSelector:
+    matchLabels:
+      app: account-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+        - podSelector:
+            matchLabels:
+              app: property-service
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -31,6 +31,18 @@ directly.
 > The language-agnostic seam is the Redis Streams bus (PRD §2.3): the worker publishes normalised
 > listing events in whatever language suits, and this service stays the only writer.
 
+## The Lean-List / Rich-Detail Payload Split
+
+This service returns **two distinct payloads** for listings, and the split is non-negotiable. The
+**list/search endpoint** (`GET /listings`) returns `ListingCard` — flat fields a card renders
+(price, beds, baths, address, neighborhood) plus a single primary image. The **detail endpoint**
+(`GET /listings/{id}`) returns `PropertyPage` with the full graph (all photos, description, open
+houses, full NAR attribution, unit detail). Search results on the client side render ~20 cards, so
+every field on that card is paid twenty times per page, on the first screen a new visitor sees. The
+card row must stay small. See PRD §3.1's "List vs. Detail Payloads" for the compliance rules:
+attribution is required on both list and detail, while description and media galleries are
+detail-only. No field-selection parameter exists that could strip attribution.
+
 Consequence to budget in #22: **Express generates no OpenAPI**, while the gateway's
 `MMLib.SwaggerForOcelot` fetches a spec URL per service (account-service serves `/openapi/v1.json`,
 inference serves `/openapi.json`). Do not hand-write one — define the request/response schemas once
@@ -776,6 +788,23 @@ the Property API document. Never publish a second document.
   including when account-service is down.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
+
+## What I'm looking for (`src/looking-for/`)
+
+`GET /looking-for`, `PUT|DELETE /looking-for/{id}` (#768). The gateway exposes them as
+`/property/looking-for*`. account-service stays identity and authorization only (ruling 2026-10-10),
+so this data lives here, keyed by account id like `saved_homes`.
+
+- `store.ts` is the only module that touches `looking_for_preferences`. The key is
+  `(account_id, id)`. The client picks `id`. The account id comes from introspection, never from the
+  request.
+- The limit is 5 per account. `upsertLookingFor` takes `pg_advisory_xact_lock` per account before it
+  counts, so parallel creates cannot pass the limit. A known id replaces its row, even at the limit.
+- Places are `city` and `zip` only. Unknown keys, including free text, answer 400. A start date
+  before yesterday (UTC) answers 400. The 400 body names the fields in `error.fields`, never values.
+- A preference sends no email. Alerts need their own opt-in (#505, #769).
+- Nothing removes these rows when account-service deletes an account. `saved_homes` has the same
+  gap.
 
 ## Staff roles (#628)
 
