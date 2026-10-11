@@ -96,7 +96,12 @@ describe('AuthForm', () => {
       expect(follows(email, or)).toBe(true);
       expect(follows(or, google)).toBe(true);
       expect(google.parentElement).toBe(apple.parentElement);
-      expect(google.parentElement).toHaveClass('grid-cols-2', 'gap-2');
+      expect(google.parentElement).toHaveClass('grid-cols-2', 'gap-1.5');
+      // One pill split in two: full outer corners, small inner corners.
+      expect(google).toHaveClass('rounded-l-full', 'rounded-r-[6px]');
+      expect(apple).toHaveClass('rounded-l-[6px]', 'rounded-r-full');
+      expect(google.className).toContain('min-h-11');
+      expect(apple.className).toContain('min-h-11');
       expect(google).toHaveAttribute('title', 'Continue with Google');
       expect(apple).toHaveAttribute('title', 'Continue with Apple');
       expect(screen.queryByText('Welcome back')).not.toBeInTheDocument();
