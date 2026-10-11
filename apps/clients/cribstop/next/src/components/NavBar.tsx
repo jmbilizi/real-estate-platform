@@ -450,7 +450,7 @@ export default function NavBar() {
                 <NavMenu signedIn={!!user} onAuth={openModal} />
               </span>
             ) : (
-              <SkeletonBlock className="h-6 w-6 shrink-0 rounded" />
+              <SkeletonBlock className="-mr-1 h-6 w-1 shrink-0 rounded" />
             )}
           </div>
         </div>

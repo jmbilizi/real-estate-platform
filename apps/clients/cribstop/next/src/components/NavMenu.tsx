@@ -118,9 +118,9 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
   return (
     <>
       {/*
-       * A bare 24px glyph: no fill, no padding, no margin. The navbar's flex gap sets the space to
-       * its neighbours. The pseudo element makes a 44px high tap target. It reaches into the gap on
-       * the left and the page padding on the right, so it overlaps no neighbour.
+       * A bare glyph with no empty box space. The navbar flex gap sets the space to Account. -mr-1 mirrors
+       * the logo's -ml-1, so the dots end as far from the page edge as the logo starts. The pseudo element makes a 44px high tap area. It reaches into the gap on the left
+       * and to the page edge on the right, so it overlaps no neighbour and never overflows.
        */}
       <button
         ref={triggerRef}
@@ -133,7 +133,7 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
           if (Date.now() - closedAt.current < 300) return;
           setOpen((v) => !v);
         }}
-        className="relative inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-3 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+        className="relative -mr-1 inline-flex h-6 w-1 shrink-0 cursor-pointer items-center justify-end rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-2 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
       >
         {MORE_ICON}
       </button>

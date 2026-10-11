@@ -308,22 +308,24 @@ describe('NavBar profile and right-side spacing', () => {
     }
   });
 
-  it('gives the More trigger no margin and the original 24px glyph box', () => {
+  it('gives the More trigger the mirror margin of the logo, a tight glyph box and no extra gap', () => {
     mockUseApp.mockReturnValue(appValue(null));
     render(<NavBar />);
     const more = screen.getByLabelText('More options');
 
-    expect(more.className).not.toMatch(MARGIN);
+    // Only -mr-1, the mirror of the logo's -ml-1. No margin on the left, where the flex gap applies.
+    expect(more.className.match(new RegExp(MARGIN.source, 'g'))).toEqual([' -mr-']);
+    expect(more.className).toContain('-mr-1');
     expect(more.className).toContain('h-6');
-    expect(more.className).toContain('w-6');
-    expect(more.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(more.className).toContain('w-1');
+    expect(more.querySelector('svg')?.getAttribute('viewBox')).toBe('10.2 3.2 3.6 17.6');
   });
 
-  it('draws the More skeleton in the same 24px box', () => {
+  it('draws the More skeleton in the same box', () => {
     mockUseApp.mockReturnValue(appValue(null));
     const html = renderToStaticMarkup(<NavBar />);
 
-    expect(html).toContain('h-6 w-6 shrink-0');
+    expect(html).toContain('-mr-1 h-6 w-1 shrink-0');
     expect(html).not.toContain('4.5px');
   });
 });
