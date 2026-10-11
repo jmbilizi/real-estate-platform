@@ -8,6 +8,7 @@ packages:
   # shared libs for web and mobile apps
   - "libs/property-contracts"
   - "libs/gateway-contracts"
+  - "libs/event-contracts"
   # - "libs/expo-next"
   # - "libs/next"
   # - "libs/expo"
