@@ -106,20 +106,48 @@ describe('AuthForm', () => {
       render(<AuthForm />);
 
       const field = screen.getByLabelText('Email');
+      const help = () => screen.getByText('We may send you a code to confirm your email.');
       expect(field).toBe(screen.getByPlaceholderText('you@example.com'));
       // The step focuses the field on mount, so blur it to read the idle state.
       fireEvent.blur(field);
-      expect(screen.queryByText(/email you a code to continue/i)).not.toBeInTheDocument();
+      expect(help()).toHaveClass('opacity-0');
 
       fireEvent.focus(field);
-      expect(screen.getByText(/email you a code to continue/i)).toBeInTheDocument();
-      expect(screen.getAllByRole('link', { name: 'Privacy Policy' })).toHaveLength(2);
-      expect(field).toHaveAttribute('aria-describedby', 'auth-email-help');
+      expect(help()).toHaveClass('opacity-100');
+      // The footer links the Privacy Policy once. The helper line has no link.
+      expect(screen.getAllByRole('link', { name: 'Privacy Policy' })).toHaveLength(1);
+      expect(field.getAttribute('aria-describedby')).toContain('auth-email-help');
 
       fireEvent.blur(field);
-      expect(screen.queryByText(/email you a code to continue/i)).not.toBeInTheDocument();
+      expect(help()).toHaveClass('opacity-0');
       fireEvent.change(field, { target: { value: 'a@b.co' } });
-      expect(screen.getByText(/email you a code to continue/i)).toBeInTheDocument();
+      expect(help()).toHaveClass('opacity-100');
+    });
+
+    it('keeps the step layout identical before focus, on focus and after blur', () => {
+      render(<AuthForm />);
+      const field = screen.getByLabelText('Email');
+      const form = field.closest('form') as HTMLElement;
+      // Everything that can change a box size: tag, classes with the opacity and label-float
+      // classes removed, and the node count. Opacity and the absolute label never move layout.
+      const NON_LAYOUT = /\bopacity-\d+\b/g;
+      const signature = () =>
+        Array.from(form.querySelectorAll('*'))
+          .filter((el) => el.tagName !== 'LABEL')
+          .map((el) => `${el.tagName}.${(el.getAttribute('class') ?? '').replace(NON_LAYOUT, '')}`)
+          .join('|');
+
+      fireEvent.blur(field);
+      const before = signature();
+      const nodesBefore = form.querySelectorAll('*').length;
+      fireEvent.focus(field);
+      expect(signature()).toBe(before);
+      expect(form.querySelectorAll('*').length).toBe(nodesBefore);
+      fireEvent.blur(field);
+      expect(signature()).toBe(before);
+      expect(form.querySelectorAll('*').length).toBe(nodesBefore);
+      // A constant 1px border plus a ring: focus never thickens the border.
+      expect(field.className).not.toMatch(/focus:border-(2|4|\[)/);
     });
 
     it('sets the email field attributes for mobile keyboards and password managers', () => {

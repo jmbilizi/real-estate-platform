@@ -38,9 +38,12 @@ jest.mock('motion/react', () => ({
 jest.mock('./AppsDropdown', () => () => <div data-testid="apps-dropdown" />);
 jest.mock('./MobileSearchSheet', () => () => <div data-testid="mobile-search-sheet" />);
 jest.mock('./MobileSearchPill', () => () => <div data-testid="mobile-search-pill" />);
-jest.mock('./SlidePanel', () => ({ children }: { children: React.ReactNode }) => (
-  <div>{children}</div>
-));
+jest.mock(
+  './SlidePanel',
+  () =>
+    ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+      open ? <div data-testid="slide-panel">{children}</div> : null,
+);
 jest.mock('./DismissButton', () => () => <button type="button">Dismiss</button>);
 
 const mockUseApp = jest.fn();
@@ -269,5 +272,58 @@ describe('NavBar right side', () => {
       'aria-haspopup',
       'dialog',
     );
+  });
+});
+
+describe('NavBar profile and right-side spacing', () => {
+  const MARGIN = /(^|\s)(md:)?-?m[trblxy]?-/;
+
+  it('opens the profile panel from the signed-in account button', () => {
+    mockUseApp.mockReturnValue(appValue(A_USER));
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+
+    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Saved homes');
+  });
+
+  it('shows the profile photo instead of the initials when the user has one', () => {
+    mockUseApp.mockReturnValue(appValue({ ...A_USER, avatar: 'https://example.com/me.jpg' }));
+    const { container } = render(<NavBar />);
+
+    expect(container.querySelector('img[src="https://example.com/me.jpg"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Profile menu' })).not.toHaveTextContent('D');
+  });
+
+  it('puts every right-side item in one flex row with one gap value', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+    const row = screen.getByLabelText('Saved').parentElement as HTMLElement;
+
+    expect(row.className).toContain('gap-1.5');
+    expect(row.className).toContain('md:gap-2');
+    expect(row.children).toHaveLength(4);
+    for (const child of Array.from(row.children)) {
+      expect(child.className).not.toMatch(MARGIN);
+    }
+  });
+
+  it('gives the More trigger no margin and the original 24px glyph box', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+    const more = screen.getByLabelText('More options');
+
+    expect(more.className).not.toMatch(MARGIN);
+    expect(more.className).toContain('h-6');
+    expect(more.className).toContain('w-6');
+    expect(more.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 24 24');
+  });
+
+  it('draws the More skeleton in the same 24px box', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    const html = renderToStaticMarkup(<NavBar />);
+
+    expect(html).toContain('h-6 w-6 shrink-0');
+    expect(html).not.toContain('4.5px');
   });
 });
