@@ -26,6 +26,7 @@ internal static class Identify
                     next = result.Next == IdentifyNext.Password ? "password" : "code",
                     resendAfterSeconds = result.ResendAfterSeconds,
                     expiresInSeconds = result.ExpiresInSeconds,
+                    sent = result.Sent,
                 }),
                 IdentifyStatus.InvalidEmail => Results.Json(new { error = "invalid_email" }, statusCode: StatusCodes.Status400BadRequest),
                 IdentifyStatus.Undeliverable => Results.Json(new { error = SignUp.UndeliverableError }, statusCode: StatusCodes.Status422UnprocessableEntity),

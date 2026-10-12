@@ -179,6 +179,11 @@ export interface CodeTiming {
 
 export interface IdentifyResult extends CodeTiming {
   next: 'password' | 'code';
+  /**
+   * False when a cooldown or a cap stopped the send (#811). An answer from an older API has no
+   * field, which reads as sent.
+   */
+  sent?: boolean;
 }
 
 async function postJson(path: string, payload: unknown): Promise<Response> {
@@ -208,7 +213,11 @@ export async function identifyEmail(email: string): Promise<IdentifyResult> {
   const res = await postJson('/api/account/identify', { email });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error('Unable to continue');
-  return { next: body?.next === 'password' ? 'password' : 'code', ...toTiming(body) };
+  return {
+    next: body?.next === 'password' ? 'password' : 'code',
+    sent: body?.sent !== false,
+    ...toTiming(body),
+  };
 }
 
 export type VerifyCodeResult =

@@ -5,5 +5,5 @@ export async function POST(req: Request) {
   const email = stringField(body, 'email');
   const code = stringField(body, 'code');
   if (!email || !code) return badRequest();
-  return relayPost('/account/signup/verify', { email, code }, 'signup verify');
+  return relayPost('/account/signup/verify', { email, code }, 'signup verify', req);
 }

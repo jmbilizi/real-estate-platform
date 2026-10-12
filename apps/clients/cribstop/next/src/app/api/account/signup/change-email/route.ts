@@ -5,5 +5,10 @@ export async function POST(req: Request) {
   const oldEmail = stringField(body, 'oldEmail');
   const newEmail = stringField(body, 'newEmail');
   if (!oldEmail || !newEmail) return badRequest('invalid_email');
-  return relayPost('/account/signup/change-email', { oldEmail, newEmail }, 'signup change-email');
+  return relayPost(
+    '/account/signup/change-email',
+    { oldEmail, newEmail },
+    'signup change-email',
+    req,
+  );
 }

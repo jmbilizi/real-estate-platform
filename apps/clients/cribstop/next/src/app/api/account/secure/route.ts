@@ -5,5 +5,5 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const token = stringField(body, 'token');
   if (!token) return badRequest('invalid_token');
-  return relayPost('/account/secure', { token }, 'secure account');
+  return relayPost('/account/secure', { token }, 'secure account', req);
 }

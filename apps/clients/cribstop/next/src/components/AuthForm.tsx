@@ -66,6 +66,8 @@ export default function AuthForm({
     resendAfterSeconds: 0,
     expiresInSeconds: 0,
   });
+  // True when identify sent no code because a cooldown or a cap stopped it (#811).
+  const [codeNotSent, setCodeNotSent] = useState(false);
   // The address a code was sent to. A different address on the email step calls change-email.
   const [codeRun, setCodeRun] = useState(0);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
@@ -132,6 +134,7 @@ export default function AuthForm({
         setPendingEmail(address);
         setCodeFlow('signup');
         setCodeTiming(result);
+        setCodeNotSent(result.sent === false);
         setCodeRun((n) => n + 1);
         goToStep('code');
       }
@@ -183,6 +186,7 @@ export default function AuthForm({
       setEmail(address);
       setCodeFlow('reset');
       setCodeTiming(timing);
+      setCodeNotSent(false);
       setCodeRun((n) => n + 1);
       goToStep('code');
     } catch (err) {
@@ -504,6 +508,7 @@ export default function AuthForm({
               flow={codeFlow}
               resendAfterSeconds={codeTiming.resendAfterSeconds}
               expiresInSeconds={codeTiming.expiresInSeconds}
+              notSent={codeNotSent}
               onVerified={handleVerified}
               onChangeEmail={() => goToStep(codeFlow === 'reset' ? 'forgot' : 'email')}
             />

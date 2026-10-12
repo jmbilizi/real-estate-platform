@@ -19,6 +19,14 @@ function digitsOnly(value: string): string {
   return value.replace(/\D/g, '').slice(0, CODE_LENGTH);
 }
 
+/** A wait longer than this is an hourly or daily cap, so the step shows no countdown. */
+const LONG_WAIT_SECONDS = 120;
+
+function clock(totalSeconds: number): string {
+  const s = Math.max(0, Math.ceil(totalSeconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function triesLeftCopy(attemptsLeft: number | null): string {
   if (attemptsLeft === null) return 'That code did not work.';
   if (attemptsLeft <= 0) return 'That code did not work. No tries left.';
@@ -34,6 +42,7 @@ export default function AuthCodeStep({
   flow = 'signup',
   resendAfterSeconds,
   expiresInSeconds,
+  notSent = false,
   onVerified,
   onChangeEmail,
   verify,
@@ -47,6 +56,11 @@ export default function AuthCodeStep({
   flow?: 'signup' | 'reset';
   resendAfterSeconds: number;
   expiresInSeconds: number;
+  /**
+   * True when a cooldown or a cap stopped the send (#811). The step then says so, in words that
+   * are the same for every address.
+   */
+  notSent?: boolean;
   onVerified: (proof: string) => void;
   /** Shows the "Change email" button. Omit it to hide the button. */
   onChangeEmail?: () => void;
@@ -89,6 +103,9 @@ export default function AuthCodeStep({
   const expiry = useCountdown(expiresInSeconds);
   const lock = useCountdown(0);
   const [expiryArmed, setExpiryArmed] = useState(expiresInSeconds > 0);
+  // Ends when the user asks for a new code: that send is real.
+  const [notSentShown, setNotSentShown] = useState(notSent);
+  const longWait = resendAfterSeconds > LONG_WAIT_SECONDS;
   const inputRef = useRef<HTMLInputElement>(null);
 
   const expired = expiryArmed && expiry.seconds === 0;
@@ -148,6 +165,7 @@ export default function AuthCodeStep({
       setExpiryArmed(timing.expiresInSeconds > 0);
       lock.start(0);
       setCode('');
+      setNotSentShown(false);
       setNotice('New code sent. The old one no longer works.');
       inputRef.current?.focus();
     } catch (err) {
@@ -208,6 +226,15 @@ export default function AuthCodeStep({
           </p>
         )}
         {!error && notice && <p className="text-ink-muted">{notice}</p>}
+        {!error && !notice && notSentShown && (
+          <p className="text-ink-muted">
+            {resend.seconds === 0
+              ? 'We sent a code recently. Check your inbox, or request a new one now.'
+              : longWait
+                ? 'We cannot send a code right now. Try again later.'
+                : `We sent a code recently. Check your inbox, or request a new one in ${clock(resend.seconds)}.`}
+          </p>
+        )}
       </div>
 
       <button
@@ -227,7 +254,11 @@ export default function AuthCodeStep({
             disabled={isSending || resend.seconds > 0}
             className="inline-flex min-h-11 items-center font-medium text-brand hover:underline disabled:text-ink-subtle disabled:no-underline"
           >
-            {resend.seconds > 0 ? `Send a new code in ${resend.seconds}s` : 'Send a new code'}
+            {resend.seconds === 0
+              ? 'Send a new code'
+              : notSentShown && longWait
+                ? 'Try again later'
+                : `Send a new code in ${resend.seconds}s`}
           </button>
         )}
         {onChangeEmail && (

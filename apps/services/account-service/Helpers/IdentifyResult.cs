@@ -9,8 +9,13 @@ namespace AccountService.Helpers;
 /// <param name="Next">The route, for <c>Ok</c>.</param>
 /// <param name="ResendAfterSeconds">The seconds until the next code. Zero for the password route.</param>
 /// <param name="ExpiresInSeconds">The life of the code. Zero for the password route.</param>
+/// <param name="Sent">
+/// False when a cooldown or a cap stopped the send on the code route. It is the same field for
+/// every address, so it shows nothing about the account.
+/// </param>
 internal sealed record IdentifyResult(
     IdentifyStatus Status,
     IdentifyNext Next = IdentifyNext.Code,
     int ResendAfterSeconds = 0,
-    int ExpiresInSeconds = 0);
+    int ExpiresInSeconds = 0,
+    bool Sent = true);
