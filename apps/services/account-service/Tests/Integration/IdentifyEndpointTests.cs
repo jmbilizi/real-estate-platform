@@ -120,6 +120,45 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task Sent_IsTrueForAFreshSend_AndFalseInsideTheCooldown_ForEveryAddress()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "unconfirmed@example.com", confirmed: false);
+
+            foreach (var address in new[] { "pending@example.com", "unconfirmed@example.com" })
+            {
+                var first = await (await Post(client, new { email = address })).Content.ReadFromJsonAsync<JsonElement>();
+                var second = await (await Post(client, new { email = address })).Content.ReadFromJsonAsync<JsonElement>();
+
+                first.GetProperty("sent").GetBoolean().Should().BeTrue();
+                second.GetProperty("sent").GetBoolean().Should().BeFalse();
+                second.GetProperty("next").GetString().Should().Be("code");
+                second.GetProperty("resendAfterSeconds").GetInt32().Should().BeInRange(1, 60);
+            }
+        }
+
+        [Fact]
+        public async Task ASpentAddressBudget_AnswersCodeWithSentFalse_AndLogsTheCounterWithoutTheEmail()
+        {
+            using var factory = new AccountRecoveryFactory(options => options.SignUpSendsPerAddress = 1);
+            using var client = factory.CreateClient();
+
+            await Post(client, new { email = "first@example.com" }, "203.0.113.50");
+            var refused = await Post(client, new { email = "second.person@example.com" }, "203.0.113.50");
+
+            refused.StatusCode.Should().Be(HttpStatusCode.OK);
+            var body = await refused.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("next").GetString().Should().Be("code");
+            body.GetProperty("sent").GetBoolean().Should().BeFalse();
+            factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).Should().ContainSingle();
+
+            var skipped = factory.Logs.Entries.Where(e => e.EventId.Name == "IdentifySendSkipped").ToList();
+            skipped.Should().ContainSingle().Which.Level.Should().Be(Microsoft.Extensions.Logging.LogLevel.Information);
+            skipped[0].Message.Should().Contain("addr").And.NotContain("second.person").And.NotContain("@");
+        }
+
+        [Fact]
         public async Task UnconfirmedAccount_GetsOneNoticeInsideTheCooldown_NotOnePerCall()
         {
             using var factory = new AccountRecoveryFactory();

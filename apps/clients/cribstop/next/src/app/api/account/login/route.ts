@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchGateway } from '@/app/api/_lib/gateway';
 import { authCookies } from '@/app/api/_lib/cookies';
+import { visitorIpHeaders } from '@/app/api/_lib/account-relay';
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -16,7 +17,11 @@ export async function POST(req: Request) {
     '/account/login',
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...visitorIpHeaders(req),
+      },
       body: JSON.stringify({ email, password }),
     },
     60_000, // .NET cold-start + EF Core pool init can be slow on first request

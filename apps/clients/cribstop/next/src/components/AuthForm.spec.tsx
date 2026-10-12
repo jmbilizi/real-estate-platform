@@ -628,6 +628,67 @@ describe('AuthForm', () => {
         expect(screen.getByRole('button', { name: /Send a new code in 30s/ })).toBeDisabled();
       });
 
+      it('says a code went out recently, with the wait, when identify sent nothing (#811)', async () => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          sent: false,
+          resendAfterSeconds: 42,
+          expiresInSeconds: 600,
+        });
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+
+        expect(
+          screen.getByText(
+            'We sent a code recently. Check your inbox, or request a new one in 0:42.',
+          ),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Send a new code in 42s/ })).toBeDisabled();
+
+        await act(async () => {
+          jest.advanceTimersByTime(42_000);
+        });
+        expect(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+      });
+
+      it('says to try again later when the wait is long (#811)', async () => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          sent: false,
+          resendAfterSeconds: 3000,
+          expiresInSeconds: 600,
+        });
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+
+        expect(screen.getByText(/Try again later\./)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Try again later' })).toBeDisabled();
+        expect(screen.queryByText(/We sent a code recently/)).not.toBeInTheDocument();
+      });
+
+      it('shows no recent-code line when the code was sent now (#811)', async () => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          sent: true,
+          resendAfterSeconds: 30,
+          expiresInSeconds: 600,
+        });
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+
+        expect(screen.queryByText(/We sent a code recently/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Try again later/)).not.toBeInTheDocument();
+      });
+
       it('says the code expired at the expiry time', async () => {
         mockIdentify.mockResolvedValue({
           next: 'code',

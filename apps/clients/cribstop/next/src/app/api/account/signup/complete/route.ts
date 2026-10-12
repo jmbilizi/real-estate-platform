@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     '/account/signup/complete',
     { email, signupProof, password },
     'signup complete',
+    req,
   );
   if (!upstream) return unavailable();
   if (!upstream.ok) return relay(upstream);
