@@ -33,6 +33,8 @@ internal sealed class EmailCodeOptions
     /// <summary>The longest life NIST SP 800-63B-4 allows for an out-of-band code.</summary>
     internal static readonly TimeSpan MaximumLifetime = TimeSpan.FromMinutes(10);
 
+    private string hmacKey = string.Empty;
+
     /// <summary>Gets or sets the number of digits in a code.</summary>
     public int CodeLength { get; set; } = 6;
 
@@ -64,7 +66,13 @@ internal sealed class EmailCodeOptions
     /// Gets or sets the HMAC key. <c>Program</c> sets it from <c>ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY</c> after
     /// binding and overwrites any value in the section, so a committed key has no effect.
     /// </summary>
-    public string HmacKey { get; set; } = string.Empty;
+    public string HmacKey
+    {
+        get => this.hmacKey;
+
+        // A secret pasted with a trailing newline must not change the key (#813).
+        set => this.hmacKey = value?.Trim() ?? string.Empty;
+    }
 
     /// <summary>Gets a value indicating whether a usable key is present.</summary>
     public bool IsConfigured =>
