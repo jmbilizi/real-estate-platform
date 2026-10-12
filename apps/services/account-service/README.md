@@ -248,9 +248,8 @@ code, the link and the message body are never logged. `PostmarkEmailSender` is t
 `IEmailSender<ApplicationUser>` that `MapIdentityApi` requires. Every member throws, because nothing
 sends an Identity link or code.
 
-**Sender identity** (configuration, section `Email`): from
-`Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Every body
-ends with `Email:BrokerageDisclosure` (PRD §6).
+**Sender identity** (configuration, section `Email`): from `"Cribstop.com" <no-reply@cribstop.com>`,
+reply-to `contact@cribstop.com`. Every body ends with `Email:BrokerageDisclosure` (PRD §6).
 
 ---
 

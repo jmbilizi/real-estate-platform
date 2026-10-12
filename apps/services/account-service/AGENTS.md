@@ -90,8 +90,8 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   message composes through `Helpers/IdentityEmailComposer.cs`. `Helpers/PostmarkEmailSender.cs` is
   the `IEmailSender<ApplicationUser>` that `MapIdentityApi` requires. Every member throws, because
   nothing may send an Identity link or code.
-- **Sender identity** (section `Email`): from `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`,
-  reply-to `contact@cribstop.com`. Startup validation refuses a reply-to equal to the from address.
+- **Sender identity** (section `Email`): from `"Cribstop.com" <no-reply@cribstop.com>`, reply-to
+  `contact@cribstop.com`. Startup validation refuses a reply-to equal to the from address.
   `Email:BrokerageDisclosure` ends every body (PRD §6). It is configuration, so a jurisdiction
   change needs no code change.
 - **Non-enumeration is a product requirement**, not stock Identity. Do not "fix" it back: `/login`
