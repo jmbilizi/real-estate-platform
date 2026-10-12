@@ -228,11 +228,11 @@ export default function AuthCodeStep({
         {!error && notice && <p className="text-ink-muted">{notice}</p>}
         {!error && !notice && notSentShown && (
           <p className="text-ink-muted">
-            {longWait
-              ? 'We cannot send a code right now. Try again later.'
-              : resend.seconds > 0
-                ? `We sent a code recently. Check your inbox, or request a new one in ${clock(resend.seconds)}.`
-                : 'We sent a code recently. Check your inbox, or request a new one now.'}
+            {resend.seconds === 0
+              ? 'We sent a code recently. Check your inbox, or request a new one now.'
+              : longWait
+                ? 'We cannot send a code right now. Try again later.'
+                : `We sent a code recently. Check your inbox, or request a new one in ${clock(resend.seconds)}.`}
           </p>
         )}
       </div>
