@@ -63,14 +63,21 @@ describe('account relay forwards the visitor IP (#811)', () => {
     expect(sentHeaders()['X-Forwarded-For']).toBe('2001:db8::1');
   });
 
-  it('forwards the new sent field to the browser', async () => {
+  it('forwards the sent and reason fields to the browser (#813)', async () => {
+    const answer = { next: 'code', sent: false, reason: 'daily_cap', resendAfterSeconds: 42 };
+    mockedFetch.mockResolvedValue(new Response(JSON.stringify(answer), { status: 200 }));
+    const res = await identify(post({ email: 'a@example.com' }));
+
+    expect(await res.json()).toEqual(answer);
+  });
+
+  it('keeps a 422 undeliverable answer a 422 (#813)', async () => {
     mockedFetch.mockResolvedValue(
-      new Response(JSON.stringify({ next: 'code', sent: false, resendAfterSeconds: 42 }), {
-        status: 200,
-      }),
+      new Response(JSON.stringify({ error: 'undeliverable' }), { status: 422 }),
     );
     const res = await identify(post({ email: 'a@example.com' }));
 
-    expect(await res.json()).toEqual({ next: 'code', sent: false, resendAfterSeconds: 42 });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'undeliverable' });
   });
 });

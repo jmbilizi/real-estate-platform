@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
+  CodeNotSentReason,
   CodesUnavailableError,
   CodeTiming,
   RateLimitError,
   resendSignupCode,
   startPasswordReset,
+  UndeliverableEmailError,
   verifyResetCode,
   verifySignupCode,
 } from '@/lib/api/account';
@@ -14,17 +16,51 @@ import { useCountdown } from '@/lib/useCountdown';
 
 const CODE_LENGTH = 6;
 
+export const UNDELIVERABLE_COPY =
+  'We cannot deliver email to this address. Check it, or use a different email.';
+
 /** Keeps digits only, so a pasted "123 456" or "123-456" works. */
 function digitsOnly(value: string): string {
   return value.replace(/\D/g, '').slice(0, CODE_LENGTH);
 }
 
-/** A wait longer than this is an hourly or daily cap, so the step shows no countdown. */
-const LONG_WAIT_SECONDS = 120;
+/** A wait longer than one hour shows "try again later", not a countdown. */
+const LONG_WAIT_SECONDS = 3600;
 
 function clock(totalSeconds: number): string {
   const s = Math.max(0, Math.ceil(totalSeconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
+ * What the step says when the call queued no code (#813). The words are the same for every
+ * address, so they do not show whether an account exists.
+ */
+export function notSentCopy(reason: CodeNotSentReason, waitSeconds: number): string {
+  const when =
+    waitSeconds <= 0
+      ? 'now'
+      : waitSeconds > LONG_WAIT_SECONDS
+        ? 'later'
+        : `in ${clock(waitSeconds)}`;
+  switch (reason) {
+    case 'pending':
+      return 'Check your inbox for the code we sent earlier.';
+    case 'notice':
+      return 'We sent you an email with the next step. Check your inbox.';
+    case 'hourly_cap':
+      return `You reached the hourly limit for codes. Check your inbox for the code we sent earlier, or try again ${when}.`;
+    case 'daily_cap':
+      return `You reached the daily limit for codes. Check your inbox for the code we sent earlier, or try again ${when}.`;
+    case 'network_cap':
+      return `We got too many code requests from your network. Try again ${when}.`;
+    case 'locked':
+      return `Too many wrong codes for this email. Try again ${when}.`;
+    default:
+      return waitSeconds <= 0
+        ? 'Check your inbox for the code we sent earlier, or ask for a new one now.'
+        : `We sent a code less than a minute ago. Check your inbox, or ask for a new one ${when}.`;
+  }
 }
 
 function triesLeftCopy(attemptsLeft: number | null): string {
@@ -42,7 +78,7 @@ export default function AuthCodeStep({
   flow = 'signup',
   resendAfterSeconds,
   expiresInSeconds,
-  notSent = false,
+  notSentReason,
   onVerified,
   onChangeEmail,
   verify,
@@ -56,11 +92,8 @@ export default function AuthCodeStep({
   flow?: 'signup' | 'reset';
   resendAfterSeconds: number;
   expiresInSeconds: number;
-  /**
-   * True when a cooldown or a cap stopped the send (#811). The step then says so, in words that
-   * are the same for every address.
-   */
-  notSent?: boolean;
+  /** Set when the call that opened the step queued no code (#813). */
+  notSentReason?: CodeNotSentReason;
   onVerified: (proof: string) => void;
   /** Shows the "Change email" button. Omit it to hide the button. */
   onChangeEmail?: () => void;
@@ -103,9 +136,10 @@ export default function AuthCodeStep({
   const expiry = useCountdown(expiresInSeconds);
   const lock = useCountdown(0);
   const [expiryArmed, setExpiryArmed] = useState(expiresInSeconds > 0);
-  // Ends when the user asks for a new code: that send is real.
-  const [notSentShown, setNotSentShown] = useState(notSent);
-  const longWait = resendAfterSeconds > LONG_WAIT_SECONDS;
+  // Cleared when a new code is queued.
+  const [notSent, setNotSent] = useState<CodeNotSentReason | undefined>(notSentReason);
+  const [notSentWait, setNotSentWait] = useState(resendAfterSeconds);
+  const longWait = notSent !== undefined && notSentWait > LONG_WAIT_SECONDS;
   const inputRef = useRef<HTMLInputElement>(null);
 
   const expired = expiryArmed && expiry.seconds === 0;
@@ -165,15 +199,22 @@ export default function AuthCodeStep({
       setExpiryArmed(timing.expiresInSeconds > 0);
       lock.start(0);
       setCode('');
-      setNotSentShown(false);
-      setNotice('New code sent. The old one no longer works.');
+      setNotSent(timing.notSentReason);
+      setNotSentWait(timing.resendAfterSeconds);
+      if (!timing.notSentReason) setNotice('New code sent. The old one no longer works.');
       inputRef.current?.focus();
     } catch (err) {
       if (err instanceof RateLimitError) {
         resend.start(err.retryAfterSeconds);
-        setError(`You can ask for another code in ${err.retryAfterSeconds} seconds.`);
+        setError(
+          err.retryAfterSeconds > LONG_WAIT_SECONDS
+            ? 'You reached the limit for new codes. Try again later.'
+            : `You can ask for another code in ${clock(err.retryAfterSeconds)}.`,
+        );
       } else if (err instanceof CodesUnavailableError) {
         setError(unavailableCopy);
+      } else if (err instanceof UndeliverableEmailError) {
+        setError(UNDELIVERABLE_COPY);
       } else {
         setError('We could not send a new code. Try again.');
       }
@@ -226,14 +267,8 @@ export default function AuthCodeStep({
           </p>
         )}
         {!error && notice && <p className="text-ink-muted">{notice}</p>}
-        {!error && !notice && notSentShown && (
-          <p className="text-ink-muted">
-            {resend.seconds === 0
-              ? 'We sent a code recently. Check your inbox, or request a new one now.'
-              : longWait
-                ? 'We cannot send a code right now. Try again later.'
-                : `We sent a code recently. Check your inbox, or request a new one in ${clock(resend.seconds)}.`}
-          </p>
+        {!error && !notice && notSent && (
+          <p className="text-ink-muted">{notSentCopy(notSent, resend.seconds)}</p>
         )}
       </div>
 
@@ -256,7 +291,7 @@ export default function AuthCodeStep({
           >
             {resend.seconds === 0
               ? 'Send a new code'
-              : notSentShown && longWait
+              : longWait
                 ? 'Try again later'
                 : `Send a new code in ${resend.seconds}s`}
           </button>

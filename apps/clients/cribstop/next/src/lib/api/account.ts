@@ -172,18 +172,46 @@ export class CodesUnavailableError extends Error {
   }
 }
 
+/** A 422 from the email-code endpoints: mail to this address cannot be delivered (#664). */
+export class UndeliverableEmailError extends Error {
+  constructor() {
+    super('Email to this address cannot be delivered');
+    this.name = 'UndeliverableEmailError';
+  }
+}
+
+/** Why a code send queued no code (#813). */
+export type CodeNotSentReason =
+  | 'cooldown'
+  | 'hourly_cap'
+  | 'daily_cap'
+  | 'network_cap'
+  | 'locked'
+  | 'pending'
+  | 'notice';
+
+const NOT_SENT_REASONS: readonly CodeNotSentReason[] = [
+  'cooldown',
+  'hourly_cap',
+  'daily_cap',
+  'network_cap',
+  'locked',
+  'pending',
+  'notice',
+];
+
 export interface CodeTiming {
   resendAfterSeconds: number;
   expiresInSeconds: number;
+  /**
+   * Set when the call queued no code. An answer from an older API has no `sent` field, which
+   * reads as sent.
+   */
+  notSentReason?: CodeNotSentReason;
 }
 
 export interface IdentifyResult extends CodeTiming {
   next: 'password' | 'code';
-  /**
-   * False when a cooldown or a cap stopped the send (#811). An answer from an older API has no
-   * field, which reads as sent.
-   */
-  sent?: boolean;
 }
 
 async function postJson(path: string, payload: unknown): Promise<Response> {
@@ -193,29 +221,41 @@ async function postJson(path: string, payload: unknown): Promise<Response> {
     body: JSON.stringify(payload),
   });
   if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  if (res.status === 503) throw new CodesUnavailableError();
+  // A gateway 502 or 504 is the same outage to the user as a 503.
+  if (res.status >= 500) throw new CodesUnavailableError();
   return res;
 }
 
 function toTiming(body: Record<string, unknown> | null): CodeTiming {
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
-  return {
+  const timing: CodeTiming = {
     resendAfterSeconds: num(body?.resendAfterSeconds),
     expiresInSeconds: num(body?.expiresInSeconds),
   };
+  if (body?.sent === false) {
+    const reason = body?.reason as CodeNotSentReason;
+    // An unknown reason still must not read as sent.
+    timing.notSentReason = NOT_SENT_REASONS.includes(reason) ? reason : 'cooldown';
+  }
+  return timing;
+}
+
+async function readCodeAnswer(res: Response, failure: string) {
+  const body = await res.json().catch(() => null);
+  if (res.status === 422 && body?.error === 'undeliverable') throw new UndeliverableEmailError();
+  if (!res.ok) throw new Error(failure);
+  return body as Record<string, unknown> | null;
 }
 
 /**
  * Email-first entry call. The answer reveals only the next step, never the account itself.
- * Throws RateLimitError on 429 and CodesUnavailableError on 503.
+ * Throws RateLimitError on 429, UndeliverableEmailError on 422 and CodesUnavailableError on 5xx.
  */
 export async function identifyEmail(email: string): Promise<IdentifyResult> {
   const res = await postJson('/api/account/identify', { email });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error('Unable to continue');
+  const body = await readCodeAnswer(res, 'Unable to continue');
   return {
     next: body?.next === 'password' ? 'password' : 'code',
-    sent: body?.sent !== false,
     ...toTiming(body),
   };
 }
@@ -240,8 +280,7 @@ export async function verifySignupCode(email: string, code: string): Promise<Ver
 
 export async function resendSignupCode(email: string): Promise<CodeTiming> {
   const res = await postJson('/api/account/signup/resend', { email });
-  if (!res.ok) throw new Error('Unable to send a new code');
-  return toTiming(await res.json().catch(() => null));
+  return toTiming(await readCodeAnswer(res, 'Unable to send a new code'));
 }
 
 export async function changeSignupEmail(oldEmail: string, newEmail: string): Promise<CodeTiming> {

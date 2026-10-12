@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AuthForm from './AuthForm';
 import {
   changeSignupEmail,
+  type CodeNotSentReason,
   CodesUnavailableError,
   completePasswordReset,
   identifyEmail,
@@ -9,6 +10,7 @@ import {
   resendSignupCode,
   SignInFailedError,
   startPasswordReset,
+  UndeliverableEmailError,
   verifyResetCode,
   verifySignupCode,
 } from '@/lib/api/account';
@@ -204,6 +206,20 @@ describe('AuthForm', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
       expect(await screen.findByText(/Sign-up is unavailable right now/)).toBeInTheDocument();
+    });
+
+    it('says the address cannot get mail for a 422 undeliverable (#813)', async () => {
+      mockIdentify.mockRejectedValue(new UndeliverableEmailError());
+      render(<AuthForm />);
+      typeEmail(EMAIL);
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+      expect(
+        await screen.findByText(
+          'We cannot deliver email to this address. Check it, or use a different email.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
     });
 
     it('shows a generic message for any other failure', async () => {
@@ -628,11 +644,11 @@ describe('AuthForm', () => {
         expect(screen.getByRole('button', { name: /Send a new code in 30s/ })).toBeDisabled();
       });
 
-      it('says a code went out recently, with the wait, when identify sent nothing (#811)', async () => {
+      const continueNotSent = async (reason: CodeNotSentReason, resendAfterSeconds: number) => {
         mockIdentify.mockResolvedValue({
           next: 'code',
-          sent: false,
-          resendAfterSeconds: 42,
+          notSentReason: reason,
+          resendAfterSeconds,
           expiresInSeconds: 600,
         });
         render(<AuthForm />);
@@ -640,42 +656,62 @@ describe('AuthForm', () => {
         await act(async () => {
           fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         });
+      };
+
+      it('shows the cooldown with a countdown, and no "we sent" claim (#813)', async () => {
+        await continueNotSent('cooldown', 42);
 
         expect(
           screen.getByText(
-            'We sent a code recently. Check your inbox, or request a new one in 0:42.',
+            'We sent a code less than a minute ago. Check your inbox, or ask for a new one in 0:42.',
           ),
         ).toBeInTheDocument();
+        expect(screen.queryByText(/We sent a 6-digit code/)).not.toBeInTheDocument();
+        expect(screen.getByText(/Enter the 6-digit code for/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Send a new code in 42s/ })).toBeDisabled();
 
         await act(async () => {
           jest.advanceTimersByTime(42_000);
         });
         expect(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+        expect(
+          screen.getByText(
+            'Check your inbox for the code we sent earlier, or ask for a new one now.',
+          ),
+        ).toBeInTheDocument();
       });
 
-      it('says to try again later when the wait is long (#811)', async () => {
-        mockIdentify.mockResolvedValue({
-          next: 'code',
-          sent: false,
-          resendAfterSeconds: 3000,
-          expiresInSeconds: 600,
-        });
-        render(<AuthForm />);
-        typeEmail(EMAIL);
-        await act(async () => {
-          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-        });
+      it.each([
+        [
+          'hourly_cap',
+          1500,
+          'You reached the hourly limit for codes. Check your inbox for the code we sent earlier, or try again in 25:00.',
+        ],
+        [
+          'daily_cap',
+          30_000,
+          'You reached the daily limit for codes. Check your inbox for the code we sent earlier, or try again later.',
+        ],
+        ['network_cap', 240, 'We got too many code requests from your network. Try again in 4:00.'],
+        ['locked', 900, 'Too many wrong codes for this email. Try again in 15:00.'],
+        ['pending', 60, 'Check your inbox for the code we sent earlier.'],
+        ['notice', 60, 'We sent you an email with the next step. Check your inbox.'],
+      ] as const)('shows the %s message (#813)', async (reason, wait, copy) => {
+        await continueNotSent(reason, wait);
 
-        expect(screen.getByText(/Try again later\./)).toBeInTheDocument();
+        expect(screen.getByText(copy)).toBeInTheDocument();
+        expect(screen.queryByText(/We sent a 6-digit code/)).not.toBeInTheDocument();
+      });
+
+      it('labels the resend "Try again later" when the wait is over one hour (#813)', async () => {
+        await continueNotSent('daily_cap', 30_000);
+
         expect(screen.getByRole('button', { name: 'Try again later' })).toBeDisabled();
-        expect(screen.queryByText(/We sent a code recently/)).not.toBeInTheDocument();
       });
 
-      it('shows no recent-code line when the code was sent now (#811)', async () => {
+      it('shows no not-sent line when the code was sent now (#813)', async () => {
         mockIdentify.mockResolvedValue({
           next: 'code',
-          sent: true,
           resendAfterSeconds: 30,
           expiresInSeconds: 600,
         });
@@ -685,8 +721,50 @@ describe('AuthForm', () => {
           fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         });
 
-        expect(screen.queryByText(/We sent a code recently/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Try again later/)).not.toBeInTheDocument();
+        expect(screen.getByText(/We sent a 6-digit code/)).toBeInTheDocument();
+        expect(screen.queryByText(/Check your inbox/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Try again/)).not.toBeInTheDocument();
+      });
+
+      it('does not say "New code sent" when the resend queued nothing (#813)', async () => {
+        await continueNotSent('cooldown', 1);
+        mockResend.mockResolvedValue({
+          resendAfterSeconds: 60,
+          expiresInSeconds: 600,
+          notSentReason: 'pending',
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(1000);
+        });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Send a new code' }));
+        });
+
+        expect(screen.queryByText(/New code sent/)).not.toBeInTheDocument();
+        expect(
+          screen.getByText('Check your inbox for the code we sent earlier.'),
+        ).toBeInTheDocument();
+      });
+
+      it('says the resend limit is reached for a long 429 (#813)', async () => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          resendAfterSeconds: 0,
+          expiresInSeconds: 600,
+        });
+        mockResend.mockRejectedValue(new RateLimitError(20_000));
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Send a new code' }));
+        });
+
+        expect(
+          screen.getByText('You reached the limit for new codes. Try again later.'),
+        ).toBeInTheDocument();
       });
 
       it('says the code expired at the expiry time', async () => {
