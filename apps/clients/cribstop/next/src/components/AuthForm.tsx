@@ -277,12 +277,8 @@ export default function AuthForm({
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted empty:hidden">
           {step === 'password' && <>Enter your password for {emailChip}.</>}
-          {step === 'code' && codeFlow === 'signup' && !codeNotSent && (
-            <>We sent a 6-digit code to {emailChip}.</>
-          )}
-          {step === 'code' && codeFlow === 'signup' && codeNotSent && (
-            <>Enter the 6-digit code for {emailChip}.</>
-          )}
+          {/* One heading for every outcome, so it shows nothing about the account (#813). */}
+          {step === 'code' && codeFlow === 'signup' && <>Enter the 6-digit code for {emailChip}.</>}
           {step === 'code' && codeFlow === 'reset' && (
             <>If an account exists for {emailChip}, we sent a 6-digit code.</>
           )}

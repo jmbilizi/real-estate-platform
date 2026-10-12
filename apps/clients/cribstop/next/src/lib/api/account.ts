@@ -221,8 +221,7 @@ async function postJson(path: string, payload: unknown): Promise<Response> {
     body: JSON.stringify(payload),
   });
   if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
-  // A gateway 502 or 504 is the same outage to the user as a 503.
-  if (res.status >= 500) throw new CodesUnavailableError();
+  if (res.status === 503) throw new CodesUnavailableError();
   return res;
 }
 
@@ -243,6 +242,8 @@ function toTiming(body: Record<string, unknown> | null): CodeTiming {
 async function readCodeAnswer(res: Response, failure: string) {
   const body = await res.json().catch(() => null);
   if (res.status === 422 && body?.error === 'undeliverable') throw new UndeliverableEmailError();
+  // A send call changes nothing, so a gateway 502 or 504 is the same outage as a 503.
+  if (res.status >= 500) throw new CodesUnavailableError();
   if (!res.ok) throw new Error(failure);
   return body as Record<string, unknown> | null;
 }

@@ -544,7 +544,7 @@ describe('AuthForm', () => {
       render(<AuthForm />);
       await continueWith('code');
 
-      expect(screen.getByText(/We sent a 6-digit code to/)).toBeInTheDocument();
+      expect(screen.getByText(/Enter the 6-digit code for/)).toBeInTheDocument();
       expect(screen.getByText(EMAIL)).toBeInTheDocument();
       const field = screen.getByLabelText('6-digit code');
       expect(field).toHaveAttribute('autocomplete', 'one-time-code');
@@ -721,7 +721,7 @@ describe('AuthForm', () => {
           fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         });
 
-        expect(screen.getByText(/We sent a 6-digit code/)).toBeInTheDocument();
+        expect(screen.getByText(/Enter the 6-digit code for/)).toBeInTheDocument();
         expect(screen.queryByText(/Check your inbox/)).not.toBeInTheDocument();
         expect(screen.queryByText(/Try again/)).not.toBeInTheDocument();
       });

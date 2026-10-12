@@ -138,8 +138,7 @@ export default function AuthCodeStep({
   const [expiryArmed, setExpiryArmed] = useState(expiresInSeconds > 0);
   // Cleared when a new code is queued.
   const [notSent, setNotSent] = useState<CodeNotSentReason | undefined>(notSentReason);
-  const [notSentWait, setNotSentWait] = useState(resendAfterSeconds);
-  const longWait = notSent !== undefined && notSentWait > LONG_WAIT_SECONDS;
+  const longWait = resend.seconds > LONG_WAIT_SECONDS;
   const inputRef = useRef<HTMLInputElement>(null);
 
   const expired = expiryArmed && expiry.seconds === 0;
@@ -200,7 +199,6 @@ export default function AuthCodeStep({
       lock.start(0);
       setCode('');
       setNotSent(timing.notSentReason);
-      setNotSentWait(timing.resendAfterSeconds);
       if (!timing.notSentReason) setNotice('New code sent. The old one no longer works.');
       inputRef.current?.focus();
     } catch (err) {

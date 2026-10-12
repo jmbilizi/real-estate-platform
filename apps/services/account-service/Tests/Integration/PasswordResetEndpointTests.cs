@@ -55,6 +55,18 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task Start_WhenPostmarkCannotSend_Answers503_ForKnownAndUnknownAlike()
+        {
+            using var factory = new AccountRecoveryFactory(canSend: false);
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "owner@example.com");
+
+            (await Post(client, StartPath, new { email = "owner@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            (await Post(client, StartPath, new { email = "nobody@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            Codes(factory).Should().BeEmpty();
+        }
+
+        [Fact]
         public async Task Start_AnswersTheSame_ForKnownUnknownUnconfirmedAndDeletedAddresses_AndSendsOnlyToTheKnown()
         {
             using var factory = new AccountRecoveryFactory();
