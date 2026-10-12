@@ -55,6 +55,27 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public async Task SendAsync_QuotesTheFromDisplayName()
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.OK,
+                new { ErrorCode = 0, Message = "OK", MessageID = "msg-123" }));
+
+            await SendAsync(handler);
+
+            using var body = System.Text.Json.JsonDocument.Parse(handler.RequestBodies.Single());
+            body.RootElement.GetProperty("From").GetString()
+                .Should().Be("\"Cribstop (Real Broker, LLC)\" <no-reply@cribstop.com>");
+        }
+
+        [Theory]
+        [InlineData("Plain", "\"Plain\" <a@b.com>")]
+        [InlineData("Say \"hi\"", "\"Say \\\"hi\\\"\" <a@b.com>")]
+        [InlineData("Back\\slash", "\"Back\\\\slash\" <a@b.com>")]
+        public void FormatMailbox_EscapesQuotesAndBackslashes(string name, string expected) =>
+            PostmarkClient.FormatMailbox(name, "a@b.com").Should().Be(expected);
+
+        [Fact]
         public async Task SendAsync_OnAnInvalidToken_ReturnsFailure_WithPostmarksErrorCode()
         {
             // Postmark's real shape for an invalid server token: HTTP 401, ErrorCode 10.
