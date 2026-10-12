@@ -39,6 +39,7 @@ namespace AccountService.Helpers;
 /// <param name="limiter">The rate limiter.</param>
 /// <param name="users">The user manager.</param>
 /// <param name="notices">The security notice sender.</param>
+/// <param name="sender">The transport, asked only whether it can deliver.</param>
 /// <param name="timeProvider">The clock.</param>
 internal sealed class PasswordResetService(
     AccountDbContext db,
@@ -47,6 +48,7 @@ internal sealed class PasswordResetService(
     AccountRecoveryRateLimiter limiter,
     AppUserManager users,
     SecurityNoticeService notices,
+    IOutboundEmailSender sender,
     TimeProvider timeProvider)
 {
     /// <summary>How long a reset proof works.</summary>
@@ -68,7 +70,7 @@ internal sealed class PasswordResetService(
         }
 
         var settings = codeOptions.Value;
-        if (!settings.IsConfigured)
+        if (!settings.IsConfigured || !sender.CanSend)
         {
             return new SignUpResult(SignUpStatus.Unavailable);
         }

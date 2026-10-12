@@ -62,6 +62,11 @@ namespace AccountService.Tests.Integration
                 // No test queries DNS. A test sets the answer for a domain on the fake.
                 services.AddSingleton<AccountService.Helpers.IMailDomainResolver>(this.MailDomains);
 
+                // No test reaches Postmark. The host has no token, so the real queue reports that it
+                // cannot send, and every code flow would answer 503 (#813). A host that records
+                // messages registers its own sender after this one.
+                services.AddSingleton<AccountService.Helpers.IOutboundEmailSender>(new DiscardingSender());
+
                 // TestServer requests carry no remote address, so every caller in a shared host
                 // shares one "unknown" bucket. Lift the limits and the timing floor out of the way.
                 // AccountRecoveryFactory sets back whatever its own tests need.
@@ -99,6 +104,12 @@ namespace AccountService.Tests.Integration
             }
 
             return host;
+        }
+
+        private sealed class DiscardingSender : AccountService.Helpers.IOutboundEmailSender
+        {
+            public Task SendAsync(AccountService.Helpers.OutboundEmail message, CancellationToken cancellationToken = default) =>
+                Task.CompletedTask;
         }
     }
 }

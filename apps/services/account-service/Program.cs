@@ -23,6 +23,15 @@ internal static class Program
     /// <summary>The event id of the startup warning while the email code engine has no key.</summary>
     internal static readonly EventId EmailCodesNotConfiguredEvent = new(1384, "EmailCodesNotConfigured");
 
+    /// <summary>The event id of the startup line that says whether Postmark is configured (#813).</summary>
+    internal static readonly EventId PostmarkStatusEvent = new(1385, "PostmarkStatus");
+
+    private static readonly Action<ILogger, bool, string, string, Exception?> LogPostmarkStatus =
+        LoggerMessage.Define<bool, string, string>(
+            LogLevel.Information,
+            PostmarkStatusEvent,
+            "Postmark configured: {PostmarkConfigured}. API host {PostmarkHost}, stream {PostmarkStream}.");
+
     public static async Task Main(string[] args)
     {
         // K8s init container mode: run migrations and exit.
@@ -238,12 +247,16 @@ internal static class Program
 
         var app = builder.Build();
 
+#pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
         if (!app.Services.GetRequiredService<IOptions<EmailCodeOptions>>().Value.IsConfigured)
         {
-#pragma warning disable CA1848 // LoggerMessage delegates: matches the service's other log sites.
             app.Logger.LogWarning(EmailCodesNotConfiguredEvent, "Email codes are not configured: no usable ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY. Every call is refused.");
-#pragma warning restore CA1848
         }
+
+        // Never the token: only whether a real one is present, and where mail goes.
+        var postmark = app.Services.GetRequiredService<IOptions<PostmarkOptions>>().Value;
+        LogPostmarkStatus(app.Logger, postmark.IsConfigured, postmark.ApiBaseUrl.Host, postmark.MessageStream, null);
+#pragma warning restore CA1848
 
         // Seed platform roles after the app starts listening so the readiness probe
         // is not blocked by a slow DB connection on startup.

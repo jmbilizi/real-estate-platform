@@ -15,7 +15,7 @@ internal static class Identify
 {
     internal static IEndpointRouteBuilder MapIdentifyRoutes(this IEndpointRouteBuilder app)
     {
-        // { email } -> { next: "password" | "code", resendAfterSeconds, expiresInSeconds }
+        // { email } -> { next: "password" | "code", resendAfterSeconds, expiresInSeconds, sent, reason }
         app.MapPost("/account/identify", async (IdentifyRequest request, IdentifyService service, HttpContext http) =>
         {
             var result = await service.IdentifyAsync(request.Email, AccountRecoveryThrottleFilter.ClientAddress(http), http.RequestAborted).ConfigureAwait(false);
@@ -27,6 +27,7 @@ internal static class Identify
                     resendAfterSeconds = result.ResendAfterSeconds,
                     expiresInSeconds = result.ExpiresInSeconds,
                     sent = result.Sent,
+                    reason = result.Outcome.Reason(),
                 }),
                 IdentifyStatus.InvalidEmail => Results.Json(new { error = "invalid_email" }, statusCode: StatusCodes.Status400BadRequest),
                 IdentifyStatus.Undeliverable => Results.Json(new { error = SignUp.UndeliverableError }, statusCode: StatusCodes.Status422UnprocessableEntity),

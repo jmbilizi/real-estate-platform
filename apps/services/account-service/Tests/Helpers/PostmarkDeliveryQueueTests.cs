@@ -40,8 +40,76 @@ namespace AccountService.Tests.Helpers
             handler.Requests.Should().BeEmpty();
             var entry = logger.Entries.Should().ContainSingle().Subject;
             entry.EventId.Id.Should().Be(1370);
-            entry.Level.Should().Be(LogLevel.Warning);
+            entry.Level.Should().Be(LogLevel.Error);
             AssertNeverLeaksTheSecret(entry.Message);
+        }
+
+        [Theory]
+        [InlineData("real-server-token\n")]
+        [InlineData("  real-server-token \r\n")]
+        public async Task DeliverAsync_WithATokenThatHasSurroundingWhitespace_SendsTheTrimmedToken(string token)
+        {
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.OK,
+                new { ErrorCode = 0, Message = "OK", MessageID = "msg-trim" }));
+
+            var (logger, _) = await RunOneMessageAsync(handler, serverToken: token);
+
+            handler.Requests.Should().ContainSingle()
+                .Which.Headers.GetValues("X-Postmark-Server-Token").Should().Equal("real-server-token");
+            logger.Entries.Should().ContainSingle().Which.EventId.Id.Should().Be(1371);
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_WhenDeliveryThrowsAnUnexpectedException_LogsTheTypeAtError_AndKeepsDraining()
+        {
+            var logger = new RecordingLogger<PostmarkDeliveryQueue>();
+            var calls = 0;
+            using var handler = new FakeHttpMessageHandler(_ => JsonResponse(
+                HttpStatusCode.OK,
+                new { ErrorCode = 0, Message = "OK", MessageID = "msg-after" }));
+            using var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.postmarkapp.com/") };
+            var client = new PostmarkClient(httpClient, Options.Create(new PostmarkOptions { ServerToken = "real-server-token" }));
+            using var queue = new PostmarkDeliveryQueue(
+                () => ++calls == 1 ? throw new FormatException("bad header") : client,
+                Options.Create(new PostmarkOptions { ServerToken = "real-server-token" }),
+                logger,
+                TimeProvider.System);
+            var delivered = 0;
+            var both = new TaskCompletionSource();
+            queue.Delivered += _ =>
+            {
+                if (Interlocked.Increment(ref delivered) == 2)
+                {
+                    both.TrySetResult();
+                }
+            };
+
+            await queue.StartAsync(CancellationToken.None);
+            await queue.SendAsync(Message);
+            await queue.SendAsync(Message);
+            await both.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await queue.StopAsync(CancellationToken.None);
+
+            var fault = logger.Entries.Should().ContainSingle(e => e.EventId.Id == 1374).Subject;
+            fault.Level.Should().Be(LogLevel.Error);
+            fault.Message.Should().Contain("FormatException").And.NotContain("bad header");
+            logger.Entries.Should().Contain(e => e.EventId.Id == 1371);
+        }
+
+        [Theory]
+        [InlineData("real-server-token", true)]
+        [InlineData(PostmarkOptions.PlaceholderServerToken, false)]
+        [InlineData(" \n", false)]
+        public void CanSend_FollowsIsConfigured(string token, bool expected)
+        {
+            using var queue = new PostmarkDeliveryQueue(
+                () => throw new InvalidOperationException("never called"),
+                Options.Create(new PostmarkOptions { ServerToken = token }),
+                new RecordingLogger<PostmarkDeliveryQueue>(),
+                TimeProvider.System);
+
+            queue.CanSend.Should().Be(expected);
         }
 
         [Theory]

@@ -55,6 +55,8 @@ internal static class SignUp
                 {
                     resendAfterSeconds = result.ResendAfterSeconds,
                     expiresInSeconds = result.ExpiresInSeconds,
+                    sent = result.Outcome == CodeSendOutcome.Sent,
+                    reason = result.Outcome.Reason(),
                 });
             case SignUpStatus.Verified:
                 return Results.Ok(new Dictionary<string, object?>

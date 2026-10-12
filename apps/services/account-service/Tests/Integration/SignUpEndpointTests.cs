@@ -126,7 +126,7 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task Start_ExistingAccount_AnswersLikeANewAddress_CreatesNoRow_AndSendsTheNotice()
+        public async Task Start_ExistingAccount_SendsTheNotice_CreatesNoRow_AndSaysNoCodeWasSent()
         {
             using var factory = new AccountRecoveryFactory();
             using var client = factory.CreateClient();
@@ -136,7 +136,8 @@ namespace AccountService.Tests.Integration
             var unknown = await Post(client, StartPath, new { email = "free@example.com" });
 
             known.StatusCode.Should().Be(unknown.StatusCode);
-            (await known.Content.ReadAsStringAsync()).Should().Be(await unknown.Content.ReadAsStringAsync());
+            (await known.Content.ReadAsStringAsync()).Should().Contain("\"sent\":false,\"reason\":\"notice\"");
+            (await unknown.Content.ReadAsStringAsync()).Should().Contain("\"sent\":true,\"reason\":null");
             (await Rows(factory)).Should().ContainSingle().Which.Email.Should().Be("FREE@EXAMPLE.COM");
 
             var sent = factory.AlreadyRegisteredNotices;
@@ -388,7 +389,7 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task Resend_ForAnUnknownOrExistingAddress_AnswersLikeAPendingOne_AndSendsNothing()
+        public async Task Resend_ForAnUnknownOrExistingAddress_RunsTheStartLogic_AndNeverAnswersSentWithNoSend()
         {
             using var factory = NoCooldown();
             using var client = factory.CreateClient();
@@ -402,15 +403,16 @@ namespace AccountService.Tests.Integration
 
             unknown.StatusCode.Should().Be(pending.StatusCode);
             existing.StatusCode.Should().Be(pending.StatusCode);
-            var expected = await pending.Content.ReadAsStringAsync();
-            (await unknown.Content.ReadAsStringAsync()).Should().Be(expected);
-            (await existing.Content.ReadAsStringAsync()).Should().Be(expected);
-            factory.AlreadyRegisteredNotices.Skip(sentBefore).Should().ContainSingle().Which.To.Should().Be("pending@example.com");
-            (await Rows(factory)).Should().ContainSingle();
+            (await pending.Content.ReadAsStringAsync()).Should().Contain("\"sent\":true");
+            (await unknown.Content.ReadAsStringAsync()).Should().Contain("\"sent\":true");
+            (await existing.Content.ReadAsStringAsync()).Should().Contain("\"sent\":false,\"reason\":\"notice\"");
+            var sent = factory.AlreadyRegisteredNotices.Skip(sentBefore).ToList();
+            sent.Where(m => m.Kind == EmailKind.Code).Select(m => m.To).Should().BeEquivalentTo("pending@example.com", "nobody@example.com");
+            sent.Should().ContainSingle(m => m.Kind == EmailKind.AlreadyRegistered).Which.To.Should().Be("taken@example.com");
         }
 
         [Fact]
-        public async Task Resend_ForAnExpiredSignUp_SendsNothing()
+        public async Task Resend_ForAnExpiredSignUp_StartsAgain_AndSendsANewCode()
         {
             var clock = new FakeClock();
             using var factory = NoCooldown(clock);
@@ -421,7 +423,9 @@ namespace AccountService.Tests.Integration
             var response = await Post(client, ResendPath, new { email = "a@example.com" });
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
-            Codes(factory).Should().ContainSingle();
+            (await response.Content.ReadAsStringAsync()).Should().Contain("\"sent\":true");
+            Codes(factory).Should().HaveCount(2);
+            (await VerifyAsync(client, "a@example.com", CodeOf(factory))).Should().NotBeNull();
         }
 
         [Fact]
@@ -547,12 +551,12 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
-        public async Task Start_ForAVerifiedAddress_LeavesTheLiveProofAlone_AndAnswersTheSame()
+        public async Task Start_ForAVerifiedAddress_LeavesTheLiveProofAlone_AndAnswersPending()
         {
             using var factory = NoCooldown();
             using var client = factory.CreateClient();
             const string email = "a@example.com";
-            var first = await Post(client, StartPath, new { email });
+            await Post(client, StartPath, new { email });
             var proof = await VerifyAsync(client, email, CodeOf(factory));
             var codesBefore = Codes(factory).Count;
 
@@ -560,7 +564,7 @@ namespace AccountService.Tests.Integration
             var again = await Post(client, StartPath, new { email });
 
             again.StatusCode.Should().Be(HttpStatusCode.OK);
-            (await again.Content.ReadAsStringAsync()).Should().Be(await first.Content.ReadAsStringAsync());
+            (await again.Content.ReadAsStringAsync()).Should().Contain("\"sent\":false,\"reason\":\"pending\"");
             Codes(factory).Should().HaveCount(codesBefore);
             (await Rows(factory)).Single().State.Should().Be(PendingRegistrationState.Verified);
             (await Consume(factory, email, proof)).Should().BeTrue();

@@ -8,14 +8,16 @@ import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
 import {
   changeSignupEmail,
+  type CodeNotSentReason,
   CodesUnavailableError,
   CodeTiming,
   identifyEmail,
   RateLimitError,
   SignInFailedError,
   startPasswordReset,
+  UndeliverableEmailError,
 } from '@/lib/api/account';
-import AuthCodeStep from '@/components/AuthCodeStep';
+import AuthCodeStep, { UNDELIVERABLE_COPY } from '@/components/AuthCodeStep';
 import AuthSetPasswordStep, { SetPasswordFailure } from '@/components/AuthSetPasswordStep';
 
 /** Keyed by hostname so it never collides across environments or domains. */
@@ -32,6 +34,7 @@ function entryError(err: unknown): string {
     return `Too many tries. Try again in ${err.retryAfterSeconds} seconds.`;
   }
   if (err instanceof CodesUnavailableError) return UNAVAILABLE_COPY;
+  if (err instanceof UndeliverableEmailError) return UNDELIVERABLE_COPY;
   return 'Something went wrong. Try again.';
 }
 
@@ -66,8 +69,8 @@ export default function AuthForm({
     resendAfterSeconds: 0,
     expiresInSeconds: 0,
   });
-  // True when identify sent no code because a cooldown or a cap stopped it (#811).
-  const [codeNotSent, setCodeNotSent] = useState(false);
+  // Set when identify queued no code, with the reason (#813).
+  const [codeNotSent, setCodeNotSent] = useState<CodeNotSentReason | undefined>(undefined);
   // The address a code was sent to. A different address on the email step calls change-email.
   const [codeRun, setCodeRun] = useState(0);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
@@ -134,7 +137,7 @@ export default function AuthForm({
         setPendingEmail(address);
         setCodeFlow('signup');
         setCodeTiming(result);
-        setCodeNotSent(result.sent === false);
+        setCodeNotSent(result.notSentReason);
         setCodeRun((n) => n + 1);
         goToStep('code');
       }
@@ -186,7 +189,7 @@ export default function AuthForm({
       setEmail(address);
       setCodeFlow('reset');
       setCodeTiming(timing);
-      setCodeNotSent(false);
+      setCodeNotSent(undefined);
       setCodeRun((n) => n + 1);
       goToStep('code');
     } catch (err) {
@@ -274,7 +277,8 @@ export default function AuthForm({
         </h2>
         <p className="mt-2 text-center text-sm text-ink-muted empty:hidden">
           {step === 'password' && <>Enter your password for {emailChip}.</>}
-          {step === 'code' && codeFlow === 'signup' && <>We sent a 6-digit code to {emailChip}.</>}
+          {/* One heading for every outcome, so it shows nothing about the account (#813). */}
+          {step === 'code' && codeFlow === 'signup' && <>Enter the 6-digit code for {emailChip}.</>}
           {step === 'code' && codeFlow === 'reset' && (
             <>If an account exists for {emailChip}, we sent a 6-digit code.</>
           )}
@@ -508,7 +512,7 @@ export default function AuthForm({
               flow={codeFlow}
               resendAfterSeconds={codeTiming.resendAfterSeconds}
               expiresInSeconds={codeTiming.expiresInSeconds}
-              notSent={codeNotSent}
+              notSentReason={codeNotSent}
               onVerified={handleVerified}
               onChangeEmail={() => goToStep(codeFlow === 'reset' ? 'forgot' : 'email')}
             />

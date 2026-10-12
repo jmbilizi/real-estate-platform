@@ -27,23 +27,25 @@ namespace AccountService.Helpers;
 /// cannot send more notices to one inbox than start does.
 /// </para>
 /// <para>
-/// <c>Sent</c> is false when the send budget or the code engine stopped the send. Every address
-/// gets the same field, so it does not reveal the account.
+/// <c>Outcome</c> says what the send did on the code route (#813). The reasons come from per-email
+/// and per-client counters, the same for every address on that route.
 /// </para>
 /// <para>
-/// Nothing here logs the email. A skipped send logs the counter name and the wait only.
+/// Nothing here logs the email. Each call logs one line with the route and the outcome.
 /// </para>
 /// </remarks>
 /// <param name="users">The user manager, for the one account lookup.</param>
 /// <param name="signUp">The #652 sign-up logic.</param>
 /// <param name="limiter">The rate limiter, for the send budget.</param>
 /// <param name="codeOptions">The engine options.</param>
+/// <param name="sender">The transport, asked only whether it can deliver.</param>
 /// <param name="logger">The logger.</param>
 internal sealed partial class IdentifyService(
     UserManager<ApplicationUser> users,
     SignUpService signUp,
     AccountRecoveryRateLimiter limiter,
     IOptions<EmailCodeOptions> codeOptions,
+    IOutboundEmailSender sender,
     ILogger<IdentifyService> logger)
 {
     /// <summary>Picks the next step for an address.</summary>
@@ -56,14 +58,37 @@ internal sealed partial class IdentifyService(
         string? clientAddress,
         CancellationToken cancellationToken = default)
     {
+        var result = await this.RouteAsync(email, clientAddress, cancellationToken).ConfigureAwait(false);
+        var route = result.Status != IdentifyStatus.Ok ? "none" : result.Next == IdentifyNext.Password ? "password" : "code";
+        var outcome = result.Status switch
+        {
+            IdentifyStatus.Ok when result.Next == IdentifyNext.Password => "none",
+            IdentifyStatus.Ok => result.Outcome.Reason() ?? "sent",
+            IdentifyStatus.InvalidEmail => "invalid_email",
+            IdentifyStatus.Undeliverable => "undeliverable",
+            _ => "unavailable",
+        };
+        var level = result.Status == IdentifyStatus.Unavailable ? LogLevel.Warning : LogLevel.Information;
+        LogOutcome(logger, level, route, outcome, result.ResendAfterSeconds);
+        return result;
+    }
+
+    [LoggerMessage(EventId = 1397, EventName = "IdentifyOutcome", Message = "Identify answered: route {Route}, outcome {Outcome}, wait {WaitSeconds}s.")]
+    private static partial void LogOutcome(ILogger logger, LogLevel level, string route, string outcome, int waitSeconds);
+
+    private async Task<IdentifyResult> RouteAsync(
+        string? email,
+        string? clientAddress,
+        CancellationToken cancellationToken)
+    {
         if (!SignUpEmail.TryNormalize(email, out var key, out var entered))
         {
             return new IdentifyResult(IdentifyStatus.InvalidEmail);
         }
 
-        // One status for every address when the engine has no key, so the status shows no route.
+        // One status for every address when codes cannot go out, so the status shows no route.
         var settings = codeOptions.Value;
-        if (!settings.IsConfigured)
+        if (!settings.IsConfigured || !sender.CanSend)
         {
             return new IdentifyResult(IdentifyStatus.Unavailable);
         }
@@ -83,30 +108,28 @@ internal sealed partial class IdentifyService(
         var expires = EmailCodeService.CeilSeconds(settings.Lifetime);
         if (!limiter.TrySignUpSend(key, clientAddress, settings.ResendCooldown, settings.MaxPerHour, settings.MaxPerDay, out var wait, out var refusedBy))
         {
-            var waitSeconds = EmailCodeService.CeilSeconds(wait);
-            LogSendSkipped(logger, refusedBy ?? "unknown", waitSeconds);
-            return new IdentifyResult(IdentifyStatus.Ok, IdentifyNext.Code, waitSeconds, expires, Sent: false);
+            return new IdentifyResult(
+                IdentifyStatus.Ok,
+                IdentifyNext.Code,
+                EmailCodeService.CeilSeconds(wait),
+                expires,
+                CodeSendOutcomeWire.FromCounter(refusedBy));
         }
 
         var started = await signUp.StartAsync(entered, cancellationToken).ConfigureAwait(false);
         return started.Status switch
         {
             SignUpStatus.Ok => new IdentifyResult(
-                IdentifyStatus.Ok, IdentifyNext.Code, started.ResendAfterSeconds, started.ExpiresInSeconds),
-            SignUpStatus.Limited => this.Limited(started.RetryAfterSeconds, expires),
+                IdentifyStatus.Ok, IdentifyNext.Code, started.ResendAfterSeconds, started.ExpiresInSeconds, started.Outcome),
+            SignUpStatus.Limited => new IdentifyResult(
+                IdentifyStatus.Ok,
+                IdentifyNext.Code,
+                Math.Max(1, started.RetryAfterSeconds),
+                expires,
+                started.Outcome == CodeSendOutcome.Sent ? CodeSendOutcome.Cooldown : started.Outcome),
             SignUpStatus.InvalidEmail => new IdentifyResult(IdentifyStatus.InvalidEmail),
             SignUpStatus.Undeliverable => new IdentifyResult(IdentifyStatus.Undeliverable),
             _ => new IdentifyResult(IdentifyStatus.Unavailable),
         };
-    }
-
-    [LoggerMessage(1397, LogLevel.Information, "Identify skipped the code send: counter {Counter} refused, wait {WaitSeconds}s.", EventName = "IdentifySendSkipped")]
-    private static partial void LogSendSkipped(ILogger logger, string counter, int waitSeconds);
-
-    private IdentifyResult Limited(int retryAfterSeconds, int expires)
-    {
-        var waitSeconds = Math.Max(1, retryAfterSeconds);
-        LogSendSkipped(logger, "start-limited", waitSeconds);
-        return new IdentifyResult(IdentifyStatus.Ok, IdentifyNext.Code, waitSeconds, expires, Sent: false);
     }
 }

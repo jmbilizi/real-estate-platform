@@ -6,6 +6,7 @@ import { clientIpOf } from '@/app/api/_lib/listings-gateway';
 const FORWARDED_FIELDS = [
   'next',
   'sent',
+  'reason',
   'stepUp',
   'resendAfterSeconds',
   'expiresInSeconds',
