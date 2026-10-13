@@ -100,6 +100,10 @@ describe('HomePageContent home feed (#836)', () => {
     mockTarget = { city: 'Rockville', state: 'MD', source: 'last-search' };
     mockAnonId = 'a'.repeat(32);
     mockProfile = WARM;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ enabled: false, rolloutPct: 0 }),
+    }) as unknown as typeof fetch;
   });
 
   afterEach(() => {
@@ -211,6 +215,43 @@ describe('HomePageContent home feed (#836)', () => {
     expect(rows).toContain('Newest homes for sale');
     expect(screen.queryByText(/failed to load/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tap to retry/i)).not.toBeInTheDocument();
+  });
+
+  it("reads the flags from /api/feed-config and shows today's rows until they arrive", async () => {
+    mockedGetHomeFeed.mockResolvedValue(feedResponse());
+    let resolveConfig: (v: unknown) => void = () => undefined;
+    global.fetch = jest.fn(
+      () => new Promise((resolve) => (resolveConfig = resolve)),
+    ) as unknown as typeof fetch;
+    const { container } = render(<HomePageContent />);
+    await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
+    expect(titles(container)).toContain('Newest homes for sale');
+    expect(mockedGetHomeFeed).not.toHaveBeenCalled();
+
+    resolveConfig({ ok: true, json: () => Promise.resolve({ enabled: true, rolloutPct: 100 }) });
+    await waitFor(() => expect(titles(container)).toContain(FEED_TITLE));
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('/api/feed-config');
+  });
+
+  it("keeps today's rows when the visitor already scrolled", async () => {
+    mockedGetHomeFeed.mockResolvedValue(feedResponse());
+    Object.defineProperty(window, 'scrollY', { value: 600, configurable: true });
+    try {
+      const { rows } = await settledTitles(<HomePageContent homeFeed={ON} />);
+      expect(rows).toContain('Newest homes for sale');
+      expect(mockedGetHomeFeed).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    }
+  });
+
+  it("keeps today's rows when the visitor already touched the page", async () => {
+    mockedGetHomeFeed.mockResolvedValue(feedResponse());
+    const { rerender } = render(<HomePageContent homeFeed={{ enabled: false, rolloutPct: 0 }} />);
+    window.dispatchEvent(new Event('pointerdown'));
+    rerender(<HomePageContent homeFeed={ON} />);
+    await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
+    expect(mockedGetHomeFeed).not.toHaveBeenCalled();
   });
 
   it('shows a skeleton with card rows while the feed loads', async () => {

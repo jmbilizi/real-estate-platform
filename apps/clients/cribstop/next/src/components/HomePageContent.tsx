@@ -18,7 +18,7 @@ import { formatRelativeTime } from '@/lib/format';
 import { homeTargetDebugEnabled, type InferredTarget, prefersRentFirst } from '@/lib/home-target';
 import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
 import { useHomeTarget } from '@/lib/useHomeTarget';
-import { feedRowTitle, HOME_FEED_OFF, type HomeFeedFlags } from '@/lib/home-feed';
+import { feedRowTitle, type HomeFeedFlags } from '@/lib/home-feed';
 import { useHomeFeed } from '@/lib/useHomeFeed';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
@@ -876,11 +876,7 @@ function FeedRows({ feed }: { feed: HomeFeedResponse }) {
  * search was rent, both the "Near you" pair and the rentals cluster move up — `useRentFirst` is
  * the only thing that changes; nothing about the rows themselves does.
  */
-export default function HomePageContent({
-  homeFeed = HOME_FEED_OFF,
-}: {
-  homeFeed?: HomeFeedFlags;
-}) {
+export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags }) {
   const rentFirst = useRentFirst();
   const { user, savedPropertyIds } = useApp();
   const { save: latestSave, loading: saveLoading } = useLatestSave(user?.email ?? null);

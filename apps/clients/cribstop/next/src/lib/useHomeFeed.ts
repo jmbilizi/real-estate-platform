@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { HomeFeedResponse } from '@cribstop/property-contracts';
 import { getHomeFeed } from '@/lib/api/home-feed';
 import { getAnonId } from '@/lib/anon-id';
 import { getFeedRequestProfile } from '@/lib/feed-profile';
 import {
+  HOME_FEED_OFF,
   type HomeFeedFlags,
   inTreatment,
   isWarmProfile,
@@ -39,12 +40,54 @@ function armOf(flags: HomeFeedFlags): 'control' | 'treatment' {
  * the flag-off path, the control arm and the server render are identical to the page before the
  * feed. The flag-off path never touches storage or the network.
  */
+/** Scrolled this far, the visitor is reading. A late swap would move the page under them. */
+export const SWAP_MAX_SCROLL_PX = 80;
+
+/** Reads the runtime flags. Off until they arrive, and off on any failure. */
+function useFeedFlags(override: HomeFeedFlags | undefined): HomeFeedFlags {
+  const [flags, setFlags] = useState<HomeFeedFlags>(override ?? HOME_FEED_OFF);
+  useEffect(() => {
+    if (override || typeof fetch !== 'function') return undefined;
+    const controller = new AbortController();
+    fetch('/api/feed-config', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: unknown) => {
+        const b = body as Partial<HomeFeedFlags> | null;
+        if (b && b.enabled === true && typeof b.rolloutPct === 'number') {
+          setFlags({
+            enabled: true,
+            rolloutPct: Math.min(100, Math.max(0, Math.floor(b.rolloutPct))),
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [override]);
+  return override ?? flags;
+}
+
+/** True once the visitor touched, pressed a key or scrolled the page. */
+function useInteracted(): () => boolean {
+  const touched = useRef(false);
+  useEffect(() => {
+    const mark = () => {
+      touched.current = true;
+    };
+    const events = ['pointerdown', 'keydown', 'touchstart', 'wheel'] as const;
+    events.forEach((e) => window.addEventListener(e, mark, { passive: true }));
+    return () => events.forEach((e) => window.removeEventListener(e, mark));
+  }, []);
+  return () => touched.current || window.scrollY > SWAP_MAX_SCROLL_PX;
+}
+
 export function useHomeFeed(
-  flags: HomeFeedFlags,
+  flagsOverride: HomeFeedFlags | undefined,
   region: InferredTarget | null,
   regionLoading: boolean,
   side: 'sale' | 'rent',
 ): HomeFeedState {
+  const flags = useFeedFlags(flagsOverride);
+  const busy = useInteracted();
   const live = flags.enabled && flags.rolloutPct > 0;
   const [arm, setArm] = useState<'unknown' | 'control' | 'treatment'>(live ? 'unknown' : 'control');
   const [state, setState] = useState<HomeFeedState>({ status: 'off' });
@@ -64,6 +107,11 @@ export function useHomeFeed(
     const target = titleSafeTarget(region);
     const profile = validProfile(getFeedRequestProfile());
     if (!target || !isWarmProfile(profile)) {
+      setState({ status: 'off' });
+      return undefined;
+    }
+    // A visitor who already scrolled or touched the page keeps today's rows.
+    if (busy()) {
       setState({ status: 'off' });
       return undefined;
     }

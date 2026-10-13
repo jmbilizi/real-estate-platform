@@ -183,7 +183,9 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
 ## Home feed rollout (#836)
 
 - `HOME_FEED_ENABLED` (default `false`) and `HOME_FEED_ROLLOUT_PCT` (0 to 100) are server env vars.
-  `app/(with-search)/page.tsx` reads them per request.
+  `GET /api/feed-config` serves them (`s-maxage=60`). The home page stays static, and the client
+  reads the config, then buckets. Until it arrives, today's rows show. A visitor who scrolled past
+  80 px or touched the page keeps today's rows.
 - The bucket is `fnv1a("home-feed-v1" + anon id) mod 100`. A bucket below the percent gets the feed.
   No anon id (opt-out, GPC) gets today's rows.
 - The feed shows only for a warm visit with a place from `explicit`, `last-search`, `looking-for`,
