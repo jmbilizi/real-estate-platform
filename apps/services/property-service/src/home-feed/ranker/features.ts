@@ -53,7 +53,8 @@ export interface ProfilePoint {
   readonly kind: 'view' | 'save';
 }
 
-const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+const clamp01 = (value: number): number =>
+  Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 
 /** Weighted quantile of sorted `[value, weight]` pairs. */
 function weightedQuantile(sorted: readonly (readonly [number, number])[], q: number): number {

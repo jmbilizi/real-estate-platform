@@ -39,7 +39,8 @@ export async function buildHomeFeed(
   const isCold = items.length === 0 && places.length === 0;
   const place = `${request.target.city}, ${request.target.state.toUpperCase()}`;
 
-  const cacheKey = `${place.toLowerCase()}|${request.side}|${request.radiusKm}|${request.variant}`;
+  const centreKey = `${request.target.lat?.toFixed(3) ?? '-'},${request.target.lng?.toFixed(3) ?? '-'}`;
+  const cacheKey = `${place.toLowerCase()}|${centreKey}|${request.side}|${request.radiusKm}|${request.variant}`;
   if (isCold) {
     const hit = coldCache.get(cacheKey);
     if (hit !== undefined && now - hit.at < COLD_CACHE_TTL_MS) {

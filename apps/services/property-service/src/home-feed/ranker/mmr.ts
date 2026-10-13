@@ -15,7 +15,14 @@ export interface Picked {
 /** 1 for the same building, 0.5 for the same ZIP, beds and a price within 10%, else 0. */
 export function similarity(a: ListingCardRow, b: ListingCardRow): number {
   if (a.propertyId === b.propertyId) return 1;
-  if (a.zip === b.zip && a.beds === b.beds && a.price !== null && b.price !== null) {
+  if (
+    a.zip !== '' &&
+    a.zip === b.zip &&
+    a.beds !== null &&
+    a.beds === b.beds &&
+    a.price !== null &&
+    b.price !== null
+  ) {
     const high = Math.max(a.price, b.price);
     if (high > 0 && Math.abs(a.price - b.price) <= 0.1 * high) return 0.5;
   }
@@ -26,6 +33,11 @@ export function similarity(a: ListingCardRow, b: ListingCardRow): number {
 export function officeOf(card: ListingCardRow): string | null {
   const name = card.officeName.trim().toLowerCase();
   return name === '' ? null : name;
+}
+
+/** A row never shows two listings of one home. */
+function sameHomeChosen(chosen: readonly Picked[], card: ListingCardRow): boolean {
+  return chosen.some((p) => p.item.candidate.card.propertyId === card.propertyId);
 }
 
 function underOfficeCap(chosen: readonly Picked[], card: ListingCardRow): boolean {
@@ -58,6 +70,7 @@ export function selectRow(
     for (let i = 0; i < remaining.length; i += 1) {
       const entry = remaining[i] as Scored;
       if (!underOfficeCap(chosen, entry.candidate.card)) continue;
+      if (sameHomeChosen(chosen, entry.candidate.card)) continue;
       const redundancy = chosen.reduce(
         (max, p) => Math.max(max, similarity(entry.candidate.card, p.item.candidate.card)),
         0,
@@ -74,7 +87,11 @@ export function selectRow(
 
   if (chosen.length === mainTarget) {
     for (let slot = 0; slot < exploreSlots; slot += 1) {
-      const eligible = remaining.filter((entry) => underOfficeCap(chosen, entry.candidate.card));
+      const eligible = remaining.filter(
+        (entry) =>
+          underOfficeCap(chosen, entry.candidate.card) &&
+          !sameHomeChosen(chosen, entry.candidate.card),
+      );
       if (eligible.length === 0) break;
       const pick = eligible[Math.floor(rng() * eligible.length)] as Scored;
       remaining.splice(remaining.indexOf(pick), 1);

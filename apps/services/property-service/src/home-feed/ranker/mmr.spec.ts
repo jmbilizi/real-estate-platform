@@ -41,6 +41,23 @@ describe('selectRow', () => {
     expect(row).toHaveLength(2);
   });
 
+  it('never shows two listings of one home in a row, explore slot included', () => {
+    const a = candidate({ zip: '20001' });
+    const twin = candidate({ propertyId: a.card.propertyId, zip: '20002' });
+    const others = Array.from({ length: 10 }, (_, i) =>
+      scored(candidate({ zip: `3${String(i).padStart(4, '0')}` }), 0.4),
+    );
+    const row = selectRow([scored(a, 0.9), scored(twin, 0.85), ...others], 8, () => 0);
+    const homes = row.map((p) => p.item.candidate.card.propertyId);
+    expect(new Set(homes).size).toBe(homes.length);
+  });
+
+  it('does not treat two missing ZIPs or beds as equal', () => {
+    const a = candidate({ beds: null, price: 500000 });
+    const b = candidate({ beds: null, price: 505000 });
+    expect(similarity(a.card, b.card)).toBe(0);
+  });
+
   it('does not cap a blank office name', () => {
     expect(officeOf(candidate({ officeName: '  ' }).card)).toBeNull();
   });

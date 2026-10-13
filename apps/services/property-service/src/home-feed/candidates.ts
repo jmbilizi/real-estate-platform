@@ -158,6 +158,8 @@ interface CentreCacheEntry {
   readonly at: number;
 }
 const CENTRE_TTL_MS = 6 * 60 * 60 * 1000;
+/** A city with no visible coordinates is checked again soon, in case it gains listings. */
+const CENTRE_MISS_TTL_MS = 60_000;
 const CENTRE_CACHE_MAX = 500;
 const centreCache = new Map<string, CentreCacheEntry>();
 
@@ -177,12 +179,18 @@ async function resolveCentre(
 ): Promise<Centre | null> {
   const key = `${city.toLowerCase()}|${state.toLowerCase()}`;
   const hit = centreCache.get(key);
-  if (hit !== undefined && now - hit.at < CENTRE_TTL_MS) return hit.centre;
+  if (
+    hit !== undefined &&
+    now - hit.at < (hit.centre === null ? CENTRE_MISS_TTL_MS : CENTRE_TTL_MS)
+  ) {
+    return hit.centre;
+  }
   const { rows } = await client.query<{ lat: number | null; lng: number | null }>(
     `SELECT avg(t.latitude)::double precision AS lat, avg(t.longitude)::double precision AS lng
      FROM (SELECT v.latitude, v.longitude FROM listing_search_v v
            WHERE lower(v.city) = lower($1) AND lower(v.state) = lower($2)
              AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL
+           ORDER BY v.id
            LIMIT 200) t`,
     [city, state],
   );
@@ -211,7 +219,8 @@ export async function findFeedCandidates(
     await client.query(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
     await client.query(DISABLE_JIT_SQL);
     const centre = query.centre ?? (await resolveCentre(client, query.city, query.state, now));
-    if (centre === null) {
+    // Whole-state mode needs no centre. Distance is then unknown and the geo feature is 0.
+    if (centre === null && query.radiusKm !== null) {
       await client.query('COMMIT');
       return [];
     }
