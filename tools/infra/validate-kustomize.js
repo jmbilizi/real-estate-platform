@@ -21,6 +21,7 @@ const yaml = require('js-yaml');
 const { resolveDeployScope, describeProblems } = require('./deploy-scope');
 const { checkSecretDrift } = require('./secret-drift');
 const { checkServiceRegistries } = require('./service-registries');
+const { findProxyProtocolProblems } = require('./proxy-protocol');
 
 const colors = {
   reset: '\x1b[0m',
@@ -109,6 +110,24 @@ function validateEnvironment(provider, env) {
 
   if (result.success) {
     logSuccess(`${provider}/${env}: Kustomize build successful`);
+
+    const proxyProblems = findProxyProtocolProblems(loadManifestDocuments(result.output), {
+      provider,
+    });
+    if (proxyProblems.length > 0) {
+      logError(`${provider}/${env}: PROXY protocol settings disagree`);
+      for (const problem of proxyProblems) {
+        log(`  ${problem.headline}:`, 'red');
+        for (const item of problem.items) {
+          log(`    - ${item}`, 'red');
+        }
+        for (const line of problem.detail) {
+          log(`    ${line}`, 'yellow');
+        }
+      }
+      return false;
+    }
+    logSuccess(`${provider}/${env}: PROXY protocol settings agree`);
 
     if (provider === 'hetzner') {
       const problems = findDeployControlProblems(result.output, env);

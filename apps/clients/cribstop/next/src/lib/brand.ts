@@ -13,6 +13,12 @@
  *  prose sentence and a state-count tile can never disagree about how many states that is. */
 const LICENSED_STATE_CODES = ['MD', 'DC', 'VA'] as const;
 
+const LICENSED_STATE_NAMES: Record<(typeof LICENSED_STATE_CODES)[number], string> = {
+  MD: 'Maryland',
+  DC: 'District of Columbia',
+  VA: 'Virginia',
+};
+
 /** "MD, DC, and VA" — an Oxford-comma join, generic over the list length. */
 function joinWithAnd(items: readonly string[]): string {
   if (items.length <= 1) return items[0] ?? '';
@@ -56,6 +62,18 @@ export const BRAND = {
 
   /** States where the brokerage is licensed, as running prose. Derived from `licensedStateCodes`. */
   licensedStates: joinWithAnd(LICENSED_STATE_CODES),
+
+  /** Full names of the licensed markets, for structured data. Derived from `licensedStateCodes`. */
+  licensedMarketNames: LICENSED_STATE_CODES.map((code) => LICENSED_STATE_NAMES[code]),
+
+  /** Public profile URLs of the brokerage, for the `sameAs` field of its structured data (#844). */
+  brokerageProfileUrls: ['https://onereal.com'] as readonly string[],
+
+  /**
+   * Licence numbers by state code. Empty until the real numbers are known: structured data
+   * publishes a licence number only when it is listed here (#844).
+   */
+  licenseNumbers: {} as Readonly<Record<string, string>>,
 
   /** Page-title suffix used in <head>. */
   titleSuffix: 'Find Your Next Home',
