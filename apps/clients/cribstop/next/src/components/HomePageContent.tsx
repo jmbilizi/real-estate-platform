@@ -202,6 +202,7 @@ function useTargetCarousel(
         : {};
   const query = { ...base, ...scope };
   const result = useCarouselListings(query, placeLoading, placeLoading);
+  // A failed query does not widen. The row shows its retry for that step.
   const empty =
     !placeLoading &&
     !result.loading &&
@@ -213,6 +214,11 @@ function useTargetCarousel(
   useEffect(() => {
     if (widening) setFallback({ placeKey, step: step + 1 });
   }, [widening, placeKey, step]);
+
+  // A moved target starts over. Without this, a return to an earlier place would resume its old step.
+  useEffect(() => {
+    setFallback((f) => (f.placeKey === placeKey ? f : { placeKey, step: 0 }));
+  }, [placeKey]);
 
   // A result for an earlier step is not the answer to this step's query yet: keep the skeleton.
   const stale = !placeLoading && !result.failed && result.settledKey !== JSON.stringify(query);
