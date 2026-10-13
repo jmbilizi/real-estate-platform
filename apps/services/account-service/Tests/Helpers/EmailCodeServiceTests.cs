@@ -566,7 +566,8 @@ namespace AccountService.Tests.Helpers
                         FromAddress = "no-reply@cribstop.com",
                         ReplyToAddress = "contact@cribstop.com",
                         BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
-                    })),
+                    }),
+                    Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://cribstop.com") })),
                 this.sender,
                 this.clock,
                 NullLogger<EmailCodeService>.Instance);
@@ -587,7 +588,7 @@ namespace AccountService.Tests.Helpers
 
             internal List<OutboundEmail> Messages { get; } = new();
 
-            internal string LastCode => this.Messages[^1].Subject.Split(' ')[0];
+            internal string LastCode => this.Messages[^1].CodeFromBody();
 
             public Task SendAsync(OutboundEmail message, CancellationToken cancellationToken = default)
             {

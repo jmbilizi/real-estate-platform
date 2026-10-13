@@ -820,7 +820,7 @@ namespace AccountService.Tests.Integration
         private static List<OutboundEmail> Codes(AccountRecoveryFactory factory) =>
             factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).ToList();
 
-        private static string CodeOf(AccountRecoveryFactory factory) => Codes(factory).Last().Subject.Split(' ')[0];
+        private static string CodeOf(AccountRecoveryFactory factory) => Codes(factory).Last().CodeFromBody();
 
         private static async Task<string?> VerifyAsync(HttpClient client, string email, string code)
         {

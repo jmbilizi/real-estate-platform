@@ -326,7 +326,7 @@ internal sealed partial class EmailCodeService(
         });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await sender.SendAsync(composer.Code(email.Trim(), code, settings.Lifetime), cancellationToken).ConfigureAwait(false);
+        await sender.SendAsync(composer.Code(email.Trim(), code, settings.Lifetime, purpose), cancellationToken).ConfigureAwait(false);
         return new EmailCodeIssueResult(EmailCodeIssueStatus.Issued);
     }
 

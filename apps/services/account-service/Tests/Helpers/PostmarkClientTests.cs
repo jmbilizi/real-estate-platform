@@ -21,8 +21,9 @@ namespace AccountService.Tests.Helpers
             "no-reply@cribstop.com",
             "contact@cribstop.com",
             "person@example.com",
-            "SECRET-CODE is your Cribstop code",
-            "Your Cribstop code:\n\nSECRET-CODE\n\nCribstop is brokered by Real Broker, LLC.");
+            "Your Cribstop verification code",
+            "Your Cribstop code:\n\nSECRET-CODE\n\nCribstop is brokered by Real Broker, LLC.",
+            "<p>SECRET-CODE</p>");
 
         [Fact]
         public async Task SendAsync_OnAccept_ReturnsSuccess_AndThePostmarkMessageId()
@@ -50,6 +51,8 @@ namespace AccountService.Tests.Helpers
             var request = handler.Requests.Should().ContainSingle().Subject;
             request.Headers.GetValues("X-Postmark-Server-Token").Should().ContainSingle().Which.Should().Be("real-server-token");
             handler.RequestBodies.Single().Should().Contain("\"MessageStream\":\"outbound\"");
+            handler.RequestBodies.Single().Should().Contain("\"HtmlBody\":").And.Contain("SECRET-CODE");
+            handler.RequestBodies.Single().Should().Contain("\"TextBody\":");
             handler.RequestBodies.Single().Should().Contain("no-reply@cribstop.com");
             handler.RequestBodies.Single().Should().Contain("contact@cribstop.com");
         }

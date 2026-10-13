@@ -195,7 +195,7 @@ namespace AccountService.Tests.Integration
             using var factory = NoCooldown();
             using var client = factory.CreateClient();
             await Post(client, new { email = "proof@example.com" });
-            var code = factory.AlreadyRegisteredNotices.Last(m => m.Kind == EmailKind.Code).Subject.Split(' ')[0];
+            var code = factory.AlreadyRegisteredNotices.Last(m => m.Kind == EmailKind.Code).CodeFromBody();
             (await client.PostAsJsonAsync("/account/signup/verify", new { email = "proof@example.com", code })).StatusCode.Should().Be(HttpStatusCode.OK);
             var codesBefore = Codes(factory);
 

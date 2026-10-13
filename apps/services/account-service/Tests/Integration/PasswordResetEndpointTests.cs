@@ -51,7 +51,7 @@ namespace AccountService.Tests.Integration
             body.GetProperty("expiresInSeconds").GetInt32().Should().Be(600);
             var message = Codes(factory).Should().ContainSingle().Subject;
             message.To.Should().Be("Owner@Example.com");
-            message.Subject.Should().MatchRegex(@"^\d{6} is your Cribstop code$");
+            message.Subject.Should().Be("Your Cribstop verification code");
         }
 
         [Fact]
@@ -712,7 +712,7 @@ namespace AccountService.Tests.Integration
         private static List<OutboundEmail> Codes(AccountRecoveryFactory factory) =>
             factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).ToList();
 
-        private static string CodeOf(AccountRecoveryFactory factory) => Codes(factory).Last().Subject.Split(' ')[0];
+        private static string CodeOf(AccountRecoveryFactory factory) => Codes(factory).Last().CodeFromBody();
 
         private static async Task<string> ProofAsync(AccountRecoveryFactory factory, HttpClient client, string email)
         {

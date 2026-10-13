@@ -56,6 +56,7 @@ internal sealed class PostmarkClient(HttpClient httpClient, IOptions<PostmarkOpt
                 message.To,
                 message.ReplyToAddress,
                 message.Subject,
+                message.HtmlBody,
                 message.TextBody,
                 settings.MessageStream),
             options: JsonOptions);
@@ -96,6 +97,7 @@ internal sealed class PostmarkClient(HttpClient httpClient, IOptions<PostmarkOpt
         string To,
         string ReplyTo,
         string Subject,
+        string HtmlBody,
         string TextBody,
         string MessageStream);
 
