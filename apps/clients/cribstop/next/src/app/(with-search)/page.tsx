@@ -6,9 +6,10 @@ import { BRAND } from '@/lib/brand';
 import { organizationJsonLd } from '@/lib/organization-jsonld';
 import { publishableOrigin } from '@/lib/publishable-origin';
 
-// ISR keeps the home page cacheable. A regeneration at runtime reads the runtime `SITE_ORIGIN`,
-// because one image serves every environment. The build has no origin, so the prerender carries no
-// JSON-LD or canonical until the first regeneration. Never add `force-dynamic` here (#871).
+// ISR keeps the home page cacheable. Regeneration reads the runtime `SITE_ORIGIN`, because one image
+// serves every environment. No build step sets `SITE_ORIGIN` (only the deploy does), so the prerender
+// has no JSON-LD or canonical. A pod serves that page until its first regeneration, up to about 300 s
+// after the first request. Never set `SITE_ORIGIN` at build time. Never add `force-dynamic` (#871).
 export const revalidate = 300;
 
 export function generateMetadata(): Metadata {
