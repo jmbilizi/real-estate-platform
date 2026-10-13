@@ -28,7 +28,10 @@ export interface FeedRequestProfile {
 
 /** Global Privacy Control: a browser-level opt-out signal. */
 export function isGpcOn(): boolean {
-  return typeof navigator !== 'undefined' && (navigator as any).globalPrivacyControl === true;
+  return (
+    typeof navigator !== 'undefined' &&
+    (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true
+  );
 }
 
 /** True unless GPC is on or the visitor turned the switch off. */
@@ -37,7 +40,8 @@ export function isPersonalisationEnabled(): boolean {
   try {
     return window.localStorage.getItem(PERSONALISE_KEY) !== 'off';
   } catch {
-    return true;
+    // Fail closed: if the opt-out cannot be read, do not personalise.
+    return false;
   }
 }
 

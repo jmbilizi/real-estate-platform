@@ -21,9 +21,11 @@ describe('PersonaliseSwitch', () => {
 
   it('clears browsing history', () => {
     recordFeedItem('a', 'view');
+    window.localStorage.setItem('recentSearches', '[{"display_name":"X"}]');
     render(<PersonaliseSwitch />);
     fireEvent.click(screen.getByRole('button', { name: /clear browsing history/i }));
     expect(window.localStorage.getItem(FEED_PROFILE_KEY)).toBeNull();
+    expect(window.localStorage.getItem('recentSearches')).toBeNull();
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
