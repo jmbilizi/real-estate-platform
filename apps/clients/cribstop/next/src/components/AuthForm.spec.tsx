@@ -33,13 +33,11 @@ jest.mock('@/lib/api/account', () => ({
   startPasswordReset: jest.fn(),
   verifyResetCode: jest.fn(),
   completePasswordReset: jest.fn(),
-  getPasswordPolicy: jest
-    .fn()
-    .mockResolvedValue({
-      minLength: 8,
-      passphraseLength: 15,
-      requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
-    }),
+  getPasswordPolicy: jest.fn().mockResolvedValue({
+    minLength: 8,
+    passphraseLength: 15,
+    requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+  }),
 }));
 
 const mockIdentify = identifyEmail as jest.MockedFunction<typeof identifyEmail>;

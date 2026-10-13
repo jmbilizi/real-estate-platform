@@ -68,6 +68,13 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public async Task LettersAndDigitsOutsideTheBasicPlane_CountAsTheirClass_NotAsSymbols()
+        {
+            // U+1D400 is a mathematical bold capital A, U+1D7CE a bold digit zero.
+            CodesOf(await this.ValidateAsync("\U0001D400bcdefg\U0001D7CE")).Should().Equal("missing_symbol");
+        }
+
+        [Fact]
         public async Task OverTheMaximum_IsTooLong()
         {
             CodesOf(await this.ValidateAsync(new string('a', 129))).Should().Equal("too_long");

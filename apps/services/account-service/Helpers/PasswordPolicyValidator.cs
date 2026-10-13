@@ -2,6 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.Text;
 using AccountService.Configuration;
 using AccountService.Models;
 using Microsoft.AspNetCore.Identity;
@@ -65,22 +66,23 @@ internal sealed class PasswordPolicyValidator(
         if (password.Length < settings.PassphraseLength)
         {
             var missing = new List<string>(4);
-            if (!password.Any(char.IsUpper))
+            var runes = password.EnumerateRunes().ToArray();
+            if (!runes.Any(Rune.IsUpper))
             {
                 missing.Add(MissingUpper);
             }
 
-            if (!password.Any(char.IsLower))
+            if (!runes.Any(Rune.IsLower))
             {
                 missing.Add(MissingLower);
             }
 
-            if (!password.Any(char.IsDigit))
+            if (!runes.Any(Rune.IsDigit))
             {
                 missing.Add(MissingDigit);
             }
 
-            if (!password.Any(c => !char.IsLetterOrDigit(c)))
+            if (!runes.Any(r => !Rune.IsLetterOrDigit(r)))
             {
                 missing.Add(MissingSymbol);
             }
