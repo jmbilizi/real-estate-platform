@@ -39,9 +39,17 @@ the system of record. A second sink for an external tool is one more implementat
 `AnalyticsSink`, added in `createSinks` behind a flag. Its failure never fails the call. No external
 sink exists.
 
+## Batches
+
+The body is one event or an array of 1 to 50 events. One bad event rejects the array. Send
+impressions in arrays: the gateway allows 120 requests per minute per client.
+
 ## Switch
 
 Set `ANALYTICS_ENABLED=false` on property-service or the web app. The route then stores nothing.
+
+A request with `Sec-GPC: 1` also stores nothing. The web helper `trackEvent` sends nothing when
+Global Privacy Control is on or the footer "Personalise my home page" switch is off.
 
 ## Daily funnel
 

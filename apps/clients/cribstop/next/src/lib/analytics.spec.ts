@@ -29,6 +29,23 @@ describe('analytics', () => {
     expect(JSON.parse(init.body)).toMatchObject({ event: 'listing_view', surface: 'detail' });
   });
 
+  it('sends nothing when the footer switch is off or GPC is on', () => {
+    window.localStorage.setItem('cribstop.personalise', 'off');
+    trackEvent('search');
+    expect(fetchMock).not.toHaveBeenCalled();
+    window.localStorage.removeItem('cribstop.personalise');
+    Object.defineProperty(window.navigator, 'globalPrivacyControl', {
+      value: true,
+      configurable: true,
+    });
+    trackEvent('search');
+    expect(fetchMock).not.toHaveBeenCalled();
+    Object.defineProperty(window.navigator, 'globalPrivacyControl', {
+      value: undefined,
+      configurable: true,
+    });
+  });
+
   it('never throws when the post fails', () => {
     fetchMock.mockRejectedValue(new Error('offline'));
     expect(() => trackEvent('search', { surface: 'map' })).not.toThrow();

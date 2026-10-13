@@ -3,7 +3,7 @@ import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
-import { analyticsEventRequestSchema } from './analytics-event';
+import { analyticsEventBatchSchema, analyticsEventRequestSchema } from './analytics-event';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
 import { listingsMetaSchema } from './listings-meta';
@@ -124,6 +124,7 @@ function componentSchemas() {
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
+  registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
@@ -726,7 +727,7 @@ export function toOpenApiDocument() {
           operationId: 'recordAnalyticsEvent',
           summary: 'Record one analytics event',
           description:
-            'Analytics contract v2. The body is one event with its own allow-listed properties. The ' +
+            'Analytics contract v2. The body is one event, or an array of up to 50 events. Each event has its own allow-listed properties. The ' +
             'service stores the event, the common properties, a random anonymous id and session id, ' +
             'and the server time. It stores no header, IP address, user agent, name, email or phone. ' +
             'The one free-text property is the scrubbed zero-result search text. With ' +
@@ -735,7 +736,12 @@ export function toOpenApiDocument() {
             required: true,
             content: {
               'application/json': {
-                schema: { $ref: '#/components/schemas/AnalyticsEventRequest' },
+                schema: {
+                  oneOf: [
+                    { $ref: '#/components/schemas/AnalyticsEventRequest' },
+                    { $ref: '#/components/schemas/AnalyticsEventBatch' },
+                  ],
+                },
               },
             },
           },

@@ -1,5 +1,6 @@
 import { type NextFunction, type Request, type Response, Router } from 'express';
 import {
+  analyticsEventBatchSchema,
   analyticsEventRequestSchema,
   type ErrorBody,
   normalizeAnalyticsEvent,
@@ -10,8 +11,9 @@ import { type AnalyticsSink, createSinks, fanOut } from './sink';
 /**
  * `POST /analytics/events` (#725, #824). Cookieless event counting.
  *
- * The handler reads only the parsed body. It never reads a header, the IP or the user agent, so
- * none of them can reach the store. The server stamps the time. `ANALYTICS_ENABLED=false` makes
+ * The handler reads the parsed body and the `Sec-GPC` header. It never reads the IP or the user
+ * agent, so neither can reach the store. `Sec-GPC: 1` makes the route accept the call and store
+ * nothing. The server stamps the time. `ANALYTICS_ENABLED=false` makes
  * the route accept the call and store nothing.
  */
 
@@ -103,7 +105,12 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');
-    const parsed = analyticsEventRequestSchema.safeParse(req.body);
+    // The one header the route reads is Sec-GPC. A visitor who sends it has opted out.
+    const optedOut = req.get('Sec-GPC') === '1';
+    const batch = Array.isArray(req.body);
+    const parsed = batch
+      ? analyticsEventBatchSchema.safeParse(req.body)
+      : analyticsEventRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       const unknown = new Set<string>();
       for (const issue of parsed.error.issues) {
@@ -122,7 +129,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
         );
       return;
     }
-    if (!enabled()) {
+    if (!enabled() || optedOut) {
       res.status(204).end();
       return;
     }
@@ -132,8 +139,14 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
       return;
     }
     inFlight += 1;
-    sink
-      .record(normalizeAnalyticsEvent(parsed.data))
+    const events = (Array.isArray(parsed.data) ? parsed.data : [parsed.data]).map(
+      normalizeAnalyticsEvent,
+    );
+    events
+      .reduce<Promise<void>>(
+        (done, event) => done.then(() => sink.record(event)),
+        Promise.resolve(),
+      )
       .then(() => {
         res.status(204).end();
       })

@@ -239,6 +239,13 @@ export const analyticsEventRequestSchema = z.discriminatedUnion(
 );
 export type AnalyticsEventRequest = z.infer<typeof analyticsEventRequestSchema>;
 
+/** One request may carry many events, so impressions fit the gateway rate limit. The body is one event or an array of up to 50. */
+export const ANALYTICS_BATCH_MAX = 50;
+export const analyticsEventBatchSchema = z
+  .array(analyticsEventRequestSchema)
+  .min(1)
+  .max(ANALYTICS_BATCH_MAX);
+
 /** The shape every sink receives. Column properties are top-level. The rest are in `props`. */
 export interface NormalizedAnalyticsEvent {
   version: typeof ANALYTICS_CONTRACT_VERSION;

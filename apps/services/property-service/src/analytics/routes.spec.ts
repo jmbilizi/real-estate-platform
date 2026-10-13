@@ -119,6 +119,32 @@ describe('contract v2 ingest (#824)', () => {
     });
   });
 
+  it('stores nothing when the request carries Sec-GPC: 1', async () => {
+    const pool = createPool();
+    const res = await request(createApp({ pool, analyticsEnabled: () => true }))
+      .post('/analytics/events')
+      .set('Sec-GPC', '1')
+      .send(v2);
+    expect(res.status).toBe(204);
+    expect(pool.recorded).toHaveLength(0);
+  });
+
+  it('stores each event of an array body and rejects the array for one bad event', async () => {
+    const pool = createPool();
+    const app = createApp({ pool, analyticsEnabled: () => true });
+    const ok = await request(app).post('/analytics/events').send([v2, body, v2]);
+    expect(ok.status).toBe(204);
+    expect(pool.recorded.filter((r) => /INSERT INTO analytics_/.test(r.sql))).toHaveLength(3);
+    pool.recorded.length = 0;
+    const bad = await request(app)
+      .post('/analytics/events')
+      .send([v2, { ...v2, email: 'a@b.co' }]);
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.message).toContain('email');
+    expect((await request(app).post('/analytics/events').send([])).status).toBe(400);
+    expect(pool.recorded).toHaveLength(0);
+  });
+
   it('rejects a property that belongs to another event', async () => {
     const pool = createPool();
     const res = await request(createApp({ pool, analyticsEnabled: () => true }))

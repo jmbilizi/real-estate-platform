@@ -452,6 +452,14 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "AnalyticsEventBatch": {
+        "items": {
+          "$ref": "#/components/schemas/AnalyticsEventRequest",
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "type": "array",
+      },
       "AnalyticsEventRequest": {
         "oneOf": [
           {
@@ -6679,13 +6687,20 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
     },
     "/analytics/events": {
       "post": {
-        "description": "Analytics contract v2. The body is one event with its own allow-listed properties. The service stores the event, the common properties, a random anonymous id and session id, and the server time. It stores no header, IP address, user agent, name, email or phone. The one free-text property is the scrubbed zero-result search text. With ANALYTICS_ENABLED=false it stores nothing and still answers 204.",
+        "description": "Analytics contract v2. The body is one event, or an array of up to 50 events. Each event has its own allow-listed properties. The service stores the event, the common properties, a random anonymous id and session id, and the server time. It stores no header, IP address, user agent, name, email or phone. The one free-text property is the scrubbed zero-result search text. With ANALYTICS_ENABLED=false it stores nothing and still answers 204.",
         "operationId": "recordAnalyticsEvent",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnalyticsEventRequest",
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AnalyticsEventRequest",
+                  },
+                  {
+                    "$ref": "#/components/schemas/AnalyticsEventBatch",
+                  },
+                ],
               },
             },
           },

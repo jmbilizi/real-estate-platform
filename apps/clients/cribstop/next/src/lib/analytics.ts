@@ -1,4 +1,5 @@
 import type { AnalyticsEventName, AnalyticsSurface } from '@cribstop/property-contracts';
+import { isPersonalisationEnabled } from './feed-profile';
 
 /**
  * Cookieless funnel events (#725). Each call posts to this app's `/api/events` and never throws.
@@ -38,6 +39,8 @@ export interface TrackOptions {
 export function trackEvent(event: AnalyticsEventName, options: TrackOptions = {}): void {
   try {
     if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+    // Global Privacy Control or the footer switch: send nothing.
+    if (!isPersonalisationEnabled()) return;
     const surface = options.surface ?? surfaceFromPath(window.location.pathname);
     void fetch('/api/events', {
       method: 'POST',

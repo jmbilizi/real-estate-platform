@@ -46,6 +46,21 @@ describe('POST /api/events', () => {
     expect(res.headers.get('set-cookie')).toBeNull();
   });
 
+  it('sends nothing when the request carries Sec-GPC: 1', async () => {
+    const res = await POST(post(good, { 'sec-gpc': '1' }));
+    expect(res.status).toBe(204);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('forwards an array body and rejects a bad event inside it', async () => {
+    expect((await POST(post([good, good]))).status).toBe(204);
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual([good, good]);
+    mockFetch.mockClear();
+    expect((await POST(post([good, { ...good, event: 'hover' }]))).status).toBe(400);
+    expect((await POST(post([]))).status).toBe(400);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('rejects an unknown event, an unknown field and a bad session id', async () => {
     for (const bad of [
       { ...good, event: 'hover' },

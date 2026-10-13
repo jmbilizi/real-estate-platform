@@ -1,5 +1,7 @@
 import {
+  ANALYTICS_BATCH_MAX,
   ANALYTICS_EVENT_NAMES,
+  analyticsEventBatchSchema,
   normalizeAnalyticsEvent,
   analyticsEventRequestSchema as schema,
   scrubQueryText,
@@ -168,6 +170,15 @@ describe('analytics event contract v2 (#824)', () => {
     expect(m.anonId).toBe(ANON);
     expect(m.common).toEqual({ utm_source: 'x' });
     expect(m.props).toEqual({ bbox_cell: '38.90:-77.03', zoom: 11 });
+  });
+
+  it('accepts a batch of up to 50 events and no more', () => {
+    const one = { event: 'page_view', surface: 'home', session_id: SESSION };
+    expect(analyticsEventBatchSchema.safeParse([one, one]).success).toBe(true);
+    expect(analyticsEventBatchSchema.safeParse([]).success).toBe(false);
+    const big = Array.from({ length: ANALYTICS_BATCH_MAX + 1 }, () => one);
+    expect(analyticsEventBatchSchema.safeParse(big).success).toBe(false);
+    expect(analyticsEventBatchSchema.safeParse([one, { ...one, email: 'x' }]).success).toBe(false);
   });
 
   it('scrubs digits and addresses', () => {
