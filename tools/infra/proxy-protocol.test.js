@@ -2,7 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { findProxyProtocolProblems, LB_ANNOTATION, NGINX_KEY } = require('./proxy-protocol');
+const {
+  findProxyProtocolProblems,
+  LB_ANNOTATION,
+  HOSTNAME_ANNOTATION,
+  NGINX_KEY,
+} = require('./proxy-protocol');
 
 const service = (annotations) => ({
   kind: 'Service',
@@ -14,8 +19,11 @@ const configMap = (data) => ({
   data,
 });
 
-test('hetzner: both on passes', () => {
-  const docs = [service({ [LB_ANNOTATION]: 'true' }), configMap({ [NGINX_KEY]: 'true' })];
+test('hetzner: both on with a hostname passes', () => {
+  const docs = [
+    service({ [LB_ANNOTATION]: 'true', [HOSTNAME_ANNOTATION]: 'lb.example.invalid' }),
+    configMap({ [NGINX_KEY]: 'true' }),
+  ];
   assert.deepEqual(findProxyProtocolProblems(docs, { provider: 'hetzner' }), []);
 });
 
@@ -36,9 +44,23 @@ test('hetzner: nginx only fails', () => {
   assert.equal(findProxyProtocolProblems(docs, { provider: 'hetzner' }).length, 1);
 });
 
-test('hetzner: a missing Service counts as off', () => {
-  const docs = [configMap({ [NGINX_KEY]: 'true' })];
-  assert.equal(findProxyProtocolProblems(docs, { provider: 'hetzner' }).length, 1);
+test('hetzner: both on without a hostname fails', () => {
+  const docs = [service({ [LB_ANNOTATION]: 'true' }), configMap({ [NGINX_KEY]: 'true' })];
+  const problems = findProxyProtocolProblems(docs, { provider: 'hetzner' });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].headline, /hostname/);
+});
+
+test('hetzner: a missing Service fails', () => {
+  const problems = findProxyProtocolProblems([configMap({ [NGINX_KEY]: 'true' })], {
+    provider: 'hetzner',
+  });
+  assert.match(problems[0].headline, /Service missing/);
+});
+
+test('hetzner: both resources missing fails', () => {
+  const problems = findProxyProtocolProblems([], { provider: 'hetzner' });
+  assert.match(problems[0].headline, /Service and ConfigMap missing/);
 });
 
 test('local provider: both off passes', () => {

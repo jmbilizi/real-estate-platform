@@ -12,6 +12,7 @@
  */
 
 const LB_ANNOTATION = 'load-balancer.hetzner.cloud/uses-proxyprotocol';
+const HOSTNAME_ANNOTATION = 'load-balancer.hetzner.cloud/hostname';
 const NGINX_KEY = 'use-proxy-protocol';
 const SERVICE_NAME = 'ingress-nginx-controller';
 
@@ -38,6 +39,30 @@ function findProxyProtocolProblems(documents, { provider } = {}) {
     ];
   }
 
+  const missing = [!service && 'Service', !configMap && 'ConfigMap'].filter(Boolean);
+  if (missing.length > 0) {
+    return [
+      {
+        headline: `ingress-nginx-controller ${missing.join(' and ')} missing from the render`,
+        detail: ['The PROXY protocol pairing cannot be checked without both resources.'],
+        items: missing,
+      },
+    ];
+  }
+
+  if (lbOn && nginxOn && !service.metadata.annotations?.[HOSTNAME_ANNOTATION]) {
+    return [
+      {
+        headline: 'PROXY protocol is on without a load balancer hostname',
+        detail: [
+          `Set ${HOSTNAME_ANNOTATION}. Without it, in-cluster traffic to the LB IP skips the PROXY header.`,
+          'The cert-manager HTTP-01 self-check is such traffic, so certificates stop issuing.',
+        ],
+        items: [HOSTNAME_ANNOTATION],
+      },
+    ];
+  }
+
   if (lbOn === nginxOn) return [];
   return [
     {
@@ -51,4 +76,4 @@ function findProxyProtocolProblems(documents, { provider } = {}) {
   ];
 }
 
-module.exports = { findProxyProtocolProblems, LB_ANNOTATION, NGINX_KEY };
+module.exports = { findProxyProtocolProblems, LB_ANNOTATION, HOSTNAME_ANNOTATION, NGINX_KEY };
