@@ -125,9 +125,9 @@ function componentSchemas() {
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
+  registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
   registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
   registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
-  registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });

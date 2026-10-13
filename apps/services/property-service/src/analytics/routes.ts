@@ -6,8 +6,8 @@ import {
   normalizeAnalyticsEvent,
 } from '@cribstop/property-contracts';
 import type { ReadClient } from '../listings/repository';
-import { startPopularityRefreshTimer } from './popularity';
 import { type AnalyticsSink, createSinks, fanOut } from './sink';
+import { startPopularityRefreshTimer } from './popularity';
 
 /**
  * `POST /analytics/events` (#725, #824). Cookieless event counting.
