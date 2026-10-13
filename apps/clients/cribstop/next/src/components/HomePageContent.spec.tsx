@@ -133,7 +133,9 @@ describe('HomePageContent', () => {
       await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
 
       for (const [query] of mockedSearchListings.mock.calls) {
-        expect(query).toMatchObject({ skipTotal: true, pageSize: 8 });
+        // Rows that dedupe against each other fetch 7 extra cards (#873).
+        const dedupes = ['near-you', 'just-listed', 'price-drops'].includes(rowKind(query));
+        expect(query).toMatchObject({ skipTotal: true, pageSize: dedupes ? 15 : 8 });
       }
     });
 
@@ -544,6 +546,103 @@ describe('HomePageContent', () => {
 
       await waitFor(() => expect(priceDrops()).toHaveLength(3));
       expect(screen.queryByText('Price drops on homes for sale')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('cross-row dedupe (#873)', () => {
+    const pid = (n: number) => `pid-${n}`;
+    const cards = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, i) =>
+        aListingCardRow({
+          id: `lid-${from + i}`,
+          propertyId: pid(from + i),
+          propertyPath: `/property/${pid(from + i)}`,
+        }),
+      );
+    const linksIn = (title: string) =>
+      new Set(
+        [...(screen.getByText(title).closest('section')?.querySelectorAll('a') ?? [])]
+          .map((a) => a.getAttribute('href') ?? '')
+          .filter((h) => h.startsWith('/property/'))
+          .map((h) => h.replace('/property/', '')),
+      );
+    const mockSaleRows = (rows: {
+      nearYou: ReturnType<typeof cards>;
+      justListed: ReturnType<typeof cards>;
+      priceDrops?: ReturnType<typeof cards>;
+    }) =>
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (q.listingType !== 'sale') return Promise.resolve(envelope([aListingCardRow()]));
+        const kind = rowKind(q);
+        if (kind === 'near-you') return Promise.resolve(envelope(rows.nearYou));
+        if (kind === 'just-listed') return Promise.resolve(envelope(rows.justListed));
+        if (kind === 'price-drops')
+          return Promise.resolve(envelope(rows.priceDrops ?? cards(1, 15)));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+    it('skips cards an earlier row shows, so the earlier row wins', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({ nearYou: cards(1, 15), justListed: cards(1, 15) });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(8))).toBe(true));
+      const near = linksIn('Homes for sale near you');
+      const newest = linksIn('Newest homes for sale');
+      for (let n = 1; n <= 7; n++) {
+        expect(near.has(pid(n))).toBe(true);
+        expect(newest.has(pid(n))).toBe(false);
+      }
+    });
+
+    it('keeps the original cards when the drop would leave fewer than 4', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({ nearYou: cards(1, 15), justListed: cards(1, 9) });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Newest homes for sale').size).toBeGreaterThan(0));
+      await screen.findByText('Homes for sale near you');
+      const newest = linksIn('Newest homes for sale');
+      expect(newest.has(pid(1))).toBe(true);
+      expect(newest.has(pid(7))).toBe(true);
+    });
+
+    it('applies the page order: a later row never removes a card from an earlier row', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({
+        nearYou: cards(1, 15),
+        justListed: cards(1, 15),
+        priceDrops: cards(1, 30),
+      });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Price drops on homes for sale').has(pid(15))).toBe(true));
+      const near = linksIn('Homes for sale near you');
+      const drops = linksIn('Price drops on homes for sale');
+      expect(near.has(pid(1))).toBe(true);
+      for (let n = 1; n <= 14; n++) expect(drops.has(pid(n))).toBe(false);
+    });
+
+    it('never makes a row wait on another row, and shows repeats until the earlier row resolves', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      let resolveNear: (value: unknown) => void = () => undefined;
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (q.listingType === 'sale' && rowKind(q) === 'near-you')
+          return new Promise((resolve) => (resolveNear = resolve));
+        if (q.listingType === 'sale' && rowKind(q) === 'just-listed')
+          return Promise.resolve(envelope(cards(1, 15)));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(true));
+      resolveNear(envelope(cards(1, 15)));
+      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(false));
+      expect(linksIn('Newest homes for sale').has(pid(8))).toBe(true);
     });
   });
 

@@ -1,5 +1,13 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type {
   HomeFeedResponse,
@@ -34,6 +42,88 @@ type ListingSide = 'sale' | 'rent';
 
 /** Small — a carousel shows a handful of cards, never a full results page. */
 const CAROUSEL_PAGE_SIZE = 8;
+
+/** Rows that share a side and a target fetch this many extra cards, so a card an earlier row
+ *  already shows can drop out and the row still fills (#873). */
+const DEDUPE_PAGE_SIZE = CAROUSEL_PAGE_SIZE + 7;
+/** A row left with fewer cards than this after the drop keeps its original cards. */
+const MIN_DEDUPED_CARDS = 4;
+/** Cards a row shows before "See all". */
+const ROW_MAX = 7;
+
+type ShownEntry = { side: ListingSide; order: number; ids: string[] };
+type ShownRegistry = {
+  shown: Record<string, ShownEntry>;
+  report: (rowKey: string, entry: ShownEntry | null) => void;
+};
+const ShownContext = createContext<ShownRegistry | null>(null);
+
+/** Records which cards each resolved row shows. A row reads only rows that come earlier on the
+ *  page, so no row waits for another row's request. */
+function ShownProvider({ children }: { children: React.ReactNode }) {
+  const [shown, setShown] = useState<Record<string, ShownEntry>>({});
+  const report = useCallback((rowKey: string, entry: ShownEntry | null) => {
+    setShown((current) => {
+      const before = current[rowKey];
+      if (!entry) {
+        if (!before) return current;
+        const { [rowKey]: _removed, ...rest } = current;
+        return rest;
+      }
+      if (before && before.order === entry.order && before.ids.join() === entry.ids.join()) {
+        return current;
+      }
+      return { ...current, [rowKey]: entry };
+    });
+  }, []);
+  const value = useMemo(() => ({ shown, report }), [shown, report]);
+  return <ShownContext.Provider value={value}>{children}</ShownContext.Provider>;
+}
+
+/** Page order of the rows that dedupe. The earlier row keeps a card, the later row skips it. */
+const DEDUPE_ORDER = { nearYou: 0, justListed: 1, priceDrops: 2 } as const;
+
+/**
+ * Drops cards an earlier row on the page already shows. Until that row resolves nothing drops, so
+ * a later row may show a repeat for a moment, then filters once. If the drop leaves fewer than
+ * `MIN_DEDUPED_CARDS`, the row keeps its original cards.
+ */
+function useDedupedListings(
+  rowKey: string,
+  side: ListingSide,
+  order: number,
+  listings: ListingCardRow[],
+  loading: boolean,
+): ListingCardRow[] {
+  const registry = useContext(ShownContext);
+  const shown = registry?.shown;
+  const report = registry?.report;
+
+  const deduped = useMemo(() => {
+    if (!shown) return listings;
+    const earlier = new Set<string>();
+    for (const [key, entry] of Object.entries(shown)) {
+      if (key !== rowKey && entry.side === side && entry.order < order) {
+        entry.ids.forEach((id) => earlier.add(id));
+      }
+    }
+    if (earlier.size === 0) return listings;
+    const kept = listings.filter((l) => !earlier.has(l.propertyId));
+    return kept.length >= MIN_DEDUPED_CARDS ? kept : listings;
+  }, [shown, rowKey, side, order, listings]);
+
+  const idsKey = deduped
+    .slice(0, ROW_MAX)
+    .map((l) => l.propertyId)
+    .join('|');
+  useEffect(() => {
+    if (!report) return;
+    report(rowKey, loading ? null : { side, order, ids: idsKey ? idsKey.split('|') : [] });
+  }, [report, rowKey, side, order, loading, idsKey]);
+  useEffect(() => () => report?.(rowKey, null), [report, rowKey]);
+
+  return deduped;
+}
 
 /**
  * The recent-search storage `CompactSearchBar` already writes (`recentSearches`). #398 reuses this
@@ -416,10 +506,18 @@ function JustListedRow({
   placeLoading: boolean;
 }) {
   useTargetDebug(`just-listed-${side}`, place);
-  const { listings, total, loading, failed, refetch, scope } = useTargetCarousel(
-    { sort: 'newly-listed', listingType: side, pageSize: CAROUSEL_PAGE_SIZE },
+  const carousel = useTargetCarousel(
+    { sort: 'newly-listed', listingType: side, pageSize: DEDUPE_PAGE_SIZE },
     place,
     placeLoading,
+  );
+  const { total, loading, failed, refetch, scope } = carousel;
+  const listings = useDedupedListings(
+    `just-listed-${side}`,
+    side,
+    DEDUPE_ORDER.justListed,
+    carousel.listings,
+    loading,
   );
 
   const show = loading || total > 0 || failed;
@@ -469,16 +567,24 @@ function NearYouRow({
   regionLoading: boolean;
 }) {
   useTargetDebug(`near-you-${side}`, region);
-  const { listings, total, loading } = useCarouselListings(
+  const near = useCarouselListings(
     {
       listingType: side,
       city: region?.city,
       state: region?.state,
       sort: 'newest',
-      pageSize: CAROUSEL_PAGE_SIZE,
+      pageSize: DEDUPE_PAGE_SIZE,
     },
     regionLoading || !region,
     regionLoading,
+  );
+  const { total, loading } = near;
+  const listings = useDedupedListings(
+    `near-you-${side}`,
+    side,
+    DEDUPE_ORDER.nearYou,
+    near.listings,
+    loading,
   );
 
   // No error UI (#363): a failed fetch hides the row exactly like a real zero total, rather than
@@ -685,15 +791,23 @@ function PriceDropsRow({
   placeLoading: boolean;
 }) {
   useTargetDebug('price-drops', place);
-  const { listings, total, loading, failed, refetch, scope } = useTargetCarousel(
+  const carousel = useTargetCarousel(
     {
       priceReduced: true,
       sort: 'newly-listed',
       listingType: 'sale',
-      pageSize: CAROUSEL_PAGE_SIZE,
+      pageSize: DEDUPE_PAGE_SIZE,
     },
     place,
     placeLoading,
+  );
+  const { total, loading, failed, refetch, scope } = carousel;
+  const listings = useDedupedListings(
+    'price-drops',
+    'sale',
+    DEDUPE_ORDER.priceDrops,
+    carousel.listings,
+    loading,
   );
 
   const show = loading || total > 0 || failed;
@@ -1041,7 +1155,7 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
     );
 
   return (
-    <>
+    <ShownProvider>
       {body}
 
       {priceSortRows}
@@ -1049,6 +1163,6 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
       <ExploreNeighborhoodsRow region={region} regionLoading={regionLoading} />
 
       <TrustBlock />
-    </>
+    </ShownProvider>
   );
 }
