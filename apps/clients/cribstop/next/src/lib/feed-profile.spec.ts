@@ -4,6 +4,7 @@ import {
   getFeedRequestProfile,
   isPersonalisationEnabled,
   MAX_PROFILE_ITEMS,
+  readItems,
   recordFeedItem,
   setPersonalisation,
 } from './feed-profile';
@@ -42,6 +43,14 @@ describe('feed profile', () => {
       'Place 2',
       'Place 3',
       'Place 4',
+    ]);
+  });
+
+  it('keeps the listing place on this device and leaves it out of the request', () => {
+    recordFeedItem('a', 'view', 'sale', 5, { city: 'Rockville', state: 'MD' });
+    expect(readItems()[0]).toMatchObject({ city: 'Rockville', state: 'MD' });
+    expect(getFeedRequestProfile()!.items).toEqual([
+      { listingId: 'a', kind: 'view', side: 'sale', at: 5 },
     ]);
   });
 

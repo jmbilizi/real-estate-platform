@@ -19,10 +19,15 @@ export interface FeedProfileItem {
   kind: FeedItemKind;
   side: FeedSide;
   at: number;
+  /** Where the listing is. Used only on this device to infer the target place (#834). */
+  city?: string;
+  state?: string;
 }
 
+export type FeedRequestItem = Omit<FeedProfileItem, 'city' | 'state'>;
+
 export interface FeedRequestProfile {
-  items: FeedProfileItem[];
+  items: FeedRequestItem[];
   places: string[];
 }
 
@@ -70,7 +75,8 @@ function isItem(v: any): v is FeedProfileItem {
   );
 }
 
-function readItems(): FeedProfileItem[] {
+/** The stored items with their places. For on-device use only. */
+export function readItems(): FeedProfileItem[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(FEED_PROFILE_KEY) ?? 'null');
     return Array.isArray(parsed?.items) ? parsed.items.filter(isItem) : [];
@@ -85,15 +91,21 @@ export function recordFeedItem(
   kind: FeedItemKind,
   side: FeedSide = 'sale',
   now: number = Date.now(),
+  place?: { city?: string | null; state?: string | null },
 ): void {
   if (!listingId || !isPersonalisationEnabled()) return;
   try {
     const existing = readItems();
     const wasSaved = existing.some((i) => i.listingId === listingId && i.kind === 'save');
-    const items = [
-      { listingId, kind: wasSaved ? 'save' : kind, side, at: now } as FeedProfileItem,
-      ...existing.filter((i) => i.listingId !== listingId),
-    ].slice(0, MAX_PROFILE_ITEMS);
+    const entry: FeedProfileItem = { listingId, kind: wasSaved ? 'save' : kind, side, at: now };
+    if (place?.city && place.state) {
+      entry.city = place.city;
+      entry.state = place.state;
+    }
+    const items = [entry, ...existing.filter((i) => i.listingId !== listingId)].slice(
+      0,
+      MAX_PROFILE_ITEMS,
+    );
     window.localStorage.setItem(FEED_PROFILE_KEY, JSON.stringify({ v: 1, items }));
   } catch {
     // A full or blocked store must not affect the page.
@@ -125,5 +137,6 @@ function readPlaces(): string[] {
 /** The profile for the feed request body. Null when personalisation is off: send nothing. */
 export function getFeedRequestProfile(): FeedRequestProfile | null {
   if (!isPersonalisationEnabled()) return null;
-  return { items: readItems(), places: readPlaces() };
+  const items = readItems().map(({ city: _city, state: _state, ...rest }) => rest);
+  return { items, places: readPlaces() };
 }
