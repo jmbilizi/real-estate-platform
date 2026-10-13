@@ -1,6 +1,6 @@
 {
   "title": "Privacy Policy",
-  "effectiveDate": "2026-10-09",
+  "effectiveDate": "2026-10-13",
   "isDraft": false,
   "sections": [
     {
@@ -17,7 +17,7 @@
         "Inquiry information: the message you send about a home, the home you ask about, and a record of your consent to be contacted, with the date and time you gave it.",
         "Activity information: the homes you save and the areas or services you join a waitlist for.",
         "Device and usage information: your IP address, browser type, device type, pages you view and the date and time of your visit.",
-        "Site activity counts: when you load or change a search, view a home, save a home or send a request, we record the type of action, the page area, the home it concerns and the time. We tag each record with a random code that exists only in your open browser tab. The record holds no name, email address, account, IP address, device detail or search words. We do not link these records to your account. They use no cookie and no browser storage, so blocking cookies does not stop them."
+        "Site activity: when you use the site, we record the pages you view, the searches and filters you use, the homes you see, open, save, share or ask about, the map areas you view in cells of about 1 km, and the time you spend on a page. We also record sign-in steps and site errors. We record where your visit came from: the referring website name and any campaign tags in the link. We tag each record with a random code that stays in your browser storage (localStorage) and changes after 13 months. A second random code lasts for one visit. The record holds no name, email address, phone number, IP address or device detail. If you use a search that finds no homes, we keep up to 60 characters of that search with numbers and contact details removed. If you are signed in, we link these records to your account so we can improve the site and your home page. We do not link them to your account when you are signed out."
       ]
     },
     {
@@ -33,7 +33,7 @@
       "body": [
         "The listing agent named on a listing receives your inquiry, your name, your contact details and your message.",
         "Agents of Real Broker, LLC may receive your inquiry and help you when the listing agent is not available.",
-        "Service providers process data for us. These include our transactional email provider, our hosting providers and our map providers. They may use your data only to provide their service to us.",
+        "Service providers process data for us. These include our transactional email provider, our hosting providers, our map providers and our site analytics provider. They may use your data only to provide their service to us. They may not use it for their own purposes.",
         "Listing data comes from Bright MLS. Bright MLS rules require us to show certain attribution and to follow display obligations. These rules do not give Bright MLS your account data.",
         "We may share information when the law requires it, to enforce our Terms of Service, or in a sale or transfer of our business."
       ]
@@ -41,7 +41,7 @@
     {
       "heading": "We do not sell your personal data",
       "body": [
-        "We do not sell your personal information. We do not share it with third parties for their own advertising."
+        "We do not sell your personal information. We do not share it with third parties for advertising."
       ]
     },
     {
@@ -49,14 +49,14 @@
       "body": [
         "We keep consent records for 5 years.",
         "We keep inquiry and lead information for 3 years after your last activity. Then we delete it or make it anonymous.",
-        "We keep each site activity record for 30 days. We keep daily totals of these records with no home or person attached.",
+        "We keep each site activity record for 13 months. We keep a search that found no homes for 30 days. We keep daily totals of these records with no home or person attached.",
         "We keep account information while your account is open. We may keep some information longer when the law requires it."
       ]
     },
     {
       "heading": "Cookies and similar technology",
       "body": [
-        "We use cookies and similar technology to keep you signed in, to remember your settings and to understand how people use the site.",
+        "We use cookies and similar technology to keep you signed in and to remember your settings. We use browser storage (localStorage) for the random code that counts site activity.",
         "You can block or delete cookies in your browser settings. Some features, such as sign in, may not work without them."
       ]
     },
@@ -65,6 +65,7 @@
       "body": [
         "You can ask to see, correct, export or delete the personal information we hold about you. You can also ask us to stop contacting you.",
         "Send your request to contact@cribstop.com. We may ask you to confirm your identity before we act on a request.",
+        "You can turn off site activity records. Turn off \"Personalise my home page\" in the site footer or on your account page. The site also reads the Global Privacy Control signal from your browser as the same request. Either one stops the site from sending these records.",
         "You can update your account details in your account settings."
       ]
     },
