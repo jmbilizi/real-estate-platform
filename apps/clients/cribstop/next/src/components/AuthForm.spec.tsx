@@ -33,7 +33,13 @@ jest.mock('@/lib/api/account', () => ({
   startPasswordReset: jest.fn(),
   verifyResetCode: jest.fn(),
   completePasswordReset: jest.fn(),
-  getPasswordMinLength: jest.fn().mockResolvedValue(15),
+  getPasswordPolicy: jest
+    .fn()
+    .mockResolvedValue({
+      minLength: 8,
+      passphraseLength: 15,
+      requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+    }),
 }));
 
 const mockIdentify = identifyEmail as jest.MockedFunction<typeof identifyEmail>;
@@ -72,7 +78,11 @@ async function reachSetPassword() {
 describe('AuthForm', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    (jest.requireMock('@/lib/api/account').getPasswordMinLength as jest.Mock).mockResolvedValue(15);
+    (jest.requireMock('@/lib/api/account').getPasswordPolicy as jest.Mock).mockResolvedValue({
+      minLength: 8,
+      passphraseLength: 15,
+      requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+    });
   });
 
   describe('email step', () => {
@@ -428,7 +438,7 @@ describe('AuthForm', () => {
         'autocomplete',
         'new-password',
       );
-      expect(screen.getByText(/15 or more characters/)).toBeInTheDocument();
+      expect(screen.getByText('Or use 15+ characters, no other rules.')).toBeInTheDocument();
     });
 
     it('keeps Update password disabled until both fields match and are long enough', async () => {
@@ -487,7 +497,10 @@ describe('AuthForm', () => {
 
     it.each([
       ['breached', 'That password has leaked before. Pick another.'],
-      ['too_short', 'That password is too short. Use 15 or more characters.'],
+      [
+        'too_short',
+        'That password is too short. Use 8+ characters with every rule, or 15+ characters.',
+      ],
       ['too_long', 'That password is too long. Shorten it.'],
     ] as const)('shows friendly copy for the %s policy error', async (code, copy) => {
       mockCompleteReset.mockResolvedValue({
@@ -841,7 +854,8 @@ describe('AuthForm', () => {
         'autocomplete',
         'new-password',
       );
-      expect(screen.getByText('15 or more characters. A phrase works.')).toBeInTheDocument();
+      expect(screen.getByText('Or use 15+ characters, no other rules.')).toBeInTheDocument();
+      expect(screen.getByText('8+ characters')).toBeInTheDocument();
       const create = screen.getByRole('button', { name: 'Create account' });
       expect(create).toBeDisabled();
 
@@ -921,7 +935,9 @@ describe('AuthForm', () => {
       fillAndSubmit();
 
       expect(
-        await screen.findByText('That password is too short. Use 15 or more characters.'),
+        await screen.findByText(
+          'That password is too short. Use 8+ characters with every rule, or 15+ characters.',
+        ),
       ).toBeInTheDocument();
     });
 

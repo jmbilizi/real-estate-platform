@@ -209,10 +209,14 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   first, so the breach check is not an oracle for a caller without a proof.
 - The new account, its role and the pending-row delete share one transaction on a relational
   provider. The unique index on `NormalizedUserName` (the address) is the final guard.
-- Policy: `Configuration/PasswordPolicyOptions.cs`, section `PasswordPolicy`. `MinLength` 15,
-  `MaxLength` 128, no composition rules. `Helpers/PasswordPolicyValidator.cs` is the only
-  `IPasswordValidator`, so register, change and reset follow it. Codes: `too_short`, `too_long`,
-  `breached`. The password is never trimmed. Old shorter passwords still log in.
+- Policy: `Configuration/PasswordPolicyOptions.cs`, section `PasswordPolicy`. `MinLength` 8,
+  `PassphraseLength` 15, `MaxLength` 128. A password is valid with 8+ characters and an uppercase
+  letter, a lowercase letter, a number and a symbol, or with 15+ characters and no other rule
+  (#819). `Helpers/PasswordPolicyValidator.cs` is the only `IPasswordValidator`, so register, change
+  and reset follow it. Identity `Require*` flags stay false. Codes: `too_short`, `missing_upper`,
+  `missing_lower`, `missing_digit`, `missing_symbol`, `too_long`, `breached`. The web mirror is
+  `lib/password-rules.ts` and `/api/account/password-policy`. The password is never trimmed. Old
+  shorter passwords still log in.
 - Breach check: `Helpers/PwnedPasswordsClient.cs` (HIBP range API, SHA-1 prefix, `Add-Padding`, 2
   second timeout). A timeout or error lets the password pass and logs event `1390`. The HTTP client
   calls `RemoveAllLoggers()` because the framework logs the request URI, which holds the prefix.

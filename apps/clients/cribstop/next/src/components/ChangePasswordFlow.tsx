@@ -6,14 +6,15 @@ import {
   AuthError,
   changePassword,
   CodesUnavailableError,
-  DEFAULT_PASSWORD_MIN_LENGTH,
-  getPasswordMinLength,
+  getPasswordPolicy,
   RateLimitError,
 } from '@/lib/api/account';
 import { useAppDispatch } from '@/lib/store/hooks';
 import { renewSession } from '@/lib/store/slices/authSlice';
 import { useCountdown } from '@/lib/useCountdown';
 import { rejectionCopy } from '@/components/AuthSetPasswordStep';
+import PasswordRequirements from '@/components/PasswordRequirements';
+import { checkPassword, DEFAULT_PASSWORD_POLICY, type PasswordPolicy } from '@/lib/password-rules';
 
 /** Change password: current, new, confirm. A change ends every other session. */
 export default function ChangePasswordFlow({
@@ -31,7 +32,7 @@ export default function ChangePasswordFlow({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [minLength, setMinLength] = useState(DEFAULT_PASSWORD_MIN_LENGTH);
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_PASSWORD_POLICY);
   const lock = useCountdown(0);
   const currentRef = useRef<HTMLInputElement>(null);
   const newRef = useRef<HTMLInputElement>(null);
@@ -39,8 +40,8 @@ export default function ChangePasswordFlow({
 
   useEffect(() => {
     let active = true;
-    getPasswordMinLength().then((n) => {
-      if (active) setMinLength(n);
+    getPasswordPolicy().then((p) => {
+      if (active) setPolicy(p);
     });
     currentRef.current?.focus();
     return () => {
@@ -52,7 +53,7 @@ export default function ChangePasswordFlow({
     if (done) headingRef.current?.focus();
   }, [done]);
 
-  const longEnough = next.length >= minLength;
+  const longEnough = checkPassword(next, policy).valid;
   const matches = next.length > 0 && next === confirm;
   const mismatch = confirm.length > 0 && !matches;
   const locked = lock.seconds > 0;
@@ -78,7 +79,7 @@ export default function ChangePasswordFlow({
         setCurrent('');
         currentRef.current?.focus();
       } else {
-        setError(rejectionCopy(outcome.errors, minLength));
+        setError(rejectionCopy(outcome.errors, policy));
         setNext('');
         setConfirm('');
         newRef.current?.focus();
@@ -167,14 +168,9 @@ export default function ChangePasswordFlow({
           className="input-field min-h-11"
           value={next}
           onChange={(e) => setNext(e.target.value)}
-          aria-describedby="change-password-rule"
+          aria-describedby="change-password-rules"
         />
-        <p
-          id="change-password-rule"
-          className={`mt-1 text-xs ${longEnough ? 'text-green-600' : 'text-ink-muted'}`}
-        >
-          {minLength} or more characters. A phrase works.
-        </p>
+        <PasswordRequirements id="change-password-rules" password={next} policy={policy} />
       </div>
 
       <div>

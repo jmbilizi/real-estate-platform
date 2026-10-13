@@ -10,10 +10,12 @@ using Microsoft.Extensions.Options;
 namespace AccountService.Helpers;
 
 /// <summary>
-/// The only password validator. It replaces Identity's stock composition rules with a length range
-/// and the breached-password check. The error <c>Code</c> and <c>Description</c> are the same
-/// stable code, so the web app writes its own copy: <c>too_short</c>, <c>too_long</c>,
-/// <c>breached</c>.
+/// The only password validator. It replaces Identity's stock composition rules with the either/or
+/// rule: <see cref="PasswordPolicyOptions.MinLength"/> characters with every class, or
+/// <see cref="PasswordPolicyOptions.PassphraseLength"/> characters with none. The breached-password
+/// check follows. The error <c>Code</c> and <c>Description</c> are the same stable code, so the web
+/// app writes its own copy: <c>too_short</c>, <c>missing_upper</c>, <c>missing_lower</c>,
+/// <c>missing_digit</c>, <c>missing_symbol</c>, <c>too_long</c>, <c>breached</c>.
 /// </summary>
 /// <remarks>
 /// The password is not trimmed or truncated. Length counts UTF-16 code units, as Identity does.
@@ -27,6 +29,18 @@ internal sealed class PasswordPolicyValidator(
 {
     /// <summary>The code for a password under the minimum length.</summary>
     internal const string TooShort = "too_short";
+
+    /// <summary>The code for a password with no uppercase letter.</summary>
+    internal const string MissingUpper = "missing_upper";
+
+    /// <summary>The code for a password with no lowercase letter.</summary>
+    internal const string MissingLower = "missing_lower";
+
+    /// <summary>The code for a password with no number.</summary>
+    internal const string MissingDigit = "missing_digit";
+
+    /// <summary>The code for a password with no symbol.</summary>
+    internal const string MissingSymbol = "missing_symbol";
 
     /// <summary>The code for a password over the maximum length.</summary>
     internal const string TooLong = "too_long";
@@ -48,6 +62,35 @@ internal sealed class PasswordPolicyValidator(
             return Fail(TooLong);
         }
 
+        if (password.Length < settings.PassphraseLength)
+        {
+            var missing = new List<string>(4);
+            if (!password.Any(char.IsUpper))
+            {
+                missing.Add(MissingUpper);
+            }
+
+            if (!password.Any(char.IsLower))
+            {
+                missing.Add(MissingLower);
+            }
+
+            if (!password.Any(char.IsDigit))
+            {
+                missing.Add(MissingDigit);
+            }
+
+            if (!password.Any(c => !char.IsLetterOrDigit(c)))
+            {
+                missing.Add(MissingSymbol);
+            }
+
+            if (missing.Count > 0)
+            {
+                return Fail([.. missing]);
+            }
+        }
+
         if (settings.BreachCheckEnabled && await breaches.IsBreachedAsync(password).ConfigureAwait(false) == true)
         {
             return Fail(Breached);
@@ -56,6 +99,6 @@ internal sealed class PasswordPolicyValidator(
         return IdentityResult.Success;
     }
 
-    private static IdentityResult Fail(string code) =>
-        IdentityResult.Failed(new IdentityError { Code = code, Description = code });
+    private static IdentityResult Fail(params string[] codes) =>
+        IdentityResult.Failed([.. codes.Select(code => new IdentityError { Code = code, Description = code })]);
 }
