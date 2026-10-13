@@ -78,6 +78,7 @@ type Query = {
   propertyType?: string[];
   listingType?: string;
   city?: string;
+  state?: string;
 };
 
 /** Which row a query belongs to, by its distinguishing filter — never by call order, since order
@@ -88,7 +89,7 @@ function rowKind(
   if (q.sort === 'price-asc' || q.sort === 'price-desc') return 'price-sort';
   if (q.priceReduced) return 'price-drops';
   if (q.status?.includes('Coming Soon')) return 'coming-soon';
-  return q.city ? 'near-you' : 'just-listed';
+  return q.sort === 'newly-listed' ? 'just-listed' : 'near-you';
 }
 
 /** Mocks `/api/geo/region`, the one fetch `useRegion` makes. `null` (the default) matches every
@@ -132,7 +133,9 @@ describe('HomePageContent', () => {
       await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
 
       for (const [query] of mockedSearchListings.mock.calls) {
-        expect(query).toMatchObject({ skipTotal: true, pageSize: 8 });
+        // Rows that dedupe against each other fetch 7 extra cards (#873).
+        const dedupes = ['near-you', 'just-listed', 'price-drops'].includes(rowKind(query));
+        expect(query).toMatchObject({ skipTotal: true, pageSize: dedupes ? 15 : 8 });
       }
     });
 
@@ -219,7 +222,9 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
 
       await screen.findByText('Newest homes for sale');
-      expect(screen.queryByText('Price drops on homes for sale')).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByText('Price drops on homes for sale')).not.toBeInTheDocument(),
+      );
     });
   });
 
@@ -358,7 +363,7 @@ describe('HomePageContent', () => {
       );
       // A stale search must not let a place-scoped row send an unscoped query while the IP loads.
       for (const [query] of mockedSearchListings.mock.calls as [Query][]) {
-        if (['coming-soon', 'price-sort'].includes(rowKind(query)))
+        if (['coming-soon', 'price-sort', 'just-listed', 'price-drops'].includes(rowKind(query)))
           expect(query.city).toBe('Ashburn');
       }
     });
@@ -369,7 +374,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
       await screen.findByText('Homes for sale near you');
 
-      const scopedKinds = ['coming-soon', 'price-sort'];
+      const scopedKinds = ['coming-soon', 'price-sort', 'just-listed', 'price-drops'];
       for (const [query] of mockedSearchListings.mock.calls as [Query][]) {
         if (scopedKinds.includes(rowKind(query))) expect(query.city).toBe('Ashburn');
       }
@@ -429,6 +434,215 @@ describe('HomePageContent', () => {
         delete (global.navigator as unknown as Record<string, unknown>).permissions;
         delete (global.navigator as unknown as Record<string, unknown>).geolocation;
       }
+    });
+  });
+
+  describe('newest and price-drop rows follow the home target (#873)', () => {
+    const kinds = ['just-listed', 'price-drops'];
+    const targeted = () =>
+      (mockedSearchListings.mock.calls as [Query][])
+        .map(([q]) => q)
+        .filter((q) => kinds.includes(rowKind(q)));
+
+    it('queries city and state for each row', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+
+      render(<HomePageContent />);
+      await waitFor(() => expect(targeted()).toHaveLength(3));
+
+      for (const q of targeted()) expect(q).toMatchObject({ city: 'Baltimore', state: 'MD' });
+      expect(targeted().filter((q) => rowKind(q) === 'just-listed')).toHaveLength(2);
+      expect(targeted().filter((q) => rowKind(q) === 'price-drops')).toHaveLength(1);
+    });
+
+    it('sends no query while the target resolves', async () => {
+      (global.fetch as jest.Mock).mockReturnValue(new Promise(() => undefined));
+
+      render(<HomePageContent />);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(targeted()).toHaveLength(0);
+    });
+
+    it('queries platform-wide when there is no target', async () => {
+      render(<HomePageContent />);
+      await waitFor(() => expect(targeted()).toHaveLength(3));
+
+      for (const q of targeted()) expect(q.city).toBeUndefined();
+    });
+
+    it('keeps the titles place-free and links "View all" with the same city and state', async () => {
+      mockRegionFetch({ city: 'Richmond', state: 'VA' });
+
+      render(<HomePageContent />);
+      const title = await screen.findByText('Newest homes for sale');
+
+      expect(title.textContent).not.toMatch(/Richmond/);
+      const href = title
+        .closest('section')
+        ?.querySelector('a[href*="newly-listed"]')
+        ?.getAttribute('href');
+      expect(href).toContain('city=Richmond');
+      expect(href).toContain('state=VA');
+      expect(title.closest('section')).toHaveAttribute('data-target-source', 'ip');
+    });
+
+    const priceDrops = () => targeted().filter((q) => rowKind(q) === 'price-drops');
+    const priceDropsHref = () =>
+      screen
+        .getByText('Price drops on homes for sale')
+        .closest('section')
+        ?.querySelector('a[href*="priceReduced"]')
+        ?.getAttribute('href');
+
+    it('widens an empty city to the state and keeps the row', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockedSearchListings.mockImplementation((q: Query) =>
+        Promise.resolve(
+          rowKind(q) === 'price-drops' && q.city ? envelope([], 0) : envelope([aListingCardRow()]),
+        ),
+      );
+
+      render(<HomePageContent />);
+      await waitFor(() =>
+        expect(priceDrops().map((q) => [q.city, q.state])).toEqual([
+          ['Baltimore', 'MD'],
+          [undefined, 'MD'],
+        ]),
+      );
+      await waitFor(() => expect(priceDropsHref()).toContain('state=MD'));
+      expect(priceDropsHref()).not.toContain('city=');
+    });
+
+    it('widens an empty state to platform-wide and keeps the row', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockedSearchListings.mockImplementation((q: Query) =>
+        Promise.resolve(
+          rowKind(q) === 'price-drops' && q.state ? envelope([], 0) : envelope([aListingCardRow()]),
+        ),
+      );
+
+      render(<HomePageContent />);
+      await waitFor(() =>
+        expect(priceDrops().map((q) => [q.city, q.state])).toEqual([
+          ['Baltimore', 'MD'],
+          [undefined, 'MD'],
+          [undefined, undefined],
+        ]),
+      );
+      await waitFor(() => expect(priceDropsHref()).not.toContain('state='));
+    });
+
+    it('hides the row when the platform-wide query is empty too', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockedSearchListings.mockImplementation((q: Query) =>
+        Promise.resolve(
+          rowKind(q) === 'price-drops' ? envelope([], 0) : envelope([aListingCardRow()]),
+        ),
+      );
+
+      render(<HomePageContent />);
+      await screen.findByText('Newest homes for sale');
+
+      await waitFor(() => expect(priceDrops()).toHaveLength(3));
+      expect(screen.queryByText('Price drops on homes for sale')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('cross-row dedupe (#873)', () => {
+    const pid = (n: number) => `pid-${n}`;
+    const cards = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, i) =>
+        aListingCardRow({
+          id: `lid-${from + i}`,
+          propertyId: pid(from + i),
+          propertyPath: `/property/${pid(from + i)}`,
+        }),
+      );
+    const linksIn = (title: string) =>
+      new Set(
+        [...(screen.getByText(title).closest('section')?.querySelectorAll('a') ?? [])]
+          .map((a) => a.getAttribute('href') ?? '')
+          .filter((h) => h.startsWith('/property/'))
+          .map((h) => h.replace('/property/', '')),
+      );
+    const mockSaleRows = (rows: {
+      nearYou: ReturnType<typeof cards>;
+      justListed: ReturnType<typeof cards>;
+      priceDrops?: ReturnType<typeof cards>;
+    }) =>
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (q.listingType !== 'sale') return Promise.resolve(envelope([aListingCardRow()]));
+        const kind = rowKind(q);
+        if (kind === 'near-you') return Promise.resolve(envelope(rows.nearYou));
+        if (kind === 'just-listed') return Promise.resolve(envelope(rows.justListed));
+        if (kind === 'price-drops')
+          return Promise.resolve(envelope(rows.priceDrops ?? cards(1, 15)));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+    it('skips cards an earlier row shows, so the earlier row wins', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({ nearYou: cards(1, 15), justListed: cards(1, 15) });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(8))).toBe(true));
+      const near = linksIn('Homes for sale near you');
+      const newest = linksIn('Newest homes for sale');
+      for (let n = 1; n <= 7; n++) {
+        expect(near.has(pid(n))).toBe(true);
+        expect(newest.has(pid(n))).toBe(false);
+      }
+    });
+
+    it('keeps the original cards when the drop would leave fewer than 4', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({ nearYou: cards(1, 15), justListed: cards(1, 9) });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Newest homes for sale').size).toBeGreaterThan(0));
+      await screen.findByText('Homes for sale near you');
+      const newest = linksIn('Newest homes for sale');
+      expect(newest.has(pid(1))).toBe(true);
+      expect(newest.has(pid(7))).toBe(true);
+    });
+
+    it('applies the page order: a later row never removes a card from an earlier row', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({
+        nearYou: cards(1, 15),
+        justListed: cards(1, 15),
+        priceDrops: cards(1, 30),
+      });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Price drops on homes for sale').has(pid(15))).toBe(true));
+      const near = linksIn('Homes for sale near you');
+      const drops = linksIn('Price drops on homes for sale');
+      expect(near.has(pid(1))).toBe(true);
+      for (let n = 1; n <= 14; n++) expect(drops.has(pid(n))).toBe(false);
+    });
+
+    it('never makes a row wait on another row, and shows repeats until the earlier row resolves', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      let resolveNear: (value: unknown) => void = () => undefined;
+      mockedSearchListings.mockImplementation((q: Query) => {
+        if (q.listingType === 'sale' && rowKind(q) === 'near-you')
+          return new Promise((resolve) => (resolveNear = resolve));
+        if (q.listingType === 'sale' && rowKind(q) === 'just-listed')
+          return Promise.resolve(envelope(cards(1, 15)));
+        return Promise.resolve(envelope([aListingCardRow()]));
+      });
+
+      render(<HomePageContent />);
+
+      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(true));
+      resolveNear(envelope(cards(1, 15)));
+      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(false));
+      expect(linksIn('Newest homes for sale').has(pid(8))).toBe(true);
     });
   });
 

@@ -1,5 +1,13 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type {
   HomeFeedResponse,
@@ -34,6 +42,88 @@ type ListingSide = 'sale' | 'rent';
 
 /** Small — a carousel shows a handful of cards, never a full results page. */
 const CAROUSEL_PAGE_SIZE = 8;
+
+/** Rows that share a side and a target fetch this many extra cards, so a card an earlier row
+ *  already shows can drop out and the row still fills (#873). */
+const DEDUPE_PAGE_SIZE = CAROUSEL_PAGE_SIZE + 7;
+/** A row left with fewer cards than this after the drop keeps its original cards. */
+const MIN_DEDUPED_CARDS = 4;
+/** Cards a row shows before "See all". */
+const ROW_MAX = 7;
+
+type ShownEntry = { side: ListingSide; order: number; ids: string[] };
+type ShownRegistry = {
+  shown: Record<string, ShownEntry>;
+  report: (rowKey: string, entry: ShownEntry | null) => void;
+};
+const ShownContext = createContext<ShownRegistry | null>(null);
+
+/** Records which cards each resolved row shows. A row reads only rows that come earlier on the
+ *  page, so no row waits for another row's request. */
+function ShownProvider({ children }: { children: React.ReactNode }) {
+  const [shown, setShown] = useState<Record<string, ShownEntry>>({});
+  const report = useCallback((rowKey: string, entry: ShownEntry | null) => {
+    setShown((current) => {
+      const before = current[rowKey];
+      if (!entry) {
+        if (!before) return current;
+        const { [rowKey]: _removed, ...rest } = current;
+        return rest;
+      }
+      if (before && before.order === entry.order && before.ids.join() === entry.ids.join()) {
+        return current;
+      }
+      return { ...current, [rowKey]: entry };
+    });
+  }, []);
+  const value = useMemo(() => ({ shown, report }), [shown, report]);
+  return <ShownContext.Provider value={value}>{children}</ShownContext.Provider>;
+}
+
+/** Page order of the rows that dedupe. The earlier row keeps a card, the later row skips it. */
+const DEDUPE_ORDER = { nearYou: 0, justListed: 1, priceDrops: 2 } as const;
+
+/**
+ * Drops cards an earlier row on the page already shows. Until that row resolves nothing drops, so
+ * a later row may show a repeat for a moment, then filters once. If the drop leaves fewer than
+ * `MIN_DEDUPED_CARDS`, the row keeps its original cards.
+ */
+function useDedupedListings(
+  rowKey: string,
+  side: ListingSide,
+  order: number,
+  listings: ListingCardRow[],
+  loading: boolean,
+): ListingCardRow[] {
+  const registry = useContext(ShownContext);
+  const shown = registry?.shown;
+  const report = registry?.report;
+
+  const deduped = useMemo(() => {
+    if (!shown) return listings;
+    const earlier = new Set<string>();
+    for (const [key, entry] of Object.entries(shown)) {
+      if (key !== rowKey && entry.side === side && entry.order < order) {
+        entry.ids.forEach((id) => earlier.add(id));
+      }
+    }
+    if (earlier.size === 0) return listings;
+    const kept = listings.filter((l) => !earlier.has(l.propertyId));
+    return kept.length >= MIN_DEDUPED_CARDS ? kept : listings;
+  }, [shown, rowKey, side, order, listings]);
+
+  const idsKey = deduped
+    .slice(0, ROW_MAX)
+    .map((l) => l.propertyId)
+    .join('|');
+  useEffect(() => {
+    if (!report) return;
+    report(rowKey, loading ? null : { side, order, ids: idsKey ? idsKey.split('|') : [] });
+  }, [report, rowKey, side, order, loading, idsKey]);
+  useEffect(() => () => report?.(rowKey, null), [report, rowKey]);
+
+  return deduped;
+}
 
 /**
  * The recent-search storage `CompactSearchBar` already writes (`recentSearches`). #398 reuses this
@@ -94,6 +184,9 @@ type CarouselState = {
   loading: boolean;
   /** true once the fetch has settled with an error — shows retry UI instead of blank. */
   failed: boolean;
+  /** The serialized query that produced a settled result. A caller compares it to its current
+   *  query, so a result left over from an earlier query never reads as the answer to a new one. */
+  settledKey?: string;
 };
 
 /**
@@ -150,6 +243,7 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
           total: envelope.total,
           loading: false,
           failed: false,
+          settledKey: queryKey,
         });
       })
       .catch((err) => {
@@ -162,6 +256,63 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
   }, [queryKey, retryKey, skip, skipLoading]);
 
   return { ...state, refetch };
+}
+
+/** The place a target row queries: the city, then the whole state, then nowhere (platform-wide). */
+type CarouselScope = { city?: string; state?: string };
+
+/** The search params that carry a row's place into its "View all" link. */
+function scopeParams(scope: CarouselScope): Record<string, string> {
+  return {
+    ...(scope.city ? { city: scope.city } : {}),
+    ...(scope.state ? { state: scope.state } : {}),
+  };
+}
+
+/**
+ * A row scoped to the home target (#873). While the target resolves, the row waits and sends no
+ * query. With a target it queries the city, then the state, then platform-wide, each only when the
+ * one before returned nothing, so a row never hides while wider results exist. With no target at
+ * all it queries platform-wide. `scope` names the place that filled the row, for "View all".
+ */
+function useTargetCarousel(
+  base: ListingSearchQuery,
+  place: InferredTarget | null,
+  placeLoading: boolean,
+) {
+  const placeKey = place ? `${place.city}|${place.state}` : '';
+  const [fallback, setFallback] = useState({ placeKey, step: 0 });
+  const step = fallback.placeKey === placeKey ? fallback.step : 0;
+  const scope: CarouselScope = !place
+    ? {}
+    : step === 0
+      ? { city: place.city, state: place.state }
+      : step === 1
+        ? { state: place.state }
+        : {};
+  const query = { ...base, ...scope };
+  const result = useCarouselListings(query, placeLoading, placeLoading);
+  // A failed query does not widen. The row shows its retry for that step.
+  const empty =
+    !placeLoading &&
+    !result.loading &&
+    !result.failed &&
+    result.total === 0 &&
+    result.settledKey === JSON.stringify(query);
+  const widening = empty && place !== null && step < 2;
+
+  useEffect(() => {
+    if (widening) setFallback({ placeKey, step: step + 1 });
+  }, [widening, placeKey, step]);
+
+  // A moved target starts over. Without this, a return to an earlier place would resume its old step.
+  useEffect(() => {
+    setFallback((f) => (f.placeKey === placeKey ? f : { placeKey, step: 0 }));
+  }, [placeKey]);
+
+  // A result for an earlier step is not the answer to this step's query yet: keep the skeleton.
+  const stale = !placeLoading && !result.failed && result.settledKey !== JSON.stringify(query);
+  return { ...result, loading: result.loading || widening || stale, scope };
 }
 
 /** Tiles shown before the horizontal scroll takes over (#393). */
@@ -345,12 +496,29 @@ const JUST_LISTED_TITLE: Record<ListingSide, string> = {
   rent: 'Newest rentals',
 };
 
-function JustListedRow({ side }: { side: ListingSide }) {
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    sort: 'newly-listed',
-    listingType: side,
-    pageSize: CAROUSEL_PAGE_SIZE,
-  });
+function JustListedRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug(`just-listed-${side}`, place);
+  const carousel = useTargetCarousel(
+    { sort: 'newly-listed', listingType: side, pageSize: DEDUPE_PAGE_SIZE },
+    place,
+    placeLoading,
+  );
+  const { total, loading, failed, refetch, scope } = carousel;
+  const listings = useDedupedListings(
+    `just-listed-${side}`,
+    side,
+    DEDUPE_ORDER.justListed,
+    carousel.listings,
+    loading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -358,7 +526,8 @@ function JustListedRow({ side }: { side: ListingSide }) {
   return (
     <ListingRow
       title={JUST_LISTED_TITLE[side]}
-      href={searchHref(side, { sort: 'newly-listed' })}
+      targetSource={place?.source}
+      href={searchHref(side, { sort: 'newly-listed', ...scopeParams(scope) })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -398,16 +567,24 @@ function NearYouRow({
   regionLoading: boolean;
 }) {
   useTargetDebug(`near-you-${side}`, region);
-  const { listings, total, loading } = useCarouselListings(
+  const near = useCarouselListings(
     {
       listingType: side,
       city: region?.city,
       state: region?.state,
       sort: 'newest',
-      pageSize: CAROUSEL_PAGE_SIZE,
+      pageSize: DEDUPE_PAGE_SIZE,
     },
     regionLoading || !region,
     regionLoading,
+  );
+  const { total, loading } = near;
+  const listings = useDedupedListings(
+    `near-you-${side}`,
+    side,
+    DEDUPE_ORDER.nearYou,
+    near.listings,
+    loading,
   );
 
   // No error UI (#363): a failed fetch hides the row exactly like a real zero total, rather than
@@ -606,13 +783,32 @@ function ComingSoonRow({
 
 /** "Price drops on homes for sale" (#394): a real price-cut flag — the title never claims a
  *  savings amount or percentage (no deal claim). Sale only, matching the ticket's scope. */
-function PriceDropsRow() {
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    priceReduced: true,
-    sort: 'newly-listed',
-    listingType: 'sale',
-    pageSize: CAROUSEL_PAGE_SIZE,
-  });
+function PriceDropsRow({
+  place,
+  placeLoading,
+}: {
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug('price-drops', place);
+  const carousel = useTargetCarousel(
+    {
+      priceReduced: true,
+      sort: 'newly-listed',
+      listingType: 'sale',
+      pageSize: DEDUPE_PAGE_SIZE,
+    },
+    place,
+    placeLoading,
+  );
+  const { total, loading, failed, refetch, scope } = carousel;
+  const listings = useDedupedListings(
+    'price-drops',
+    'sale',
+    DEDUPE_ORDER.priceDrops,
+    carousel.listings,
+    loading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -620,7 +816,8 @@ function PriceDropsRow() {
   return (
     <ListingRow
       title="Price drops on homes for sale"
-      href={searchHref('sale', { priceReduced: 'true' })}
+      targetSource={place?.source}
+      href={searchHref('sale', { priceReduced: 'true', ...scopeParams(scope) })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -901,12 +1098,18 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
   const nearYouRent = (
     <NearYouRow key="near-you-rent" side="rent" region={region} regionLoading={regionLoading} />
   );
-  const justListedSale = <JustListedRow key="just-listed-sale" side="sale" />;
+  const justListedSale = (
+    <JustListedRow key="just-listed-sale" side="sale" place={region} placeLoading={regionLoading} />
+  );
   const comingSoonSale = (
     <ComingSoonRow key="coming-soon-sale" side="sale" place={region} placeLoading={regionLoading} />
   );
-  const priceDrops = <PriceDropsRow key="price-drops" />;
-  const justListedRent = <JustListedRow key="just-listed-rent" side="rent" />;
+  const priceDrops = (
+    <PriceDropsRow key="price-drops" place={region} placeLoading={regionLoading} />
+  );
+  const justListedRent = (
+    <JustListedRow key="just-listed-rent" side="rent" place={region} placeLoading={regionLoading} />
+  );
   const comingSoonRent = (
     <ComingSoonRow key="coming-soon-rent" side="rent" place={region} placeLoading={regionLoading} />
   );
@@ -952,7 +1155,7 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
     );
 
   return (
-    <>
+    <ShownProvider>
       {body}
 
       {priceSortRows}
@@ -960,6 +1163,6 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
       <ExploreNeighborhoodsRow region={region} regionLoading={regionLoading} />
 
       <TrustBlock />
-    </>
+    </ShownProvider>
   );
 }
