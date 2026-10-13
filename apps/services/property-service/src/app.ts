@@ -247,6 +247,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.use(
     createAnalyticsRouter({
       pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,
+      refreshPool: pool,
       enabled: options.analyticsEnabled,
     }),
   );
