@@ -50,7 +50,7 @@ describe('ListingCard analytics (#826)', () => {
   it('sends listing_click when the card opens', () => {
     const listing = aListingCardRow();
     render(<ListingCard listing={listing} track={track} />);
-    fireEvent.click(screen.getByRole('link'));
+    fireEvent.click(screen.getAllByRole('link')[0]);
     expect(mockTrackEvent).toHaveBeenCalledWith('listing_click', {
       listingId: listing.id,
       props: { row_id: 'near-you', card_position: 2, target: 'card' },
@@ -79,7 +79,7 @@ describe('ListingCard analytics (#826)', () => {
     const feed = { variant: 'ranked-a', modelVersion: 'm1', explore: false };
     render(<ListingCard listing={listing} track={{ ...track, feed }} />);
     seen();
-    fireEvent.click(screen.getByRole('link'));
+    fireEvent.click(screen.getAllByRole('link')[0]);
     const feedBody = {
       listingId: listing.id,
       props: {
@@ -92,13 +92,14 @@ describe('ListingCard analytics (#826)', () => {
     };
     expect(mockTrackEvent).toHaveBeenCalledWith('feed_impression', feedBody);
     expect(mockTrackEvent).toHaveBeenCalledWith('feed_click', feedBody);
+    expect(screen.getAllByRole('link')[1].getAttribute('href')).toContain('?src=home:near-you:2');
   });
 
   it('sends no feed event for a flag-off row, and nothing for a card with no track', () => {
     const listing = aListingCardRow();
     render(<ListingCard listing={listing} track={track} />);
     seen();
-    fireEvent.click(screen.getByRole('link'));
+    fireEvent.click(screen.getAllByRole('link')[0]);
     expect(names().filter((n) => n.startsWith('feed_'))).toEqual([]);
     mockTrackEvent.mockReset();
     render(<ListingCard listing={aListingCardRow({ id: 'other' })} />);
