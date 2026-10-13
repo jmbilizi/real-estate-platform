@@ -1,25 +1,78 @@
 /**
- * The one client-side definition of the password policy.
- *
- * account-service does not override ASP.NET Core Identity's `PasswordOptions`, so these are
- * Identity's defaults (6+ characters, one upper, one lower, one digit, one symbol). Keep this the
- * only copy: a form that shows password rules imports this file rather than restating the list, so
- * the client and the server (and every form on the client) cannot drift apart.
+ * The one client-side definition of the password policy. Mirrors account-service
+ * `PasswordPolicyValidator`: a password is valid with `minLength`+ characters and one of each
+ * character class, or with `passphraseLength`+ characters and no other rule. The server stays the
+ * gate. Forms import this file rather than restating the rules.
  */
-export interface PasswordRule {
-  id: string;
-  label: string;
-  test: (password: string) => boolean;
+export type PasswordClass = 'upper' | 'lower' | 'digit' | 'symbol';
+
+export interface PasswordPolicy {
+  minLength: number;
+  passphraseLength: number;
+  requiredClasses: PasswordClass[];
 }
 
-export const PASSWORD_RULES: PasswordRule[] = [
-  { id: 'length', label: 'At least 6 characters', test: (password) => password.length >= 6 },
-  { id: 'upper', label: 'One uppercase letter', test: (password) => /[A-Z]/.test(password) },
-  { id: 'lower', label: 'One lowercase letter', test: (password) => /[a-z]/.test(password) },
-  { id: 'digit', label: 'One number', test: (password) => /[0-9]/.test(password) },
-  { id: 'symbol', label: 'One symbol', test: (password) => /[^A-Za-z0-9]/.test(password) },
-];
+export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
+  minLength: 8,
+  passphraseLength: 15,
+  requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+};
 
-export function passwordMeetsRules(password: string): boolean {
-  return PASSWORD_RULES.every((rule) => rule.test(password));
+const CLASS_LABELS: Record<PasswordClass, string> = {
+  upper: 'An uppercase letter',
+  lower: 'A lowercase letter',
+  digit: 'A number',
+  symbol: 'A symbol',
+};
+
+const CLASS_TESTS: Record<PasswordClass, (password: string) => boolean> = {
+  upper: (password) => /\p{Lu}/u.test(password),
+  lower: (password) => /\p{Ll}/u.test(password),
+  digit: (password) => /\p{Nd}/u.test(password),
+  symbol: (password) => /[^\p{L}\p{Nd}]/u.test(password),
+};
+
+export interface PasswordRuleStatus {
+  id: 'length' | PasswordClass;
+  label: string;
+  met: boolean;
+}
+
+export interface PasswordCheck {
+  rules: PasswordRuleStatus[];
+  /** True when the password has `passphraseLength`+ characters. */
+  passphrase: boolean;
+  valid: boolean;
+}
+
+/** Checks a password. At passphrase length every rule reads as met. */
+export function checkPassword(
+  password: string,
+  policy: PasswordPolicy = DEFAULT_PASSWORD_POLICY,
+): PasswordCheck {
+  const passphrase = password.length >= policy.passphraseLength;
+  const rules: PasswordRuleStatus[] = [
+    {
+      id: 'length',
+      label: `${policy.minLength}+ characters`,
+      met: passphrase || password.length >= policy.minLength,
+    },
+    ...policy.requiredClasses.map((id) => ({
+      id,
+      label: CLASS_LABELS[id],
+      met: passphrase || CLASS_TESTS[id](password),
+    })),
+  ];
+  return { rules, passphrase, valid: rules.every((rule) => rule.met) };
+}
+
+export function passphraseHint(policy: PasswordPolicy = DEFAULT_PASSWORD_POLICY): string {
+  return `Or use ${policy.passphraseLength}+ characters, no other rules.`;
+}
+
+export function passwordMeetsRules(
+  password: string,
+  policy: PasswordPolicy = DEFAULT_PASSWORD_POLICY,
+): boolean {
+  return checkPassword(password, policy).valid;
 }

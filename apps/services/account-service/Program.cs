@@ -137,7 +137,7 @@ internal static class Program
             .AddSignInManager<AppSignInManager>()
             .AddEntityFrameworkStores<AccountDbContext>();
 
-        // Password policy: length and the breached-password check, no composition rules (#654).
+        // Password policy: 8+ with every character class, or 15+ with none, plus the breached-password check (#654, #819).
         // Identity's stock PasswordValidator is removed. PasswordPolicyValidator is the only
         // validator, so register, change, reset and sign-up all follow it. The Identity switches
         // are cleared too, as a second line should a stock validator return.

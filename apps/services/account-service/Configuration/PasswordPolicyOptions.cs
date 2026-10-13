@@ -5,8 +5,10 @@
 namespace AccountService.Configuration;
 
 /// <summary>
-/// The password policy. Section <c>PasswordPolicy</c>. There are no composition rules (NIST
-/// SP 800-63B-4 section 3.1.1.2). Only length and the breached-password check apply.
+/// The password policy. Section <c>PasswordPolicy</c>. A password passes when it has
+/// <see cref="MinLength"/> characters with an uppercase letter, a lowercase letter, a number and a
+/// symbol, or when it has <see cref="PassphraseLength"/> characters with no other rule (#819).
+/// The breached-password check applies to both.
 /// </summary>
 internal sealed class PasswordPolicyOptions
 {
@@ -16,8 +18,11 @@ internal sealed class PasswordPolicyOptions
     /// <summary>The longest password the policy accepts. The limit is fixed to bound hashing cost.</summary>
     public const int AbsoluteMaxLength = 128;
 
-    /// <summary>Gets or sets the shortest accepted password.</summary>
-    public int MinLength { get; set; } = 15;
+    /// <summary>Gets or sets the shortest accepted password. Below <see cref="PassphraseLength"/> it needs every character class.</summary>
+    public int MinLength { get; set; } = 8;
+
+    /// <summary>Gets or sets the length at which a password needs no character class.</summary>
+    public int PassphraseLength { get; set; } = 15;
 
     /// <summary>Gets or sets the longest accepted password.</summary>
     public int MaxLength { get; set; } = AbsoluteMaxLength;
@@ -40,9 +45,14 @@ internal sealed class PasswordPolicyOptions
             return $"{SectionName}:{nameof(this.MinLength)} must be at least 1.";
         }
 
-        if (this.MaxLength < this.MinLength || this.MaxLength > AbsoluteMaxLength)
+        if (this.PassphraseLength < this.MinLength)
         {
-            return $"{SectionName}:{nameof(this.MaxLength)} must be between {nameof(this.MinLength)} and {AbsoluteMaxLength}.";
+            return $"{SectionName}:{nameof(this.PassphraseLength)} must be at least {nameof(this.MinLength)}.";
+        }
+
+        if (this.MaxLength < this.PassphraseLength || this.MaxLength > AbsoluteMaxLength)
+        {
+            return $"{SectionName}:{nameof(this.MaxLength)} must be between {nameof(this.PassphraseLength)} and {AbsoluteMaxLength}.";
         }
 
         // https: the SHA-1 prefix must not cross the network in clear text. The slash: the

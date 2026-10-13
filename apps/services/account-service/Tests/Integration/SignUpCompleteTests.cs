@@ -189,7 +189,7 @@ namespace AccountService.Tests.Integration
 
         [Theory]
         [InlineData("short", "too_short")]
-        [InlineData("fourteen chars", "too_short")]
+        [InlineData("Abcdefg1", "missing_symbol")]
         public async Task Complete_AShortPassword_Returns400WithTheCode_AndKeepsTheProof(string password, string code)
         {
             using var factory = new AccountRecoveryFactory();
@@ -207,6 +207,16 @@ namespace AccountService.Tests.Integration
 
             // The user fixes the password with the same proof.
             (await Post(client, new { email, signupProof = proof, password = GoodPassword })).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task Complete_AnEightCharacterPasswordWithEveryClass_Passes()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+            await CompleteAsync(factory, client, "eight@example.com", "Abcde1!x");
+
+            (await UserCount(factory)).Should().Be(1);
         }
 
         [Fact]
@@ -288,7 +298,7 @@ namespace AccountService.Tests.Integration
             const string email = "config@example.com";
             var proof = await ProofAsync(factory, client, email);
 
-            (await Post(client, new { email, signupProof = proof, password = "ten chars!" })).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Post(client, new { email, signupProof = proof, password = "Abcdefg1!x" })).StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         [Fact]
@@ -326,6 +336,43 @@ namespace AccountService.Tests.Integration
 
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await response.Content.ReadAsStringAsync()).Should().Contain("too_short");
+        }
+
+        [Fact]
+        public async Task Policy_TheInAccountChangeTakesAnEightCharacterPasswordWithEveryClass()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+            const string email = "change8@example.com";
+            var token = await CompleteAsync(factory, client, email, GoodPassword);
+
+            using var change = new HttpRequestMessage(HttpMethod.Post, "/account/manage/info")
+            {
+                Content = JsonContent.Create(new { oldPassword = GoodPassword, newPassword = "Abcde1!x" }),
+            };
+            change.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            (await client.SendAsync(change)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        [Fact]
+        public async Task Policy_TheInAccountChangeRefusesAMissingClassWithItsCode()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+            const string email = "change9@example.com";
+            var token = await CompleteAsync(factory, client, email, GoodPassword);
+
+            using var change = new HttpRequestMessage(HttpMethod.Post, "/account/manage/info")
+            {
+                Content = JsonContent.Create(new { oldPassword = GoodPassword, newPassword = "abcdefg1" }),
+            };
+            change.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await client.SendAsync(change);
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            var text = await response.Content.ReadAsStringAsync();
+            text.Should().Contain("missing_upper").And.Contain("missing_symbol");
         }
 
         [Fact]

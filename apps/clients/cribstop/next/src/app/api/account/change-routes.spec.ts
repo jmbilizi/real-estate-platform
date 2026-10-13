@@ -99,6 +99,10 @@ describe('change email and change password routes', () => {
   it.each([
     [{ PasswordMismatch: ['Incorrect password.'] }, { error: 'wrong_password' }],
     [{ breached: ['x'] }, { error: 'password_rejected', errors: ['breached'] }],
+    [
+      { missing_upper: ['x'], missing_symbol: ['x'] },
+      { error: 'password_rejected', errors: ['missing_upper', 'missing_symbol'] },
+    ],
   ])('password change maps the validation problem %j', async (errors, expected) => {
     mockedFetch.mockResolvedValue(json({ errors }, 400));
     const res = await passwordChange(req({ currentPassword: 'a', newPassword: 'b' }));

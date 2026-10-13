@@ -1,3 +1,9 @@
+import {
+  DEFAULT_PASSWORD_POLICY,
+  type PasswordClass,
+  type PasswordPolicy,
+} from '@/lib/password-rules';
+
 interface LoginRequest {
   email: string;
   password: string;
@@ -290,10 +296,25 @@ export async function changeSignupEmail(oldEmail: string, newEmail: string): Pro
   return toTiming(await res.json().catch(() => null));
 }
 
-export type PasswordRejectionCode = 'too_short' | 'too_long' | 'breached';
+export type PasswordRejectionCode =
+  | 'too_short'
+  | 'missing_upper'
+  | 'missing_lower'
+  | 'missing_digit'
+  | 'missing_symbol'
+  | 'too_long'
+  | 'breached';
 
 function knownRejections(errors: unknown): PasswordRejectionCode[] {
-  const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
+  const known: PasswordRejectionCode[] = [
+    'too_short',
+    'missing_upper',
+    'missing_lower',
+    'missing_digit',
+    'missing_symbol',
+    'too_long',
+    'breached',
+  ];
   return Array.isArray(errors)
     ? errors.filter((e): e is PasswordRejectionCode => known.includes(e as PasswordRejectionCode))
     : [];
@@ -452,23 +473,36 @@ export async function changePassword(payload: {
   throw new Error('Unable to change the password');
 }
 
-export const DEFAULT_PASSWORD_MIN_LENGTH = 15;
-let cachedPasswordMinLength: number | null = null;
+let cachedPasswordPolicy: PasswordPolicy | null = null;
 
-/** Minimum password length from /api/account/password-policy. Falls back to the default. */
-export async function getPasswordMinLength(): Promise<number> {
-  if (cachedPasswordMinLength !== null) return cachedPasswordMinLength;
+/** The password policy from /api/account/password-policy. Falls back to the default. */
+export async function getPasswordPolicy(): Promise<PasswordPolicy> {
+  if (cachedPasswordPolicy !== null) return cachedPasswordPolicy;
   try {
     const res = await fetch('/api/account/password-policy');
     if (res.ok) {
       const body = await res.json().catch(() => null);
-      if (typeof body?.minLength === 'number' && body.minLength > 0) {
-        cachedPasswordMinLength = body.minLength;
-        return body.minLength;
+      if (
+        Number.isInteger(body?.minLength) &&
+        Number.isInteger(body?.passphraseLength) &&
+        body.minLength > 0 &&
+        body.passphraseLength >= body.minLength
+      ) {
+        const classes: PasswordClass[] = Array.isArray(body.requiredClasses)
+          ? body.requiredClasses.filter((c: unknown): c is PasswordClass =>
+              ['upper', 'lower', 'digit', 'symbol'].includes(c as string),
+            )
+          : DEFAULT_PASSWORD_POLICY.requiredClasses;
+        cachedPasswordPolicy = {
+          minLength: body.minLength,
+          passphraseLength: body.passphraseLength,
+          requiredClasses: classes,
+        };
+        return cachedPasswordPolicy;
       }
     }
   } catch {
     // Network failure. Use the default below.
   }
-  return DEFAULT_PASSWORD_MIN_LENGTH;
+  return DEFAULT_PASSWORD_POLICY;
 }
