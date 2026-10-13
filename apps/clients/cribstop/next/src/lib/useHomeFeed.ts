@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { HomeFeedResponse } from '@cribstop/property-contracts';
 import { getHomeFeed } from '@/lib/api/home-feed';
 import { getAnonId } from '@/lib/anon-id';
@@ -26,9 +26,18 @@ export type HomeFeedState =
   | { status: 'pending' }
   | { status: 'ready'; feed: HomeFeedResponse };
 
+function armOf(flags: HomeFeedFlags): 'control' | 'treatment' {
+  try {
+    return inTreatment(flags, getAnonId()) ? 'treatment' : 'control';
+  } catch {
+    return 'control';
+  }
+}
+
 /**
- * The A/B gate and the feed read (#836). The flag-off path never touches storage or the network,
- * so the page renders exactly as before.
+ * The A/B gate and the feed read (#836). Every state but a started fetch shows today's rows, so
+ * the flag-off path, the control arm and the server render are identical to the page before the
+ * feed. The flag-off path never touches storage or the network.
  */
 export function useHomeFeed(
   flags: HomeFeedFlags,
@@ -38,24 +47,18 @@ export function useHomeFeed(
 ): HomeFeedState {
   const live = flags.enabled && flags.rolloutPct > 0;
   const [arm, setArm] = useState<'unknown' | 'control' | 'treatment'>(live ? 'unknown' : 'control');
-  const [state, setState] = useState<HomeFeedState>({ status: live ? 'pending' : 'off' });
-  const generation = useRef(0);
+  const [state, setState] = useState<HomeFeedState>({ status: 'off' });
 
   useEffect(() => {
-    if (!live) return;
-    setArm(inTreatment(flags, getAnonId()) ? 'treatment' : 'control');
+    if (live) setArm(armOf(flags));
   }, [live, flags]);
 
-  const regionKey = region ? `${region.city}|${region.state}|${region.source}` : '';
+  const radiusKm = region?.radiusKm == null ? null : Math.min(100, Math.max(1, region.radiusKm));
+  const regionKey = region ? `${region.city}|${region.state}|${region.source}|${radiusKm}` : '';
 
   useEffect(() => {
-    if (!live) return undefined;
-    if (arm === 'control') {
+    if (!live || arm !== 'treatment' || regionLoading) {
       setState({ status: 'off' });
-      return undefined;
-    }
-    if (arm === 'unknown' || regionLoading) {
-      setState({ status: 'pending' });
       return undefined;
     }
     const target = titleSafeTarget(region);
@@ -64,7 +67,8 @@ export function useHomeFeed(
       setState({ status: 'off' });
       return undefined;
     }
-    const mine = ++generation.current;
+    // `stale` marks a run its own cleanup ended. A timeout abort is not stale: it ends in `off`.
+    let stale = false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
     setState({ status: 'pending' });
@@ -72,27 +76,27 @@ export function useHomeFeed(
       {
         profile,
         target: { city: target.city, state: target.state },
-        radiusKm: target.radiusKm,
+        radiusKm,
         side,
         variant: TREATMENT_VARIANT,
       },
       controller.signal,
     )
       .then((feed) => {
-        if (generation.current !== mine) return;
+        if (stale) return;
         const usable = feed.variant !== 'fallback' && feed.rows.some((r) => r.listings.length > 0);
         setState(usable ? { status: 'ready', feed } : { status: 'off' });
       })
       .catch(() => {
-        if (generation.current !== mine) return;
-        setState({ status: 'off' });
+        if (!stale) setState({ status: 'off' });
       })
       .finally(() => clearTimeout(timer));
     return () => {
+      stale = true;
       clearTimeout(timer);
       controller.abort();
     };
-    // `region` is keyed by place and source, so a new object for the same place never refetches.
+    // `region` is keyed by place, source and radius, so a new object for the same place never refetches.
   }, [live, arm, regionKey, regionLoading, side]);
 
   return live ? state : { status: 'off' };

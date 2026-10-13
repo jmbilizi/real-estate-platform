@@ -19,8 +19,16 @@ const failure = (status: number) =>
 
 export async function POST(req: NextRequest) {
   if (req.headers.get('sec-gpc') === '1') return failure(400);
+  // A chunked body has no length header, so the size check runs on the text as well.
   if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return failure(400);
-  const raw: unknown = await req.json().catch(() => null);
+  const text = await req.text().catch(() => '');
+  if (text.length > MAX_BODY_BYTES) return failure(400);
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    raw = null;
+  }
   const parsed = homeFeedRequestSchema.safeParse(raw);
   if (!parsed.success) return failure(400);
   try {

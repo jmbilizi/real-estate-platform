@@ -1,8 +1,8 @@
 import {
   bucketOf,
+  feedRowTitle,
   fnv1a,
   inTreatment,
-  feedRowTitle,
   isWarmProfile,
   parseHomeFeedFlags,
   titleSafeTarget,
