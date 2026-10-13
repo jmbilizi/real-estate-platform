@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import { listRecentSavedHomes } from '@/lib/api/saved-homes';
@@ -106,6 +106,7 @@ describe('HomePageContent', () => {
   });
 
   afterEach(() => {
+    cleanup();
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
     mockedGetNeighborhoods.mockReset();
@@ -298,6 +299,123 @@ describe('HomePageContent', () => {
           expect.anything(),
         ),
       );
+    });
+  });
+
+  describe('home target (#822)', () => {
+    const rockville = {
+      display_name: 'Rockville, MD',
+      address: { city: 'Rockville', state_code: 'MD' },
+    };
+
+    function storeSearch(entry: Record<string, unknown>) {
+      window.localStorage.setItem('recentSearches', JSON.stringify([entry]));
+    }
+
+    it('uses the last search for "near you", not the IP region', async () => {
+      mockRegionFetch({ city: 'Ashburn', state: 'VA' });
+      storeSearch({ ...rockville, listingType: 'sale', searchedAt: Date.now() });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('Homes for sale near you');
+      expect(screen.getByText('Homes for sale near you').closest('section')).toHaveAttribute(
+        'data-target-source',
+        'last-search',
+      );
+      expect(mockedSearchListings).toHaveBeenCalledWith(
+        expect.objectContaining({ listingType: 'sale', city: 'Rockville', state: 'MD' }),
+        expect.anything(),
+      );
+      expect(mockedSearchListings).not.toHaveBeenCalledWith(
+        expect.objectContaining({ city: 'Ashburn' }),
+        expect.anything(),
+      );
+    });
+
+    it('ignores a last search older than 30 days and uses the IP region', async () => {
+      mockRegionFetch({ city: 'Ashburn', state: 'VA' });
+      storeSearch({ ...rockville, searchedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 });
+
+      render(<HomePageContent />);
+
+      await screen.findByText('Homes for sale near you');
+      expect(screen.getByText('Homes for sale near you').closest('section')).toHaveAttribute(
+        'data-target-source',
+        'ip',
+      );
+      expect(mockedSearchListings).not.toHaveBeenCalledWith(
+        expect.objectContaining({ city: 'Rockville' }),
+        expect.anything(),
+      );
+    });
+
+    it('sends no platform-wide query from a place-scoped row while the target resolves', async () => {
+      mockRegionFetch({ city: 'Ashburn', state: 'VA' });
+
+      render(<HomePageContent />);
+      await screen.findByText('Homes for sale near you');
+
+      const scopedKinds = ['coming-soon', 'price-sort'];
+      for (const [query] of mockedSearchListings.mock.calls as [Query][]) {
+        if (scopedKinds.includes(rowKind(query))) expect(query.city).toBe('Ashburn');
+      }
+    });
+
+    it('uses a granted browser position over the IP region', async () => {
+      const permissions = { query: jest.fn().mockResolvedValue({ state: 'granted' }) };
+      const geolocation = {
+        getCurrentPosition: jest.fn((ok: (p: unknown) => void) =>
+          ok({ coords: { latitude: 39.2904, longitude: -76.6122 } }),
+        ),
+      };
+      Object.defineProperty(global.navigator, 'permissions', {
+        value: permissions,
+        configurable: true,
+      });
+      Object.defineProperty(global.navigator, 'geolocation', {
+        value: geolocation,
+        configurable: true,
+      });
+      (global.fetch as jest.Mock).mockImplementation((url: string) =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve(
+              url.startsWith('/api/geocode/reverse')
+                ? { address: { city: 'Baltimore', state_code: 'MD' } }
+                : { city: 'Ashburn', state: 'VA' },
+            ),
+        }),
+      );
+
+      try {
+        render(<HomePageContent />);
+
+        await screen.findByText('Homes for sale near you');
+        expect(screen.getByText('Homes for sale near you').closest('section')).toHaveAttribute(
+          'data-target-source',
+          'geolocation',
+        );
+        await waitFor(() =>
+          expect(mockedSearchListings).toHaveBeenCalledWith(
+            expect.objectContaining({ listingType: 'sale', city: 'Baltimore', state: 'MD' }),
+            expect.anything(),
+          ),
+        );
+        expect(mockedSearchListings).not.toHaveBeenCalledWith(
+          expect.objectContaining({ city: 'Ashburn' }),
+          expect.anything(),
+        );
+        // Rounded to about 1 km before the lookup.
+        expect(global.fetch).toHaveBeenCalledWith(
+          expect.stringContaining('lat=39.29&lon=-76.61'),
+          expect.anything(),
+        );
+      } finally {
+        delete (global.navigator as unknown as Record<string, unknown>).permissions;
+        delete (global.navigator as unknown as Record<string, unknown>).geolocation;
+      }
     });
   });
 
@@ -509,8 +627,8 @@ describe('HomePageContent', () => {
       expect(await screen.findByText('Cheapest homes for sale')).toBeInTheDocument();
       expect(screen.getByText('Cheapest rentals')).toBeInTheDocument();
       expect(screen.queryByText('Priciest homes for sale')).not.toBeInTheDocument();
-      expect(priceCalls('sale')[0].sort).toBe('price-asc');
-      expect(priceCalls('rent')[0].sort).toBe('price-asc');
+      await waitFor(() => expect(priceCalls('sale')[0]?.sort).toBe('price-asc'));
+      await waitFor(() => expect(priceCalls('rent')[0]?.sort).toBe('price-asc'));
     });
 
     it('flips one row to the high-to-low sort and title, and leaves the other row alone', async () => {
@@ -523,6 +641,7 @@ describe('HomePageContent', () => {
       expect(lowest).toHaveAttribute('aria-pressed', 'true');
       expect(highest).toHaveAttribute('aria-pressed', 'false');
 
+      await waitFor(() => expect(priceCalls('rent').length).toBeGreaterThan(0));
       mockedSearchListings.mockClear();
       fireEvent.click(highest);
 
@@ -586,6 +705,7 @@ describe('HomePageContent', () => {
       render(<HomePageContent />);
       await screen.findByText('Cheapest rentals');
 
+      await waitFor(() => expect(priceCalls('sale').length).toBeGreaterThan(0));
       const [sale] = priceCalls('sale');
       expect(sale.propertyType).toContain('Single Family');
       expect(sale.propertyType).not.toContain('Land');
@@ -620,12 +740,12 @@ describe('HomePageContent', () => {
   });
 
   describe('resilience', () => {
-    it('fires every row query in parallel rather than one after another', () => {
+    it('fires every row query in parallel rather than one after another', async () => {
       mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
       render(<HomePageContent />);
 
       // Just listed (x2 sides), coming soon (x2 sides), price drops, and two price-sort rows.
-      expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(6);
+      await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(6));
     });
 
     it('degrades gracefully when one row fails — the rest of the page still renders, with its own retry', async () => {
@@ -801,7 +921,7 @@ describe('HomePageContent', () => {
 
       await waitFor(() => expect(mockedRecentSaved).toHaveBeenCalled());
       expect(await screen.findByText(TITLE)).toBeInTheDocument();
-      const call = mockedSearchListings.mock.calls.find(([q]) => q.city === 'Rockville');
+      const call = mockedSearchListings.mock.calls.find(([q]) => q.propertyType?.includes('Condo'));
       expect(call?.[0]).toMatchObject({
         city: 'Rockville',
         state: 'MD',
