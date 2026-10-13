@@ -47,7 +47,9 @@ interface Props {
   /** Where the row sits, for analytics. Defaults to `grid`. */
   listType?: CardTrack['listType'];
   /** Set only for a ranked home-feed row. Adds `feed_impression` and `feed_click`. */
-  feed?: CardTrack['feed'];
+  feed?: Omit<NonNullable<CardTrack['feed']>, 'explore'>;
+  /** Ids of the exploration-slot cards in a feed row. */
+  exploreIds?: ReadonlySet<string>;
 }
 
 function slugRowId(title: string): string {
@@ -76,6 +78,7 @@ export default function ListingRow({
   rowId,
   listType = 'grid',
   feed,
+  exploreIds,
 }: Props) {
   const trackRowId = rowId ?? slugRowId(title);
   // Show max+1 cards so See all is always after scroll
@@ -296,7 +299,12 @@ export default function ListingRow({
               <div key={l.id} className={CARD_WIDTH_CLASS}>
                 <ListingCard
                   listing={l}
-                  track={{ listType, rowId: trackRowId, position: i, ...(feed ? { feed } : {}) }}
+                  track={{
+                    listType,
+                    rowId: trackRowId,
+                    position: i,
+                    ...(feed ? { feed: { ...feed, explore: exploreIds?.has(l.id) ?? false } } : {}),
+                  }}
                 />
               </div>
             );

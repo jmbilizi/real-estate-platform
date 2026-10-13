@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type {
+  HomeFeedResponse,
   NeighborhoodRow as NeighborhoodApiRow,
   PropertyType,
 } from '@cribstop/property-contracts';
@@ -17,6 +18,8 @@ import { formatRelativeTime } from '@/lib/format';
 import { homeTargetDebugEnabled, type InferredTarget, prefersRentFirst } from '@/lib/home-target';
 import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
 import { useHomeTarget } from '@/lib/useHomeTarget';
+import { feedRowTitle, HOME_FEED_OFF, type HomeFeedFlags } from '@/lib/home-feed';
+import { useHomeFeed } from '@/lib/useHomeFeed';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import {
@@ -818,6 +821,53 @@ function TrustBlock() {
   );
 }
 
+/** Rows in the feed skeleton. A typical warm feed has this many rows above the price-sort rows. */
+const FEED_SKELETON_ROWS = 3;
+
+/** Card-row placeholders. Same row component and padding as real rows, with an empty title line. */
+function FeedSkeleton() {
+  return (
+    <div aria-hidden="true" data-testid="home-feed-skeleton">
+      {Array.from({ length: FEED_SKELETON_ROWS }, (_, i) => (
+        <ListingRow
+          key={i}
+          title={' '}
+          listings={[]}
+          loading
+          max={7}
+          sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The ranked rows (#836). A row sets `feed`, so each card sends `feed_impression` and
+ * `feed_click` with the row, position, variant and model version. The title is the server's. It
+ * names only a place the visitor chose or acted on (`titleSafeTarget`).
+ */
+function FeedRows({ feed }: { feed: HomeFeedResponse }) {
+  return (
+    <>
+      {feed.rows
+        .filter((row) => row.listings.length > 0)
+        .map((row) => (
+          <ListingRow
+            key={row.rowId}
+            title={feedRowTitle(row.rowId, row.title)}
+            rowId={row.rowId}
+            listings={row.listings.map((item) => item.listing)}
+            exploreIds={new Set(row.listings.filter((i) => i.explore).map((i) => i.listing.id))}
+            feed={{ variant: row.variant, modelVersion: row.modelVersion }}
+            max={8}
+            sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+          />
+        ))}
+    </>
+  );
+}
+
 /**
  * Row order (#394 stakeholder ruling, #363): "Near you" leads the body, sale then rent — the
  * first row a visitor sees is scoped to their own region, not a platform-wide feed. Just listed
@@ -826,7 +876,11 @@ function TrustBlock() {
  * search was rent, both the "Near you" pair and the rentals cluster move up — `useRentFirst` is
  * the only thing that changes; nothing about the rows themselves does.
  */
-export default function HomePageContent() {
+export default function HomePageContent({
+  homeFeed = HOME_FEED_OFF,
+}: {
+  homeFeed?: HomeFeedFlags;
+}) {
   const rentFirst = useRentFirst();
   const { user, savedPropertyIds } = useApp();
   const { save: latestSave, loading: saveLoading } = useLatestSave(user?.email ?? null);
@@ -835,6 +889,7 @@ export default function HomePageContent() {
     savedHome: latestSave ? { city: latestSave.city, state: latestSave.state } : null,
     savedPending: saveLoading,
   });
+  const feedState = useHomeFeed(homeFeed, region, regionLoading, rentFirst ? 'rent' : 'sale');
   const savedLike = user ? (
     <SavedLikeRow
       key="saved-like"
@@ -886,9 +941,23 @@ export default function HomePageContent() {
         comingSoonRent,
       ];
 
+  // Today's rows are the default for every path that is not a ready feed: flag off, control arm,
+  // opt-out, a cold visit, an error and a fallback answer. A visitor never sees an empty page.
+  const body =
+    feedState.status === 'ready' ? (
+      <>
+        <FeedRows feed={feedState.feed} />
+        {savedLike}
+      </>
+    ) : feedState.status === 'pending' ? (
+      <FeedSkeleton />
+    ) : (
+      rows
+    );
+
   return (
     <>
-      {rows}
+      {body}
 
       {priceSortRows}
 

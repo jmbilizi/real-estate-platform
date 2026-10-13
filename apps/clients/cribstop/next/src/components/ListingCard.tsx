@@ -68,7 +68,11 @@ export default function ListingCard({
    */
   const openPanel = () => {
     reportClick();
-    openListingPanel(listing.id, listing);
+    openListingPanel(
+      listing.id,
+      listing,
+      track?.feed ? `home:${track.rowId}:${track.position}` : undefined,
+    );
   };
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
