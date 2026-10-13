@@ -6,6 +6,7 @@ import { BRAND } from '@/lib/brand';
 import { getListingsMeta } from '@/lib/api/listings';
 import { PROPERTY_TIME_ZONE } from '@/lib/format';
 import type { ListingsMeta } from '@/lib/types';
+import PersonaliseSwitch from '@/components/PersonaliseSwitch';
 
 export default function Footer() {
   // The footer renders on every route, including ones that never search, so freshness is fetched
@@ -208,6 +209,10 @@ export default function Footer() {
               </p>
             )}
           </div>
+        </div>
+
+        <div className="mt-8 text-ink-muted">
+          <PersonaliseSwitch />
         </div>
 
         {/* Bottom bar */}

@@ -142,6 +142,25 @@ describe('proxyListingsRead server cache (#755)', () => {
     expect(fetchGateway).not.toHaveBeenCalled();
   });
 
+  it('keeps two visitors in different cities apart, whatever IP asks (#822)', async () => {
+    fetchGateway
+      .mockResolvedValueOnce(okUpstream({ city: 'Rockville' }, 'public, max-age=60'))
+      .mockResolvedValueOnce(okUpstream({ city: 'Baltimore' }, 'public, max-age=60'));
+
+    const a = await proxyListingsRead('', 'city=Rockville&state=MD', {
+      cache: true,
+      clientIp: '203.0.113.5',
+    });
+    const b = await proxyListingsRead('', 'city=Baltimore&state=MD', {
+      cache: true,
+      clientIp: '198.51.100.7',
+    });
+
+    expect(await a.json()).toEqual({ city: 'Rockville' });
+    expect(await b.json()).toEqual({ city: 'Baltimore' });
+    expect(fetchGateway).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps reads with different queries apart', async () => {
     fetchGateway.mockResolvedValue(okUpstream({ total: 3 }, 'public, max-age=60'));
 

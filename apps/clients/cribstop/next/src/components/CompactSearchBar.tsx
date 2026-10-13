@@ -851,7 +851,7 @@ export default function CompactSearchBar({
   // reusing this key rather than a second one.
   const addRecentSearch = (item: any) => {
     if (!item) return;
-    const entry = { ...item, listingType: searchListingType };
+    const entry = { ...item, listingType: searchListingType, searchedAt: Date.now() };
     setRecentSearches((prev) => {
       const filtered = prev.filter((s) => s.display_name !== entry.display_name);
       const updated = [entry, ...filtered].slice(0, 5);

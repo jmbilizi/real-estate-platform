@@ -39,6 +39,8 @@ interface Props {
   onRetry?: () => void;
   /** Control between the title and the see-all chip, on the title's first line (#484). */
   headerExtra?: ReactNode;
+  /** Which home-target source chose this row's place. Output only, for debugging and tests. */
+  targetSource?: string;
 }
 
 /** The carousel's per-card width breakpoints, shared by real cards and their loading skeletons. */
@@ -55,6 +57,7 @@ export default function ListingRow({
   failed = false,
   onRetry,
   headerExtra,
+  targetSource,
 }: Props) {
   // Show max+1 cards so See all is always after scroll
   const showSeeAll = !loading && listings.length > max;
@@ -62,7 +65,10 @@ export default function ListingRow({
   const { scrollerRef, atStart, atEnd, scroll } = useCarouselScroll([loading, visible.length]);
 
   return (
-    <section className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}>
+    <section
+      className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}
+      data-target-source={targetSource}
+    >
       {/* `gap-1.5`, not `gap-1` (#447): the title/chip link's `before:-bottom-1.5` hit area reaches
           6px below its own box, so a smaller gap here would let that invisible hit area cover the
           top of `subtitle`'s text. */}
