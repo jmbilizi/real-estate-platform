@@ -1,6 +1,6 @@
 import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import { proxyListingsRead } from '@/app/api/_lib/listings-gateway';
-import { loadInitialResults, initialQueryFor } from './listings-initial';
+import { initialQueryFor, loadInitialResults } from './listings-initial';
 
 jest.mock('next/headers', () => ({ headers: jest.fn(async () => new Headers()) }));
 jest.mock('@/app/api/_lib/listings-gateway', () => ({
