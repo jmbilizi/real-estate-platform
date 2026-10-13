@@ -1,0 +1,51 @@
+# Enterprise CA trust for every local workload (#180, #275). A selector, not a list: a new
+# Deployment gets the mount with no edit here. The patches add to the first container, which is
+# the application container in every Deployment. `add` replaces an existing array, so a base
+# manifest that gains its own volumes, volumeMounts or envFrom needs them merged here first.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - workspace-ca-env.configmap.yaml
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes
+        value:
+          - name: workspace-ca-bundle
+            configMap:
+              name: workspace-ca-bundle
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: workspace-ca-bundle
+            mountPath: /etc/workspace-ca
+            readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: workspace-ca-env
+  - target:
+      kind: CronJob
+    patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/volumes
+        value:
+          - name: workspace-ca-bundle
+            configMap:
+              name: workspace-ca-bundle
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/volumeMounts
+        value:
+          - name: workspace-ca-bundle
+            mountPath: /etc/workspace-ca
+            readOnly: true
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: workspace-ca-env
