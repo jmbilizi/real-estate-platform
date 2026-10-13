@@ -2,8 +2,10 @@ import {
   clearFeedProfile,
   FEED_PROFILE_KEY,
   getFeedRequestProfile,
+  getVisitStart,
   isPersonalisationEnabled,
   MAX_PROFILE_ITEMS,
+  readItems,
   recordFeedItem,
   setPersonalisation,
 } from './feed-profile';
@@ -43,6 +45,24 @@ describe('feed profile', () => {
       'Place 3',
       'Place 4',
     ]);
+  });
+
+  it('keeps the listing place on this device and leaves it out of the request', () => {
+    recordFeedItem('a', 'view', 'sale', 5, { city: 'Rockville', state: 'MD' });
+    expect(readItems()[0]).toMatchObject({ city: 'Rockville', state: 'MD' });
+    expect(getFeedRequestProfile()!.items).toEqual([
+      { listingId: 'a', kind: 'view', side: 'sale', at: 5 },
+    ]);
+  });
+
+  it('starts the visit at the first recorded item and keeps it', () => {
+    window.sessionStorage.clear();
+    const before = Date.now();
+    recordFeedItem('a', 'view');
+    const start = getVisitStart();
+    expect(start).toBeGreaterThanOrEqual(before);
+    recordFeedItem('b', 'view');
+    expect(getVisitStart()).toBe(start);
   });
 
   it('writes and sends nothing when the switch is off, and deletes the stored profile', () => {

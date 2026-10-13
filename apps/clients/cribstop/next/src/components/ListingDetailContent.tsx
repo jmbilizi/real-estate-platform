@@ -155,7 +155,13 @@ export default function ListingDetailContent({
 
   useEffect(() => {
     trackEvent('listing_view', { surface: 'detail', listingId: listing.id });
-    recordFeedItem(listing.id, 'view', listing.listingType === 'rent' ? 'rent' : 'sale');
+    recordFeedItem(
+      listing.id,
+      'view',
+      listing.listingType === 'rent' ? 'rent' : 'sale',
+      Date.now(),
+      listing,
+    );
   }, [listing.id]);
 
   useEffect(() => {
