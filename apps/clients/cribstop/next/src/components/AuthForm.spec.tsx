@@ -242,7 +242,7 @@ describe('AuthForm', () => {
   });
 
   describe('password step (returning user)', () => {
-    it('shows the email, a Change email link and current-password autocomplete', async () => {
+    it('shows the email and current-password autocomplete, with no Change email link', async () => {
       render(<AuthForm />);
       await continueWith('password');
 
@@ -252,6 +252,7 @@ describe('AuthForm', () => {
       expect(screen.getByLabelText('Password')).toHaveFocus();
       expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeInTheDocument();
       expect(screen.getByLabelText('Remember me')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change email' })).not.toBeInTheDocument();
     });
 
     it('signs in and calls onSuccess', async () => {
@@ -292,18 +293,6 @@ describe('AuthForm', () => {
       await waitFor(() =>
         expect(toast).toHaveBeenCalledWith('Sign-in service unavailable', 'error'),
       );
-    });
-
-    it('returns to the email step with the field filled and drops the typed password', async () => {
-      render(<AuthForm />);
-      await continueWith('password');
-      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-
-      fireEvent.click(screen.getByRole('button', { name: 'Change email' }));
-
-      expect(screen.getByPlaceholderText('you@example.com')).toHaveValue(EMAIL);
-      await continueWith('password');
-      expect(screen.getByLabelText('Password')).toHaveValue('');
     });
 
     it('opens the reset screen from Forgot password with the email filled in', async () => {
