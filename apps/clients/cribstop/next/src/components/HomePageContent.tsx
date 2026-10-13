@@ -94,6 +94,9 @@ type CarouselState = {
   loading: boolean;
   /** true once the fetch has settled with an error — shows retry UI instead of blank. */
   failed: boolean;
+  /** The serialized query that produced a settled result. A caller compares it to its current
+   *  query, so a result left over from an earlier query never reads as the answer to a new one. */
+  settledKey?: string;
 };
 
 /**
@@ -150,6 +153,7 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
           total: envelope.total,
           loading: false,
           failed: false,
+          settledKey: queryKey,
         });
       })
       .catch((err) => {
@@ -162,6 +166,57 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
   }, [queryKey, retryKey, skip, skipLoading]);
 
   return { ...state, refetch };
+}
+
+/** The place a target row queries: the city, then the whole state, then nowhere (platform-wide). */
+type CarouselScope = { city?: string; state?: string };
+
+/** The search params that carry a row's place into its "View all" link. */
+function scopeParams(scope: CarouselScope): Record<string, string> {
+  return {
+    ...(scope.city ? { city: scope.city } : {}),
+    ...(scope.state ? { state: scope.state } : {}),
+  };
+}
+
+/**
+ * A row scoped to the home target (#873). While the target resolves, the row waits and sends no
+ * query. With a target it queries the city, then the state, then platform-wide, each only when the
+ * one before returned nothing, so a row never hides while wider results exist. With no target at
+ * all it queries platform-wide. `scope` names the place that filled the row, for "View all".
+ */
+function useTargetCarousel(
+  base: ListingSearchQuery,
+  place: InferredTarget | null,
+  placeLoading: boolean,
+) {
+  const placeKey = place ? `${place.city}|${place.state}` : '';
+  const [fallback, setFallback] = useState({ placeKey, step: 0 });
+  const step = fallback.placeKey === placeKey ? fallback.step : 0;
+  const scope: CarouselScope = !place
+    ? {}
+    : step === 0
+      ? { city: place.city, state: place.state }
+      : step === 1
+        ? { state: place.state }
+        : {};
+  const query = { ...base, ...scope };
+  const result = useCarouselListings(query, placeLoading, placeLoading);
+  const empty =
+    !placeLoading &&
+    !result.loading &&
+    !result.failed &&
+    result.total === 0 &&
+    result.settledKey === JSON.stringify(query);
+  const widening = empty && place !== null && step < 2;
+
+  useEffect(() => {
+    if (widening) setFallback({ placeKey, step: step + 1 });
+  }, [widening, placeKey, step]);
+
+  // A result for an earlier step is not the answer to this step's query yet: keep the skeleton.
+  const stale = !placeLoading && !result.failed && result.settledKey !== JSON.stringify(query);
+  return { ...result, loading: result.loading || widening || stale, scope };
 }
 
 /** Tiles shown before the horizontal scroll takes over (#393). */
@@ -345,12 +400,21 @@ const JUST_LISTED_TITLE: Record<ListingSide, string> = {
   rent: 'Newest rentals',
 };
 
-function JustListedRow({ side }: { side: ListingSide }) {
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    sort: 'newly-listed',
-    listingType: side,
-    pageSize: CAROUSEL_PAGE_SIZE,
-  });
+function JustListedRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug(`just-listed-${side}`, place);
+  const { listings, total, loading, failed, refetch, scope } = useTargetCarousel(
+    { sort: 'newly-listed', listingType: side, pageSize: CAROUSEL_PAGE_SIZE },
+    place,
+    placeLoading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -358,7 +422,8 @@ function JustListedRow({ side }: { side: ListingSide }) {
   return (
     <ListingRow
       title={JUST_LISTED_TITLE[side]}
-      href={searchHref(side, { sort: 'newly-listed' })}
+      targetSource={place?.source}
+      href={searchHref(side, { sort: 'newly-listed', ...scopeParams(scope) })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -606,13 +671,24 @@ function ComingSoonRow({
 
 /** "Price drops on homes for sale" (#394): a real price-cut flag — the title never claims a
  *  savings amount or percentage (no deal claim). Sale only, matching the ticket's scope. */
-function PriceDropsRow() {
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    priceReduced: true,
-    sort: 'newly-listed',
-    listingType: 'sale',
-    pageSize: CAROUSEL_PAGE_SIZE,
-  });
+function PriceDropsRow({
+  place,
+  placeLoading,
+}: {
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug('price-drops', place);
+  const { listings, total, loading, failed, refetch, scope } = useTargetCarousel(
+    {
+      priceReduced: true,
+      sort: 'newly-listed',
+      listingType: 'sale',
+      pageSize: CAROUSEL_PAGE_SIZE,
+    },
+    place,
+    placeLoading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -620,7 +696,8 @@ function PriceDropsRow() {
   return (
     <ListingRow
       title="Price drops on homes for sale"
-      href={searchHref('sale', { priceReduced: 'true' })}
+      targetSource={place?.source}
+      href={searchHref('sale', { priceReduced: 'true', ...scopeParams(scope) })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -901,12 +978,18 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
   const nearYouRent = (
     <NearYouRow key="near-you-rent" side="rent" region={region} regionLoading={regionLoading} />
   );
-  const justListedSale = <JustListedRow key="just-listed-sale" side="sale" />;
+  const justListedSale = (
+    <JustListedRow key="just-listed-sale" side="sale" place={region} placeLoading={regionLoading} />
+  );
   const comingSoonSale = (
     <ComingSoonRow key="coming-soon-sale" side="sale" place={region} placeLoading={regionLoading} />
   );
-  const priceDrops = <PriceDropsRow key="price-drops" />;
-  const justListedRent = <JustListedRow key="just-listed-rent" side="rent" />;
+  const priceDrops = (
+    <PriceDropsRow key="price-drops" place={region} placeLoading={regionLoading} />
+  );
+  const justListedRent = (
+    <JustListedRow key="just-listed-rent" side="rent" place={region} placeLoading={regionLoading} />
+  );
   const comingSoonRent = (
     <ComingSoonRow key="coming-soon-rent" side="rent" place={region} placeLoading={regionLoading} />
   );
