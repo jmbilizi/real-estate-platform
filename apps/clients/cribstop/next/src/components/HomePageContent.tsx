@@ -374,6 +374,12 @@ const NEAR_YOU_TITLE: Record<ListingSide, string> = {
   rent: 'Rentals near you',
 };
 
+/** The cold-start market (#834) is not the visitor's place, so its row does not say "near you". */
+const MARKET_TITLE: Record<ListingSide, string> = {
+  sale: 'Homes for sale',
+  rent: 'Rentals',
+};
+
 /** "Near you" (#363): the home page's first row. One stable component throughout — its query
  *  goes from skipped to region-scoped in place, rather than swapping in a freshly-mounted child
  *  once the region resolves. Hidden while the region is unknown or absent, and while it resolves
@@ -407,7 +413,7 @@ function NearYouRow({
 
   return (
     <ListingRow
-      title={NEAR_YOU_TITLE[side]}
+      title={region?.source === 'rotation' ? MARKET_TITLE[side] : NEAR_YOU_TITLE[side]}
       targetSource={region?.source}
       href={
         region

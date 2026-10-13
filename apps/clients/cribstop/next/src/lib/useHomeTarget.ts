@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { addressCity, addressState } from '@/lib/search-place';
 import { getLookingFor } from '@/lib/api/looking-for';
 import {
+  CONFIDENCE_MID,
   inferHomeTarget,
   type InferredTarget,
   type LastSearch,
@@ -257,8 +258,11 @@ export function useHomeTarget(opts: {
     'rotation',
   ];
   const winnerRank = target ? order.indexOf(target.source) : order.length;
+  // A weak winner also waits for a pending source, so a stale search or the cold-start rotation
+  // does not flash before the IP region arrives.
+  const weak = !target || target.confidence < CONFIDENCE_MID;
   const loading = pendingByRank.some(
-    ([source, pending]) => pending && order.indexOf(source) < winnerRank,
+    ([source, pending]) => pending && (weak || order.indexOf(source) < winnerRank),
   );
 
   return { target: loading ? null : target, loading };
