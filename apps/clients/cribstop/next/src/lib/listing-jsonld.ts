@@ -80,6 +80,8 @@ export function listingJsonLd(
 ): JsonLdObject | null {
   if (origin === null) return null;
   if (listing.isSample || listing.source !== 'brightMLS') return null;
+  // A paid placement carries its label on the page. JSON-LD has no field for it, so it emits none.
+  if (listing.sponsored) return null;
   if (!EMITTED_STATUSES.has(listing.status)) return null;
 
   const base = origin.replace(/\/$/, '');

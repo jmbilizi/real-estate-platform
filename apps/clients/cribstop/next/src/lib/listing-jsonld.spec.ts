@@ -149,6 +149,10 @@ describe('listingJsonLd', () => {
     expect(ldFor({ isSample: true })).toBeNull();
   });
 
+  it('emits nothing for a sponsored row', () => {
+    expect(ldFor({ sponsored: true })).toBeNull();
+  });
+
   it('emits nothing for a row Bright MLS did not supply', () => {
     expect(ldFor({ source: 'internal' })).toBeNull();
     expect(ldFor({ source: 'other' })).toBeNull();
