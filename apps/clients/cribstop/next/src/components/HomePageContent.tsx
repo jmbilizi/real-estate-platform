@@ -73,8 +73,7 @@ type Region = { city: string; state: string };
 function useTargetDebug(row: string, target: HomeTarget | null) {
   useEffect(() => {
     if (!target || !homeTargetDebugEnabled()) return;
-    const used = target ? `${target.source} ${target.city}, ${target.state}` : 'none';
-    console.info(`[home-target] ${row}: ${used}`);
+    console.info(`[home-target] ${row}: ${target.source} ${target.city}, ${target.state}`);
   }, [row, target]);
 }
 
@@ -124,14 +123,9 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
     }
 
     const controller = new AbortController();
-    // A refresh (the target moved) keeps the cards on screen until the new ones land, so the
-    // row keeps its height. Only a row with nothing to show yet shows its skeleton.
-    setState((prev) => ({
-      listings: prev.listings,
-      total: prev.total,
-      loading: prev.listings.length === 0,
-      failed: false,
-    }));
+    // A moved target shows the skeleton, which has the card row's height, so the layout holds.
+    // Old cards never stay under a new place title.
+    setState({ listings: [], total: 0, loading: true, failed: false });
 
     // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
     // `total` then holds the number of cards returned, which is all the rows below read.
@@ -558,7 +552,7 @@ function ComingSoonRow({
 }) {
   useTargetDebug(`coming-soon-${side}`, place);
   // Scoped to the home target even with no subtitle to name it. While the target resolves, the
-  // row waits instead of firing a platform-wide query.
+  // row waits. With no target at all, it shows the platform-wide row.
   const { listings, total, loading, failed, refetch } = useCarouselListings(
     {
       status: ['Coming Soon'],
@@ -825,6 +819,7 @@ export default function HomePageContent() {
   const { target: region, loading: regionLoading } = useHomeTarget({
     signedIn: !!user,
     savedHome: latestSave ? { city: latestSave.city, state: latestSave.state } : null,
+    savedPending: saveLoading,
   });
   const savedLike = user ? (
     <SavedLikeRow

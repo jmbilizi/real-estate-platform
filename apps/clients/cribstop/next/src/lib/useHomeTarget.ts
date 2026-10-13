@@ -46,7 +46,13 @@ function useGeolocationPlace(): Settled<TargetPlace> {
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
+    // The wait starts now, so a permission query that never answers cannot hold the rows. A fix
+    // that lands later still replaces the lower sources.
+    const waitTimer = setTimeout(() => {
+      if (!cancelled) setState((prev) => ({ ...prev, pending: false }));
+    }, GEOLOCATION_WAIT_MS);
     const settle = (value: TargetPlace | null) => {
+      clearTimeout(waitTimer);
       if (!cancelled) setState({ value, pending: false });
     };
 
@@ -60,13 +66,8 @@ function useGeolocationPlace(): Settled<TargetPlace> {
       } catch {
         return settle(null);
       }
-      // Lower sources start after the wait. A later fix still replaces them below.
-      const waitTimer = setTimeout(() => {
-        if (!cancelled) setState((prev) => ({ ...prev, pending: false }));
-      }, GEOLOCATION_WAIT_MS);
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          clearTimeout(waitTimer);
           const lat = roundCoordinate(pos.coords.latitude);
           const lon = roundCoordinate(pos.coords.longitude);
           try {
@@ -82,10 +83,7 @@ function useGeolocationPlace(): Settled<TargetPlace> {
             settle(null);
           }
         },
-        () => {
-          clearTimeout(waitTimer);
-          settle(null);
-        },
+        () => settle(null),
         { maximumAge: 10 * 60_000, timeout: 10_000 },
       );
     };
@@ -93,6 +91,7 @@ function useGeolocationPlace(): Settled<TargetPlace> {
 
     return () => {
       cancelled = true;
+      clearTimeout(waitTimer);
       controller.abort();
     };
   }, []);
@@ -115,37 +114,43 @@ function useIpRegion(): Settled<TargetPlace> {
 }
 
 /** The first city place of a signed-in visitor's preferences (#768). */
-function useLookingForPlace(signedIn: boolean): TargetPlace | null {
-  const [place, setPlace] = useState<TargetPlace | null>(null);
+function useLookingForPlace(signedIn: boolean): Settled<TargetPlace> {
+  const [state, setState] = useState<Settled<TargetPlace>>({ value: null, pending: signedIn });
   useEffect(() => {
     if (!signedIn) {
-      setPlace(null);
+      setState({ value: null, pending: false });
       return undefined;
     }
     let cancelled = false;
+    setState((prev) => ({ ...prev, pending: true }));
     getLookingFor()
-      .then((list) => !cancelled && setPlace(placeFromLookingFor(list.items)))
-      .catch(() => undefined);
+      .then(
+        (list) =>
+          !cancelled && setState({ value: placeFromLookingFor(list.items), pending: false }),
+      )
+      .catch(() => !cancelled && setState({ value: null, pending: false }));
     return () => {
       cancelled = true;
     };
   }, [signedIn]);
-  return place;
+  return state;
 }
 
 export interface HomeTargetState {
   target: HomeTarget | null;
-  /** True while no target exists and a source can still give one. Rows show their skeleton. */
+  /** True while a source that could give a better target is still pending. Rows show their skeleton. */
   loading: boolean;
 }
 
 /**
  * The one place every home row targets. Sources arrive in any order and the target recomputes
  * on each arrival, so a late fix or a late saved read moves the rows to the better place.
+ * The rows wait only for sources that rank above the current winner.
  */
 export function useHomeTarget(opts: {
   signedIn: boolean;
   savedHome: TargetPlace | null;
+  savedPending: boolean;
 }): HomeTargetState {
   const [lastSearch, setLastSearch] = useState<{ value: LastSearch | null; ready: boolean }>({
     value: null,
@@ -159,22 +164,28 @@ export function useHomeTarget(opts: {
   const ip = useIpRegion();
   const lookingFor = useLookingForPlace(opts.signedIn);
 
-  const target = lastSearch.ready
-    ? resolveHomeTarget({
-        lastSearch: lastSearch.value,
-        geolocation: geo.value,
-        lookingFor,
-        savedHome: opts.savedHome,
-        ip: ip.value,
-      })
-    : null;
+  if (!lastSearch.ready) return { target: null, loading: true };
 
-  // A granted position outranks IP, so the IP answer waits for it. A last search needs no wait.
-  const waiting =
-    !lastSearch.ready ||
-    (lastSearch.value === null && (geo.pending || (ip.pending && !opts.savedHome && !lookingFor)));
-  const gated = target && target.source !== 'last-search' && target.source !== 'geolocation';
-  const loading = !target ? waiting : !!gated && geo.pending;
+  const target = resolveHomeTarget({
+    lastSearch: lastSearch.value,
+    geolocation: geo.value,
+    lookingFor: lookingFor.value,
+    savedHome: opts.savedHome,
+    ip: ip.value,
+  });
+
+  // Pending flags in precedence order, after the last search (which is already read).
+  const pendingByRank: [HomeTarget['source'], boolean][] = [
+    ['geolocation', geo.pending],
+    ['looking-for', lookingFor.pending],
+    ['saved-home', opts.savedPending],
+    ['ip', ip.pending],
+  ];
+  const order = ['last-search', 'geolocation', 'looking-for', 'saved-home', 'ip', 'default'];
+  const winnerRank = target ? order.indexOf(target.source) : order.length;
+  const loading = pendingByRank.some(
+    ([source, pending]) => pending && order.indexOf(source) < winnerRank,
+  );
 
   return { target: loading ? null : target, loading };
 }

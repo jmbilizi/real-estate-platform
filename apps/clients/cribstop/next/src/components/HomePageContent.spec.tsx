@@ -348,6 +348,11 @@ describe('HomePageContent', () => {
         expect.objectContaining({ city: 'Rockville' }),
         expect.anything(),
       );
+      // A stale search must not let a place-scoped row send an unscoped query while the IP loads.
+      for (const [query] of mockedSearchListings.mock.calls as [Query][]) {
+        if (['coming-soon', 'price-sort'].includes(rowKind(query)))
+          expect(query.city).toBe('Ashburn');
+      }
     });
 
     it('sends no platform-wide query from a place-scoped row while the target resolves', async () => {
