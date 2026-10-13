@@ -6,8 +6,10 @@ import { BRAND } from '@/lib/brand';
 import { organizationJsonLd } from '@/lib/organization-jsonld';
 import { publishableOrigin } from '@/lib/publishable-origin';
 
-// `SITE_ORIGIN` is read per request: one image serves every environment.
-export const dynamic = 'force-dynamic';
+// ISR keeps the home page cacheable. A regeneration at runtime reads the runtime `SITE_ORIGIN`,
+// because one image serves every environment. The build has no origin, so the prerender carries no
+// JSON-LD or canonical until the first regeneration. Never add `force-dynamic` here (#871).
+export const revalidate = 300;
 
 export function generateMetadata(): Metadata {
   const origin = publishableOrigin();

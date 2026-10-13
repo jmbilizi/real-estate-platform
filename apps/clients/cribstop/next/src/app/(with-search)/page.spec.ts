@@ -1,7 +1,39 @@
 jest.mock('@/components/HomePageContent', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/ScrollSentinel', () => ({ __esModule: true, default: () => null }));
 
-import { generateMetadata } from './page';
+import * as page from './page';
+import JsonLd from '@/components/JsonLd';
+
+const { generateMetadata } = page;
+
+describe('home page rendering mode', () => {
+  const saved = process.env.SITE_ORIGIN;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.SITE_ORIGIN;
+    else process.env.SITE_ORIGIN = saved;
+  });
+
+  it('stays cacheable: no force-dynamic export', () => {
+    expect((page as Record<string, unknown>).dynamic).not.toBe('force-dynamic');
+    expect(page.revalidate).toBeGreaterThan(0);
+  });
+
+  const jsonLdChildren = () => {
+    const tree = page.default() as { props: { children: unknown[] } };
+    return tree.props.children.filter((c) => (c as { type?: unknown } | null)?.type === JsonLd);
+  };
+
+  it('publishes JSON-LD from SITE_ORIGIN', () => {
+    process.env.SITE_ORIGIN = 'https://example.com';
+    const [node] = jsonLdChildren() as { props: { data: { '@graph': { url: string }[] } } }[];
+    expect(node.props.data['@graph'][0].url).toBe('https://example.com/');
+  });
+
+  it('publishes no JSON-LD without SITE_ORIGIN', () => {
+    delete process.env.SITE_ORIGIN;
+    expect(jsonLdChildren()).toHaveLength(0);
+  });
+});
 
 describe('home page metadata', () => {
   const saved = process.env.SITE_ORIGIN;
