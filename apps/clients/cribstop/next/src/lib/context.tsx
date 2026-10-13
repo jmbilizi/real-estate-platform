@@ -38,6 +38,7 @@ import {
 import { clearSaved, type SavedEntry, saveEntry } from '@/lib/store/slices/favoritesSlice';
 import { removeHome, syncSavedHomes, toggleHome } from '@/lib/saved-sync';
 import { trackEvent } from '@/lib/analytics';
+import { recordFeedItem } from '@/lib/feed-profile';
 import { addToast } from '@/lib/store/slices/toastSlice';
 
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
@@ -283,12 +284,15 @@ export function useApp(): AppContextValue {
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(
-    (listing: { id: string; propertyId: string }) => {
+    (listing: { id: string; propertyId: string; listingType?: string }) => {
       const signedIn = store.getState().auth.user !== null;
       const alreadySaved = store
         .getState()
         .favorites.homes.some((h) => h.propertyId === listing.propertyId);
-      if (!alreadySaved) trackEvent('listing_save', { listingId: listing.id });
+      if (!alreadySaved) {
+        trackEvent('listing_save', { listingId: listing.id });
+        recordFeedItem(listing.id, 'save', listing.listingType === 'rent' ? 'rent' : 'sale');
+      }
       void toggleHome(store, listing, signedIn, notifyError(dispatch));
     },
     [dispatch],
