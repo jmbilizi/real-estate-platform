@@ -8,6 +8,7 @@ import {
 import { createAnalyticsPool, getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
+import { createHomeFeedRouter } from './home-feed/routes';
 import { createAddressLoader } from './listings/address-loader';
 import type { AddressFetcher } from './listings/property-page';
 import type { ReadPool } from './listings/repository';
@@ -242,6 +243,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       createSavedStateReader(pool, introspection),
     ),
   );
+  app.use(createHomeFeedRouter(pool));
   app.use(createSavedHomesRouter({ pool, introspection }));
   app.use(createLookingForRouter({ pool, introspection }));
   app.use(

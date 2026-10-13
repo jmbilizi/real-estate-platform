@@ -328,6 +328,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/home-feed",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/home-feed",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 60
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/analytics/events",
       "UpstreamHttpMethod": ["POST"],
       "DownstreamPathTemplate": "/analytics/events",

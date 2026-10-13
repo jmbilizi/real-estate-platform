@@ -5,6 +5,7 @@ import {
   type ErrorBody,
 } from '@cribstop/property-contracts';
 import type { ReadClient } from '../listings/repository';
+import { startPopularityRefreshTimer } from './popularity';
 
 /**
  * `POST /analytics/events` (#725). Cookieless funnel counting.
@@ -95,6 +96,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   let inFlight = 0;
   // A timer, not a per-write check, so an idle pod still deletes rows older than 30 days.
   startPurgeTimer(deps.pool);
+  startPopularityRefreshTimer();
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');

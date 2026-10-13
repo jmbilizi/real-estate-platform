@@ -15,6 +15,7 @@ export * from './address-slug';
 export * from './property-page';
 export * from './looking-for';
 export * from './saved-homes';
+export * from './home-feed';
 export * from './staff';
 export * from './staff-metrics';
 export * from './agent-leads';

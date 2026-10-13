@@ -104,7 +104,7 @@ const MEDIA_VISIBLE = mediaVisibleSql('v');
 export const PRIMARY_MEDIA_ORDER = 'm.is_primary DESC, m.sort_order, m.id';
 
 /** #717. The earlier MLS price of the shown record. Page rows only, never the count. */
-const PRICE_CHANGE_JOIN = `
+export const PRICE_CHANGE_JOIN = `
     LEFT JOIN LATERAL ${priceChangeLateral()} pc ON true`;
 
 const PRIMARY_MEDIA_JOIN = `
@@ -117,7 +117,7 @@ const PRIMARY_MEDIA_JOIN = `
     ) pm ON true`;
 
 /** #382. The unit number that `propertyPath` needs, read only when the view shows the address. */
-const CARD_UNIT_NUMBER = `CASE WHEN v.address IS NULL THEN NULL
+export const CARD_UNIT_NUMBER = `CASE WHEN v.address IS NULL THEN NULL
          ELSE (SELECT u.unit_number FROM units u WHERE u.id = v.unit_id) END AS unit_number`;
 
 /**
