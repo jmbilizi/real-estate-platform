@@ -20,6 +20,7 @@ patches:
 
   ## ConfigMaps (environment-specific overrides)
   - path: patches/configmaps/jaeger.configmap.yaml
+  - path: patches/configmaps/ingress-nginx-controller.configmap.yaml
 
   ## Deployments (stateless applications)
   - path: patches/deployments/api-gateway.deployment.yaml

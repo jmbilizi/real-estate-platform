@@ -7,6 +7,7 @@ import {
 } from '@cribstop/property-contracts';
 import type { ReadClient } from '../listings/repository';
 import { type AnalyticsSink, createSinks, fanOut } from './sink';
+import { startPopularityRefreshTimer } from './popularity';
 
 /**
  * `POST /analytics/events` (#725, #824). Cookieless event counting.
@@ -102,6 +103,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   let inFlight = 0;
   // A timer, not a per-write check, so an idle pod still deletes rows older than the retention window.
   startPurgeTimer(deps.pool);
+  startPopularityRefreshTimer();
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');

@@ -303,6 +303,29 @@ dev/test cribstop-web Ingress
 
 **Note:** These are substituted into Ingress manifest files during deployment (not K8s Secrets).
 
+## Visitor IP and PROXY protocol (#853)
+
+Each Hetzner overlay turns on PROXY protocol at both ends: the Service annotation
+`load-balancer.hetzner.cloud/uses-proxyprotocol` and the ConfigMap key `use-proxy-protocol`.
+`pnpm run infra:validate` fails if one is on without the other, and if local has either. Keep
+`use-forwarded-headers: "false"` (#143).
+
+**Trust.** The load balancer reaches nodes over the private network (`use-private-ip`), and
+`externalTrafficPolicy: Local` keeps the source address. `proxy-real-ip-cidr` is the private subnet
+`10.0.0.0/16`, so nginx ignores a PROXY header from any other peer. `infra:validate` fails if the
+CIDR is missing or `0.0.0.0/0`.
+
+**Rollout.** One `kubectl apply` writes the ConfigMap and the Service. Nginx reloads at once. The
+load balancer changes only after the Cloud Controller Manager reconciles, usually under 2 minutes.
+Between the two, ingress traffic to that environment fails. Expect 1 to 3 minutes of downtime. No
+order avoids it: each side rejects the other while they disagree. Roll out dev, then test, then
+prod, in a quiet window.
+
+**Rollback.** Remove both settings in one commit and deploy. The same gap applies.
+
+**After deploy.** Open the web app in a real browser, then open `/api/geo/region`. Expect the
+visitor's city, not Ashburn. Confirm a certificate renews or a new ingress gets a certificate.
+
 ## 🛠️ Tools Required
 
 ### Local Development

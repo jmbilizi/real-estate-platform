@@ -34,10 +34,10 @@ import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
   applyLandInterlock,
   filtersToSearchParams,
-  parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
 import {
+  type ListingsEnvelope,
   type MapBounds,
   maxReachablePage,
   type NeighborhoodRow,
@@ -46,6 +46,7 @@ import {
 import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { AREA_PARAM, areaToParam } from '@/lib/draw-area';
 import { useListingSearch } from '@/lib/useListingSearch';
+import { parseQueryFilters } from '@/lib/search-place';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
 import { useBrokerGroups, useBrokerName } from '@/lib/useBrokerGroups';
 import { useZipGroups, useZipTotal } from '@/lib/useZipGroups';
@@ -120,6 +121,11 @@ export interface SearchExperienceProps {
    * query string and never into the applied-filter count: the path already says them.
    */
   place?: SearchPathPlace;
+  /**
+   * The first page of results, fetched on the server (#841), so a crawler sees the cards in the
+   * HTML. Used for the first render only. It answers the filters and page of the initial URL.
+   */
+  initialResults?: ListingsEnvelope;
 }
 
 export interface SearchPathPlace {
@@ -135,15 +141,6 @@ export interface SearchPathPlace {
   query?: string;
 }
 
-/** Filters from the query string. On a search path, `type` belongs to the place, not the filters. */
-function parseQueryFilters(params: URLSearchParams, place: SearchPathPlace | undefined) {
-  if (!place) return parseFiltersFromSearchParams(params);
-  const own = new URLSearchParams(params);
-  own.delete('type');
-  own.delete('listingType');
-  return parseFiltersFromSearchParams(own);
-}
-
 /**
  * The search results experience: the split map/grid layout, its filters, sort and paging.
  *
@@ -156,6 +153,7 @@ export default function SearchExperience({
   ownsUrl = true,
   deferred = false,
   place,
+  initialResults,
 }: SearchExperienceProps) {
   const {
     savedHomes,
@@ -561,6 +559,7 @@ export default function SearchExperience({
     requestFilters,
     grouped ? 1 : page,
     !deferred,
+    initialResults,
   );
 
   // Pins carry a listing id, a save keys on the home (#25). Every row of a saved home gets the saved
