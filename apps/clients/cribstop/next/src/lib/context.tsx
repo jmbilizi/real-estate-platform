@@ -304,6 +304,8 @@ export function useApp(): AppContextValue {
           Date.now(),
           listing,
         );
+      } else {
+        trackEvent('listing_unsave', { listingId: listing.id });
       }
       void toggleHome(store, listing, signedIn, notifyError(dispatch));
     },

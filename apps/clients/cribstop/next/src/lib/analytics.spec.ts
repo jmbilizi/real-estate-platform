@@ -42,7 +42,9 @@ describe('analytics', () => {
     expect(url).toBe('/api/events');
     expect(init.keepalive).toBe(true);
     expect(init.credentials).toBe('omit');
-    const body = JSON.parse(init.body);
+    const body = (JSON.parse(init.body) as Record<string, unknown>[]).find(
+      (e) => e['event'] === 'listing_view',
+    ) as Record<string, string>;
     expect(body).toMatchObject({ event: 'listing_view', surface: 'detail' });
     expect(body.anon_id).toBe(getAnonId());
     expect(body.session_id).toMatch(/^[a-f0-9]{32}$/);
