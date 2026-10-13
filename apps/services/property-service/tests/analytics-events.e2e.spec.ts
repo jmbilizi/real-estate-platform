@@ -8,7 +8,7 @@ import { purgeRawAnalyticsEvents } from '../src/analytics/routes';
 
 /**
  * Funnel events (#725) against a REAL service and REAL database: migration 059 up and down, the
- * route, the daily counts, `analytics_funnel_daily_v` and the 30-day purge.
+ * route, the daily counts, `analytics_funnel_daily_v` and the 13-month and 30-day purges (#824).
  * The service must run with `ANALYTICS_ENABLED` unset or true.
  */
 const MIGRATION = '1785801600059_create-analytics-events';
@@ -93,12 +93,24 @@ describe('POST /analytics/events (#725)', () => {
     const raw = await pool().query('SELECT * FROM analytics_events');
     expect(raw.rowCount).toBe(5);
     expect(Object.keys(raw.rows[0]).sort()).toEqual([
+      'anon_id',
+      'app_version',
+      'device',
       'event',
       'id',
       'listing_id',
       'occurred_at',
+      'path_template',
+      'props',
+      'query_text',
+      'referrer_host',
+      'row_id',
+      'schema_version',
       'session_id',
       'surface',
+      'utm_campaign',
+      'utm_medium',
+      'utm_source',
     ]);
 
     const daily = await pool().query(
@@ -144,6 +156,7 @@ describe('POST /analytics/events (#725)', () => {
       { event: 'page_hover', surface: 'detail', sessionId: sid },
       { event: 'search', surface: 'detail', sessionId: sid, query: 'near a good school' },
       { event: 'search', surface: 'sidebar', sessionId: sid },
+      { event: 'page_view', surface: 'home', session_id: sid, email: 'a@b.co' },
       { event: 'search', surface: 'search', sessionId: 'x' },
       { event: 'search', surface: 'search', sessionId: 'a'.repeat(65) },
       { event: 'listing_view', surface: 'detail', sessionId: sid, listingId: 'not-a-uuid' },
@@ -185,25 +198,68 @@ describe('POST /analytics/events (#725)', () => {
     }
   });
 
-  it('purges raw rows older than 30 days and keeps the daily counts', async () => {
+  it('stores a v2 event and counts it by row', async () => {
+    const body = {
+      event: 'feed_impression',
+      surface: 'home',
+      session_id: session(),
+      anon_id: session(),
+      row_id: 'near_you',
+      position: 1,
+      listing_id: randomUUID(),
+      variant: 'control',
+      model_version: 'v1',
+      explore: false,
+      utm_source: 'newsletter',
+    };
+    expect((await post(body)).status).toBe(204);
+    const raw = await pool().query('SELECT row_id, utm_source, props FROM analytics_events');
+    expect(raw.rows).toEqual([
+      {
+        row_id: 'near_you',
+        utm_source: 'newsletter',
+        props: { position: 1, variant: 'control', model_version: 'v1', explore: false },
+      },
+    ]);
+    const daily = await pool().query('SELECT row_id, count::int AS count FROM analytics_daily');
+    expect(daily.rows).toEqual([{ row_id: 'near_you', count: 1 }]);
+  });
+
+  it('purges raw rows older than 13 months and zero-result text older than 30 days, and keeps the daily counts', async () => {
     const sid = session();
     await post({ event: 'search', surface: 'search', sessionId: sid });
+    await post({
+      event: 'search_zero_result_text',
+      surface: 'search',
+      session_id: sid,
+      query_text: 'castle in bethesda',
+    });
     await pool().query(
-      `INSERT INTO analytics_events (occurred_at, event, surface, session_id)
-       VALUES (now() - interval '31 days', 'search', 'search', $1),
-              (now() - interval '29 days', 'search', 'search', $1)`,
+      `INSERT INTO analytics_events (occurred_at, event, surface, session_id, query_text)
+       VALUES (now() - interval '14 months', 'search', 'search', $1, NULL),
+              (now() - interval '12 months', 'search', 'search', $1, NULL),
+              (now() - interval '31 days', 'search_zero_result_text', 'search', $1, 'old text'),
+              (now() - interval '29 days', 'search_zero_result_text', 'search', $1, 'newer text')`,
       [sid],
     );
 
     await purgeRawAnalyticsEvents(pool());
 
     const raw = await pool().query(
-      `SELECT count(*)::int AS n,
-              count(*) FILTER (WHERE occurred_at < now() - interval '30 days')::int AS old
-       FROM analytics_events`,
+      'SELECT event, query_text FROM analytics_events ORDER BY occurred_at',
     );
-    expect(raw.rows).toEqual([{ n: 2, old: 0 }]);
-    const daily = await pool().query('SELECT count::int AS count FROM analytics_daily');
-    expect(daily.rows).toEqual([{ count: 1 }]);
+    expect(raw.rows).toEqual([
+      { event: 'search', query_text: null },
+      { event: 'search_zero_result_text', query_text: 'newer text' },
+      { event: 'search', query_text: null },
+      { event: 'search_zero_result_text', query_text: 'castle in bethesda' },
+    ]);
+    const daily = await pool().query(
+      'SELECT event, count::int AS count FROM analytics_daily ORDER BY event',
+    );
+    expect(daily.rows).toEqual([
+      { event: 'search', count: 1 },
+      { event: 'search_zero_result_text', count: 1 },
+    ]);
   });
 });

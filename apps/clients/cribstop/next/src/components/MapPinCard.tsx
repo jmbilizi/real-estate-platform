@@ -69,7 +69,11 @@ export default function MapPinCard({
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  if (state.status === 'ready') return <ListingCard listing={state.row} />;
+  if (state.status === 'ready') {
+    return (
+      <ListingCard listing={state.row} track={{ listType: 'map', rowId: 'map', position: 0 }} />
+    );
+  }
 
   if (state.status === 'loading') {
     // The same boxes as the card: a 4:3 photo, then the price, the facts and the address lines.

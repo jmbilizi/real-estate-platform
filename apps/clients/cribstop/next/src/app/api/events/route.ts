@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyticsEventRequestSchema } from '@cribstop/property-contracts';
+import {
+  analyticsEventBatchSchema,
+  analyticsEventRequestSchema,
+} from '@cribstop/property-contracts';
 import { fetchGateway } from '@/app/api/_lib/gateway';
 import { clientIpOf } from '@/app/api/_lib/listings-gateway';
 
@@ -13,21 +16,27 @@ import { clientIpOf } from '@/app/api/_lib/listings-gateway';
  */
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const EVENT_TIMEOUT_MS = 3_000;
-const MAX_BODY_BYTES = 1_024;
+const MAX_BODY_BYTES = 32_768;
 
 export async function POST(req: NextRequest) {
   if ((process.env.ANALYTICS_ENABLED ?? 'true').trim().toLowerCase() === 'false') {
     return new NextResponse(null, { status: 204, headers: NO_STORE });
   }
-  // A valid event is under 250 bytes. Refuse a large body before it is read.
+  // A valid event is under 2 KB, and a batch holds 50 at most. Refuse a large body before it is read.
   if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) {
     return NextResponse.json(
       { error: { code: 'invalid_request', message: 'The event is not valid.' } },
       { status: 400, headers: NO_STORE },
     );
   }
+  // Global Privacy Control is an opt-out: store and forward nothing.
+  if (req.headers.get('sec-gpc') === '1') {
+    return new NextResponse(null, { status: 204, headers: NO_STORE });
+  }
   const raw: unknown = await req.json().catch(() => null);
-  const parsed = analyticsEventRequestSchema.safeParse(raw);
+  const parsed = Array.isArray(raw)
+    ? analyticsEventBatchSchema.safeParse(raw)
+    : analyticsEventRequestSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
       { error: { code: 'invalid_request', message: 'The event is not valid.' } },

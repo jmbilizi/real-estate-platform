@@ -7,6 +7,7 @@
 
 export const FEED_PROFILE_KEY = 'cribstop.feedProfile.v1';
 export const PERSONALISE_KEY = 'cribstop.personalise';
+export const ANON_ID_KEY = 'cribstop.anonId.v1';
 export const PERSONALISE_EVENT = 'cribstop:personalise-change';
 export const MAX_PROFILE_ITEMS = 50;
 export const MAX_PROFILE_PLACES = 5;
@@ -57,6 +58,7 @@ export function setPersonalisation(enabled: boolean): void {
     if (enabled) window.localStorage.removeItem(PERSONALISE_KEY);
     else {
       window.localStorage.setItem(PERSONALISE_KEY, 'off');
+      window.localStorage.removeItem(ANON_ID_KEY);
       clearFeedProfile();
     }
   } catch {

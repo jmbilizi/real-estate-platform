@@ -15,6 +15,7 @@ import type { ReadPool } from './listings/repository';
 import { createBrightSyncAdminRouter } from './admin/bright-sync-routes';
 import type { SyncQueryable } from './jobs/bright-sync/store';
 import { createAnalyticsRouter } from './analytics/routes';
+import type { AnalyticsSink } from './analytics/sink';
 import { createInquiriesRouter } from './inquiries/routes';
 import { createLookingForRouter } from './looking-for/routes';
 import { createSavedStateReader } from './saved/identity';
@@ -172,6 +173,8 @@ export interface CreateAppOptions {
   mapPinCap?: number;
   /** Overrides `ANALYTICS_ENABLED` (#725). */
   analyticsEnabled?: () => boolean;
+  /** Overrides the analytics sinks (#824). The first is the system of record. */
+  analyticsSinks?: AnalyticsSink[];
   /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
   adminToken?: () => string | undefined;
 }
@@ -250,6 +253,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     createAnalyticsRouter({
       pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,
       enabled: options.analyticsEnabled,
+      sinks: options.analyticsSinks,
     }),
   );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));

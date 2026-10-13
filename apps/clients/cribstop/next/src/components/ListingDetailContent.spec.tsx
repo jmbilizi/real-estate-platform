@@ -11,6 +11,12 @@ jest.mock('@/lib/context', () => ({
 const mockToast = jest.fn();
 jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: mockToast }) }));
 
+const mockTrackEvent = jest.fn();
+jest.mock('@/lib/analytics', () => ({
+  ...jest.requireActual('@/lib/analytics'),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}));
+
 jest.mock('@/lib/api/listings', () => {
   const actual = jest.requireActual('@/lib/api/listings');
   return {
@@ -37,6 +43,7 @@ const mockedSearchListings = searchListings as jest.Mock;
 
 beforeEach(() => {
   mockToast.mockReset();
+  mockTrackEvent.mockReset();
   mockedSearchListings.mockReset();
   mockedSearchListings.mockResolvedValue({
     results: [],
@@ -357,6 +364,11 @@ describe('ListingDetailContent — Share (#135)', () => {
     expect(share).toHaveBeenCalledTimes(1);
     expect(share.mock.calls[0][0]).toMatchObject({ url: CANONICAL });
     expect(mockToast).not.toHaveBeenCalled();
+    expect(mockTrackEvent).toHaveBeenCalledWith('listing_share', {
+      surface: 'detail',
+      listingId: LISTING_ID,
+      props: { channel: 'native' },
+    });
   });
 
   it('copies the canonical URL and confirms it when the platform has no Web Share API', async () => {
@@ -368,6 +380,11 @@ describe('ListingDetailContent — Share (#135)', () => {
 
     expect(writeText).toHaveBeenCalledWith(CANONICAL);
     expect(mockToast).toHaveBeenCalledWith('Link copied');
+    expect(mockTrackEvent).toHaveBeenCalledWith('listing_share', {
+      surface: 'detail',
+      listingId: LISTING_ID,
+      props: { channel: 'copy' },
+    });
   });
 
   it('falls back to the clipboard when the share sheet fails for a reason other than dismissal', async () => {

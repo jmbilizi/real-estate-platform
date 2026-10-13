@@ -267,13 +267,11 @@ export default function SearchExperience({
     return rest;
   }, [requestFilters]);
   /**
-   * One `search` event per change of the filters. A map pan changes only `bounds`, which `mapFilters`
-   * leaves out, so a pan counts nothing. The event carries no filter value (#725).
+   * One `search` event per change of the filters, sent when the results arrive (below). A map pan
+   * changes only `bounds`, which `mapFilters` leaves out, so a pan counts nothing.
    */
   const searchKey = JSON.stringify(mapFilters);
-  useEffect(() => {
-    trackEvent('search', { surface: 'search' });
-  }, [searchKey]);
+  const sentSearchKey = useRef<string | null>(null);
   /** The neighborhood the view is drilled into: from the neighborhood path, else from the query. */
   const drilledName = requestFilters.neighborhood;
   // Two-phase geocode:
@@ -562,6 +560,20 @@ export default function SearchExperience({
     grouped ? 1 : page,
     !deferred,
   );
+
+  // `useListingSearch` turns `loading` on in its own effect, so the render where `searchKey`
+  // changes still holds the old total. Send only for a key whose request was seen loading.
+  const loadingKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (status === 'loading') loadingKey.current = searchKey;
+    if (status !== 'ready' || loadingKey.current !== searchKey) return;
+    if (sentSearchKey.current === searchKey) return;
+    sentSearchKey.current = searchKey;
+    trackEvent('search', {
+      surface: 'search',
+      props: { result_count: total, is_zero_result: total === 0 },
+    });
+  }, [status, searchKey, total]);
 
   // Pins carry a listing id, a save keys on the home (#25). Every row of a saved home gets the saved
   // pin. A viewport-only pin has no home id, so it shows saved only when it is the listing saved from.
@@ -1287,13 +1299,16 @@ export default function SearchExperience({
             ) : (
               <>
                 <div className={`grid ${RESULTS_GRID_GAP_CLASS} ${RESULTS_GRID_COLUMNS_CLASS}`}>
-                  {results.map((l) => (
+                  {results.map((l, i) => (
                     <div
                       key={l.id}
                       onMouseEnter={() => setHoveredId(l.id)}
                       onMouseLeave={() => setHoveredId(null)}
                     >
-                      <ListingCard listing={l} />
+                      <ListingCard
+                        listing={l}
+                        track={{ listType: 'grid', rowId: 'search', position: i }}
+                      />
                     </div>
                   ))}
                 </div>

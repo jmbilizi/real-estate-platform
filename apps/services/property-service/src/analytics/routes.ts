@@ -1,21 +1,26 @@
 import { type NextFunction, type Request, type Response, Router } from 'express';
 import {
-  type AnalyticsEventRequest,
+  analyticsEventBatchSchema,
   analyticsEventRequestSchema,
   type ErrorBody,
+  normalizeAnalyticsEvent,
 } from '@cribstop/property-contracts';
 import type { ReadClient } from '../listings/repository';
 import { startPopularityRefreshTimer } from './popularity';
+import { type AnalyticsSink, createSinks, fanOut } from './sink';
 
 /**
- * `POST /analytics/events` (#725). Cookieless funnel counting.
+ * `POST /analytics/events` (#725, #824). Cookieless event counting.
  *
- * The handler reads only the parsed body. It never reads a header, the IP or the user agent, so
- * none of them can reach the store. The server stamps the time. `ANALYTICS_ENABLED=false` makes
+ * The handler reads the parsed body and the `Sec-GPC` header. It never reads the IP or the user
+ * agent, so neither can reach the store. `Sec-GPC: 1` makes the route accept the call and store
+ * nothing. The server stamps the time. `ANALYTICS_ENABLED=false` makes
  * the route accept the call and store nothing.
  */
 
-export const RAW_RETENTION_DAYS = 30;
+export const RAW_RETENTION_MONTHS = 13;
+export const ZERO_RESULT_TEXT_RETENTION_DAYS = 30;
+const ZERO_RESULT_EVENT = 'search_zero_result_text';
 /** The purge runs at most this often per process. A DELETE on every write would cost more than it saves. */
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -36,36 +41,35 @@ export function analyticsEnabled(env: NodeJS.ProcessEnv = process.env): boolean 
   return (env.ANALYTICS_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
 }
 
-export async function recordAnalyticsEvent(
-  db: ReadClient,
-  event: AnalyticsEventRequest,
-): Promise<void> {
-  // One statement, so the raw row and the daily count commit together or not at all.
-  await db.query(
-    `WITH raw AS (
-       INSERT INTO analytics_events (event, surface, listing_id, session_id)
-       VALUES ($1, $2, $3, $4)
-     )
-     INSERT INTO analytics_daily (day, event, surface, count)
-     VALUES ((now() AT TIME ZONE 'UTC')::date, $1, $2, 1)
-     ON CONFLICT (day, event, surface) DO UPDATE SET count = analytics_daily.count + 1`,
-    [event.event, event.surface, event.listingId ?? null, event.sessionId],
-  );
-}
-
 const PURGE_BATCH = 5000;
 
-/** Deletes in batches, so each statement stays inside the analytics pool's 1 s statement timeout. */
+/**
+ * Deletes raw rows past retention: zero-result text after 30 days, every other row after 13 months.
+ * The daily count for a row is written when the row is, in the same statement. So the aggregate
+ * always exists before the purge deletes the row. Batches keep each statement inside the analytics
+ * pool's 1 s statement timeout.
+ */
 export async function purgeRawAnalyticsEvents(db: ReadClient): Promise<void> {
-  for (;;) {
-    const { rows } = await db.query<{ id: string }>(
-      `DELETE FROM analytics_events WHERE id IN (
-         SELECT id FROM analytics_events
-         WHERE occurred_at < now() - make_interval(days => $1::int) LIMIT $2
-       ) RETURNING id`,
-      [RAW_RETENTION_DAYS, PURGE_BATCH],
-    );
-    if (rows.length < PURGE_BATCH) return;
+  const rules = [
+    {
+      where: `event = '${ZERO_RESULT_EVENT}' AND occurred_at < now() - make_interval(days => $1::int)`,
+      age: ZERO_RESULT_TEXT_RETENTION_DAYS,
+    },
+    {
+      where: 'occurred_at < now() - make_interval(months => $1::int)',
+      age: RAW_RETENTION_MONTHS,
+    },
+  ];
+  for (const { where, age } of rules) {
+    for (;;) {
+      const { rows } = await db.query<{ id: string }>(
+        `DELETE FROM analytics_events WHERE id IN (
+           SELECT id FROM analytics_events WHERE ${where} LIMIT $2
+         ) RETURNING id`,
+        [age, PURGE_BATCH],
+      );
+      if (rows.length < PURGE_BATCH) break;
+    }
   }
 }
 
@@ -88,19 +92,27 @@ export interface AnalyticsRouterDeps {
   pool: ReadClient;
   /** Read per request so a test or an operator can switch it without a new router. */
   enabled?: () => boolean;
+  /** The first sink is the system of record. Defaults to the database sink. */
+  sinks?: AnalyticsSink[];
 }
 
 export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   const router = Router();
   const enabled = deps.enabled ?? (() => analyticsEnabled());
+  const sink = fanOut(deps.sinks ?? createSinks(deps.pool));
   let inFlight = 0;
-  // A timer, not a per-write check, so an idle pod still deletes rows older than 30 days.
+  // A timer, not a per-write check, so an idle pod still deletes rows older than the retention window.
   startPurgeTimer(deps.pool);
   startPopularityRefreshTimer();
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');
-    const parsed = analyticsEventRequestSchema.safeParse(req.body);
+    // The one header the route reads is Sec-GPC. A visitor who sends it has opted out.
+    const optedOut = req.get('Sec-GPC') === '1';
+    const batch = Array.isArray(req.body);
+    const parsed = batch
+      ? analyticsEventBatchSchema.safeParse(req.body)
+      : analyticsEventRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       const unknown = new Set<string>();
       for (const issue of parsed.error.issues) {
@@ -119,7 +131,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
         );
       return;
     }
-    if (!enabled()) {
+    if (!enabled() || optedOut) {
       res.status(204).end();
       return;
     }
@@ -129,7 +141,14 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
       return;
     }
     inFlight += 1;
-    recordAnalyticsEvent(deps.pool, parsed.data)
+    const events = (Array.isArray(parsed.data) ? parsed.data : [parsed.data]).map(
+      normalizeAnalyticsEvent,
+    );
+    events
+      .reduce<Promise<void>>(
+        (done, event) => done.then(() => sink.record(event)),
+        Promise.resolve(),
+      )
       .then(() => {
         res.status(204).end();
       })

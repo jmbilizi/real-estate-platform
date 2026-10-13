@@ -80,6 +80,12 @@ jest.mock('@/lib/context', () => ({
   useApp: () => mockAppContext,
 }));
 
+const mockTrackEvent = jest.fn();
+jest.mock('@/lib/analytics', () => ({
+  ...jest.requireActual('@/lib/analytics'),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}));
+
 const mockedSearchListings = searchListings as jest.Mock;
 
 const envelope = () => ({
@@ -674,5 +680,53 @@ describe('an empty result set is not a failure and not a load', () => {
     const empty = await screen.findByTestId('search-empty-state');
     expect(empty).toHaveTextContent('No homes to show here');
     expect(screen.queryByRole('button', { name: 'Clear all filters' })).not.toBeInTheDocument();
+  });
+});
+
+describe('search analytics (#826)', () => {
+  beforeEach(() => mockTrackEvent.mockReset());
+
+  const searchCalls = () => mockTrackEvent.mock.calls.filter(([name]) => name === 'search');
+
+  it('sends one search event with the result count when results arrive', async () => {
+    mockedSearchListings.mockResolvedValue({
+      ...envelope(),
+      results: [aListingCardRow()],
+      total: 1,
+    });
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    expect(searchCalls()[0][1]).toEqual({
+      surface: 'search',
+      props: { result_count: 1, is_zero_result: false },
+    });
+  });
+
+  it('flags a zero-result search and carries no query text', async () => {
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+    render(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    expect(searchCalls()[0][1].props).toEqual({ result_count: 0, is_zero_result: true });
+    expect(JSON.stringify(mockTrackEvent.mock.calls)).not.toContain('Alexandria');
+  });
+
+  it('sends the new count after a filter change, not the old one', async () => {
+    mockedSearchListings.mockResolvedValue({
+      ...envelope(),
+      results: [aListingCardRow(), aListingCardRow({ id: 'second' })],
+      total: 2,
+    });
+    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+    rerender(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(2));
+    expect(searchCalls()[1][1].props).toEqual({ result_count: 0, is_zero_result: true });
+  });
+
+  it('sends nothing while the request is still loading', () => {
+    mockedSearchListings.mockReturnValue(new Promise(() => undefined));
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    expect(searchCalls()).toHaveLength(0);
   });
 });
