@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { homeFeedResponseSchema } from '@cribstop/property-contracts';
+import { findFallbackCandidates } from '../src/home-feed/candidates';
 import { closePool, getPool } from '../src/db/pool';
 import {
   COLLAPSE_CITY,
@@ -158,6 +159,14 @@ describe('POST /home-feed (#835)', () => {
     const response = await feed({ ...BODY, radiusKm: null });
     expect(response.status).toBe(200);
     homeFeedResponseSchema.parse(response.data);
+  });
+
+  it('runs the fallback read against the real schema', async () => {
+    const candidates = await findFallbackCandidates(pool as never, {
+      side: 'sale',
+      state: COLLAPSE_STATE,
+    });
+    expect(Array.isArray(candidates)).toBe(true);
   });
 
   it('rejects an unknown field with 400', async () => {

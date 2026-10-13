@@ -6,6 +6,7 @@ import {
   mediaVisibleSql,
   PRICE_CHANGE_JOIN,
   PRIMARY_MEDIA_ORDER,
+  type ReadClient,
   type ReadPool,
 } from '../listings/repository';
 import { applyCardAddressSuppression } from '../listings/suppression';
@@ -89,6 +90,13 @@ const PRIMARY_MEDIA_JOIN = `
       LIMIT 1
     ) pm ON true`;
 
+const FALLBACK_LIMIT = 100;
+
+const OUTER_SELECT = `SELECT ${LISTING_CARD_SELECT}, ${FEED_EXTRA_COLUMNS.join(', ')}, ${CARD_UNIT_NUMBER}
+    FROM ids
+    JOIN listing_search_v v ON v.id = ids.id${PRIMARY_MEDIA_JOIN}${PRICE_CHANGE_JOIN}
+    LEFT JOIN listing_popularity_14d pop ON pop.listing_id = v.id`;
+
 /** Builds the statement and its parameters. Exported for the plan test. */
 export function buildCandidateSql(query: CandidateQuery): { text: string; params: unknown[] } {
   const params: unknown[] = [];
@@ -136,10 +144,32 @@ export function buildCandidateSql(query: CandidateQuery): { text: string; params
         SELECT * FROM base UNION ALL SELECT * FROM drops UNION ALL SELECT * FROM fresh
       ) u GROUP BY id
     )
-    SELECT ${LISTING_CARD_SELECT}, ${FEED_EXTRA_COLUMNS.join(', ')}, ${CARD_UNIT_NUMBER}
-    FROM ids
-    JOIN listing_search_v v ON v.id = ids.id${PRIMARY_MEDIA_JOIN}${PRICE_CHANGE_JOIN}
-    LEFT JOIN listing_popularity_14d pop ON pop.listing_id = v.id`;
+    ${OUTER_SELECT}`;
+  return { text, params };
+}
+
+/**
+ * The degraded read (#835). It starts from the small popularity view, so it stays cheap when the
+ * personalised query times out. Same visibility, collapse and photo rules. No personal signal.
+ */
+export function buildFallbackSql(query: { side: 'sale' | 'rent'; state: string }): {
+  text: string;
+  params: unknown[];
+} {
+  const params = [query.side, ['Active', 'Coming Soon'], query.state];
+  const text = `
+    WITH ids AS (
+      SELECT v.id, NULL::double precision AS dist_km
+      FROM listing_popularity_14d pop
+      JOIN listing_search_v v ON v.id = pop.listing_id
+      WHERE v.listing_type = $1 AND v.status = ANY($2) AND lower(v.state) = lower($3)
+        AND EXISTS (SELECT 1 FROM listing_media m WHERE m.listing_id = v.id
+                      AND m.source_url IS NOT NULL AND ${MEDIA_VISIBLE})
+        AND ${collapseCondition()}
+      ORDER BY pop.score DESC, v.id
+      LIMIT ${FALLBACK_LIMIT}
+    )
+    ${OUTER_SELECT}`;
   return { text, params };
 }
 
@@ -213,21 +243,44 @@ export async function findFeedCandidates(
   query: Omit<CandidateQuery, 'centre'> & { centre?: Centre | null },
   now: number,
 ): Promise<Candidate[]> {
+  return withReadTimeout(pool, async (client) => {
+    const centre = query.centre ?? (await resolveCentre(client, query.city, query.state, now));
+    // Whole-state mode needs no centre. Distance is then unknown and the geo feature is 0.
+    if (centre === null && query.radiusKm !== null) return [];
+    const { text, params } = buildCandidateSql({ ...query, centre });
+    const result = await client.query<FeedCandidateRow>(text, params);
+    return result.rows.map(toCandidate);
+  });
+}
+
+/** Popularity-ordered candidates of the state. No centre, no personal signal. */
+export async function findFallbackCandidates(
+  pool: ReadPool,
+  query: { side: 'sale' | 'rent'; state: string },
+): Promise<Candidate[]> {
+  return withReadTimeout(pool, async (client) => {
+    const { text, params } = buildFallbackSql(query);
+    const result = await client.query<FeedCandidateRow>(text, params);
+    return result.rows.map(toCandidate);
+  });
+}
+
+/**
+ * One read-only transaction on one pooled connection, with the statement timeout every feed read
+ * shares (#755). A timeout rejects and rolls back.
+ */
+export async function withReadTimeout<T>(
+  pool: ReadPool,
+  work: (client: ReadClient) => Promise<T>,
+): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN READ ONLY');
     await client.query(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
     await client.query(DISABLE_JIT_SQL);
-    const centre = query.centre ?? (await resolveCentre(client, query.city, query.state, now));
-    // Whole-state mode needs no centre. Distance is then unknown and the geo feature is 0.
-    if (centre === null && query.radiusKm !== null) {
-      await client.query('COMMIT');
-      return [];
-    }
-    const { text, params } = buildCandidateSql({ ...query, centre });
-    const result = await client.query<FeedCandidateRow>(text, params);
+    const result = await work(client);
     await client.query('COMMIT');
-    return result.rows.map(toCandidate);
+    return result;
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;

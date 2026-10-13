@@ -1,7 +1,17 @@
-import type { HomeFeedRequest, HomeFeedResponse, HomeFeedRow } from '@cribstop/property-contracts';
+import type {
+  HomeFeedRequest,
+  HomeFeedResponse,
+  HomeFeedRow,
+  ListingCardRow,
+} from '@cribstop/property-contracts';
 import { findListingCardsByIds, type ReadPool } from '../listings/repository';
-import { findFeedCandidates } from './candidates';
-import { buildProfileModel, EMPTY_MODEL, type ProfilePoint } from './ranker/features';
+import { findFallbackCandidates, findFeedCandidates, withReadTimeout } from './candidates';
+import {
+  buildProfileModel,
+  type Candidate,
+  EMPTY_MODEL,
+  type ProfilePoint,
+} from './ranker/features';
 import { buildRows } from './ranker/rows';
 import { MODEL_VERSION } from './ranker/v1-weights';
 
@@ -20,6 +30,44 @@ export interface FeedDeps {
 }
 
 const WARM_VIEWS = 3;
+
+const FALLBACK_VARIANT = 'fallback';
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * The degraded feed: popularity-ordered listings of the state, cold row order, no personal
+ * signal, `variant: "fallback"`. It is never cached. If this read fails too, the rows are empty.
+ */
+async function buildFallbackFeed(
+  pool: ReadPool,
+  request: HomeFeedRequest,
+  place: string,
+  now: number,
+  rng: () => number,
+): Promise<HomeFeedResponse> {
+  let candidates: Candidate[] = [];
+  try {
+    candidates = await findFallbackCandidates(pool, {
+      side: request.side,
+      state: request.target.state,
+    });
+  } catch (error) {
+    console.warn('Home feed fallback read failed:', errorMessage(error));
+  }
+  const rows = buildRows({
+    candidates,
+    model: EMPTY_MODEL,
+    warm: false,
+    place,
+    radiusKm: null,
+    variant: FALLBACK_VARIANT,
+    now,
+    rng,
+  });
+  return { modelVersion: MODEL_VERSION, variant: FALLBACK_VARIANT, rows };
+}
 
 /**
  * Ranks one visitor's home feed. The profile arrives in the request, is read here and is never
@@ -50,7 +98,13 @@ export async function buildHomeFeed(
 
   const sideItems = items.filter((item) => item.side === request.side);
   const ids = [...new Set(sideItems.map((item) => item.listingId))];
-  const cards = await findListingCardsByIds(pool, ids);
+  // A failed profile read costs personalisation, never the feed.
+  const cards = await withReadTimeout(pool, (client) => findListingCardsByIds(client, ids)).catch(
+    (error: unknown) => {
+      console.warn('Home feed profile read failed:', errorMessage(error));
+      return new Map<string, ListingCardRow>();
+    },
+  );
   const points: ProfilePoint[] = [];
   for (const item of sideItems) {
     const card = cards.get(item.listingId);
@@ -68,17 +122,23 @@ export async function buildHomeFeed(
     request.target.lat !== undefined && request.target.lng !== undefined
       ? { lat: request.target.lat, lng: request.target.lng }
       : null;
-  const candidates = await findFeedCandidates(
-    pool,
-    {
-      side: request.side,
-      city: request.target.city,
-      state: request.target.state,
-      centre,
-      radiusKm: request.radiusKm,
-    },
-    now,
-  );
+  let candidates: Candidate[];
+  try {
+    candidates = await findFeedCandidates(
+      pool,
+      {
+        side: request.side,
+        city: request.target.city,
+        state: request.target.state,
+        centre,
+        radiusKm: request.radiusKm,
+      },
+      now,
+    );
+  } catch (error) {
+    console.warn('Home feed candidate read failed, serving the fallback:', errorMessage(error));
+    return buildFallbackFeed(pool, request, place, now, rng);
+  }
 
   const rows = buildRows({
     candidates,
