@@ -495,12 +495,6 @@ export default function AuthForm({
               )}
               {!loginFailed && notice && <p role="status">{notice}</p>}
             </div>
-
-            <div className="flex justify-center text-sm">
-              <button type="button" onClick={() => goToStep('email')} className={linkButton}>
-                Change email
-              </button>
-            </div>
           </form>
         )}
 
