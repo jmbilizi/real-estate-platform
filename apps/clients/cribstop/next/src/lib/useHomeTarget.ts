@@ -10,10 +10,11 @@ import {
   placeFromLookingFor,
   roundCoordinate,
   sameVisitRefineEnabled,
+  fresh as searchIsFresh,
   type TargetPlace,
   type TimedPlace,
 } from '@/lib/home-target';
-import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
+import { getVisitStart, isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
 import licensedMarkets from '@/config/licensed-markets.json';
 
 /** Longest wait for a granted position. After it, lower sources decide and a late fix refreshes. */
@@ -142,7 +143,6 @@ function useLookingForPlace(signedIn: boolean): Settled<TargetPlace> {
 }
 
 const LOAD_COUNTER_KEY = 'cribstop.homeLoads';
-const VISIT_START_KEY = 'cribstop.visitStart';
 
 /** A counter in this browser. It rotates the cold-start market. It holds no personal data. */
 function nextLoadIndex(): number {
@@ -152,19 +152,6 @@ function nextLoadIndex(): number {
     return n;
   } catch {
     return Math.floor(Date.now() / 1000);
-  }
-}
-
-/** Epoch ms of the first home load in this tab session. */
-function readVisitStart(): number {
-  try {
-    const stored = Number(window.sessionStorage.getItem(VISIT_START_KEY));
-    if (stored) return stored;
-    const now = Date.now();
-    window.sessionStorage.setItem(VISIT_START_KEY, String(now));
-    return now;
-  } catch {
-    return Date.now();
   }
 }
 
@@ -188,7 +175,7 @@ function readLocalSignals(): LocalSignals {
     saved: items.filter((i) => i.kind === 'save').map(place),
     viewed: items.filter((i) => i.kind === 'view').map(place),
     loadIndex: nextLoadIndex(),
-    visitStart: readVisitStart(),
+    visitStart: getVisitStart(),
     refine: sameVisitRefineEnabled(),
   };
 }
@@ -258,9 +245,20 @@ export function useHomeTarget(opts: {
     'rotation',
   ];
   const winnerRank = target ? order.indexOf(target.source) : order.length;
-  // A weak winner also waits for a pending source, so a stale search or the cold-start rotation
-  // does not flash before the IP region arrives.
-  const weak = !target || target.confidence < CONFIDENCE_MID;
+  // A weak winner, or one from views alone, also waits for a pending source. A stale search,
+  // the cold-start rotation or a few views then do not flash before a better source arrives.
+  // A search or position the visitor gave never waits.
+  const precedence =
+    target?.source === 'explicit' ||
+    target?.source === 'geolocation' ||
+    target?.source === 'visit-views' ||
+    (target?.source === 'last-search' &&
+      !!lastSearch.value &&
+      searchIsFresh(lastSearch.value, Date.now()));
+  const weak =
+    !target ||
+    target.source === 'viewed-homes' ||
+    (target.confidence < CONFIDENCE_MID && !precedence);
   const loading = pendingByRank.some(
     ([source, pending]) => pending && (weak || order.indexOf(source) < winnerRank),
   );

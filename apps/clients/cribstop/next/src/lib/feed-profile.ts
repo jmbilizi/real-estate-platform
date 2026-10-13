@@ -94,6 +94,7 @@ export function recordFeedItem(
   place?: { city?: string | null; state?: string | null },
 ): void {
   if (!listingId || !isPersonalisationEnabled()) return;
+  getVisitStart();
   try {
     const existing = readItems();
     const wasSaved = existing.some((i) => i.listingId === listingId && i.kind === 'save');
@@ -110,6 +111,20 @@ export function recordFeedItem(
   } catch {
     // A full or blocked store must not affect the page.
   }
+}
+
+const VISIT_START_KEY = 'cribstop.visitStart';
+
+/** Epoch ms of the first listing view or home load in this tab session. */
+export function getVisitStart(now: number = Date.now()): number {
+  try {
+    const stored = Number(window.sessionStorage.getItem(VISIT_START_KEY));
+    if (stored) return stored;
+    window.sessionStorage.setItem(VISIT_START_KEY, String(now));
+  } catch {
+    // Storage is blocked. The visit then starts now.
+  }
+  return now;
 }
 
 export function clearFeedProfile(): void {

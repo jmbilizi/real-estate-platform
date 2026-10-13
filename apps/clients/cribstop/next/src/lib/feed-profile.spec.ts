@@ -2,6 +2,7 @@ import {
   clearFeedProfile,
   FEED_PROFILE_KEY,
   getFeedRequestProfile,
+  getVisitStart,
   isPersonalisationEnabled,
   MAX_PROFILE_ITEMS,
   readItems,
@@ -52,6 +53,16 @@ describe('feed profile', () => {
     expect(getFeedRequestProfile()!.items).toEqual([
       { listingId: 'a', kind: 'view', side: 'sale', at: 5 },
     ]);
+  });
+
+  it('starts the visit at the first recorded item and keeps it', () => {
+    window.sessionStorage.clear();
+    const before = Date.now();
+    recordFeedItem('a', 'view');
+    const start = getVisitStart();
+    expect(start).toBeGreaterThanOrEqual(before);
+    recordFeedItem('b', 'view');
+    expect(getVisitStart()).toBe(start);
   });
 
   it('writes and sends nothing when the switch is off, and deletes the stored profile', () => {

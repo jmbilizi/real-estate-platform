@@ -55,7 +55,7 @@ function usable(place: TargetPlace | null | undefined): place is TargetPlace {
   return !!place && !!place.city?.trim() && /^[A-Za-z]{2}$/.test(place.state ?? '');
 }
 
-function fresh(search: LastSearch, now: number): boolean {
+export function fresh(search: LastSearch, now: number): boolean {
   if (search.searchedAt == null) return true;
   return now - search.searchedAt <= LAST_SEARCH_MAX_AGE_DAYS * DAY_MS;
 }
