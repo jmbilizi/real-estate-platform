@@ -12,8 +12,11 @@ import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow, ListingsMeta } from '@/lib/types';
-import { addressCity, addressState, searchTargetUrl } from '@/lib/search-place';
+import { searchTargetUrl } from '@/lib/search-place';
 import { formatRelativeTime } from '@/lib/format';
+import { homeTargetDebugEnabled, type InferredTarget, prefersRentFirst } from '@/lib/home-target';
+import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
+import { useHomeTarget } from '@/lib/useHomeTarget';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import {
@@ -54,59 +57,32 @@ function lastSearchedSide(): ListingSide | null {
   return latestRecentSearch()?.listingType === 'rent' ? 'rent' : null;
 }
 
-/** True once the client has read a rent last search. `false` until then (and forever if there is
- *  none) — server render always sees no history. */
+/** True once the client has read a rent last search, or mostly rent views in 7 days. `false` until
+ *  then (and forever if there is none) — server render always sees no history. */
 function useRentFirst(): boolean {
   const [rentFirst, setRentFirst] = useState(false);
   useEffect(() => {
-    setRentFirst(lastSearchedSide() === 'rent');
+    const views = isPersonalisationEnabled()
+      ? readItems()
+          .filter((i) => i.kind === 'view')
+          .map((i) => ({ side: i.side, at: i.at }))
+      : [];
+    setRentFirst(prefersRentFirst({ lastSearchSide: lastSearchedSide(), views }));
   }, []);
   return rentFirst;
 }
 
-/** A place to scope a row's query by (#416): a place-named row must be that place's own count,
- *  never a platform-wide one. `null` when the visitor has never searched — never a guessed or
- *  IP-derived location. */
-function lastSearchedPlace(): { city: string; state: string } | null {
-  const address = latestRecentSearch()?.address ?? {};
-  const city = addressCity(address);
-  const state = addressState(address);
-  return city && state ? { city, state } : null;
-}
-
-/** Client-only, like `useRentFirst`: server render always sees no place. */
-function useLastSearchedPlace(): { city: string; state: string } | null {
-  const [place, setPlace] = useState<{ city: string; state: string } | null>(null);
-  useEffect(() => {
-    setPlace(lastSearchedPlace());
-  }, []);
-  return place;
-}
-
-/** A resolved visitor region (#363): city/state granularity only, never coordinates. */
+/** A place a row scopes to. `InferredTarget` adds the source, confidence and radius (`lib/home-target.ts`). */
 type Region = { city: string; state: string };
 
-type RegionState = { region: Region | null; loading: boolean };
-
-/**
- * Fetches the visitor's IP region once per page load, through the Next.js proxy route
- * (`/api/geo/region`), which already reduces the gateway's response to `{ city, state } | null` —
- * a non-US region, a 204, or a failed lookup all arrive here as `null`. One fetch, shared by every
- * row below that scopes itself to the region, rather than each row fetching its own.
- */
-function useRegion(): RegionState {
-  const [state, setState] = useState<RegionState>({ region: null, loading: true });
-
+/** Logs which source a row used. Off unless the debug flag is set. */
+function useTargetDebug(row: string, target: InferredTarget | null) {
   useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/geo/region', { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((region: Region | null) => setState({ region, loading: false }))
-      .catch(() => setState({ region: null, loading: false }));
-    return () => controller.abort();
-  }, []);
-
-  return state;
+    if (!target || !homeTargetDebugEnabled()) return;
+    console.info(
+      `[home-target] ${row}: ${target.source} ${target.city}, ${target.state} C=${target.confidence.toFixed(2)} r=${target.radiusKm ?? 'state'}`,
+    );
+  }, [row, target]);
 }
 
 type CarouselState = {
@@ -155,6 +131,8 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
     }
 
     const controller = new AbortController();
+    // A moved target shows the skeleton, which has the card row's height, so the layout holds.
+    // Old cards never stay under a new place title.
     setState({ listings: [], total: 0, loading: true, failed: false });
 
     // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
@@ -396,6 +374,12 @@ const NEAR_YOU_TITLE: Record<ListingSide, string> = {
   rent: 'Rentals near you',
 };
 
+/** The cold-start market (#834) is not the visitor's place, so its row does not say "near you". */
+const MARKET_TITLE: Record<ListingSide, string> = {
+  sale: 'Homes for sale',
+  rent: 'Rentals',
+};
+
 /** "Near you" (#363): the home page's first row. One stable component throughout — its query
  *  goes from skipped to region-scoped in place, rather than swapping in a freshly-mounted child
  *  once the region resolves. Hidden while the region is unknown or absent, and while it resolves
@@ -407,9 +391,10 @@ function NearYouRow({
   regionLoading,
 }: {
   side: ListingSide;
-  region: Region | null;
+  region: InferredTarget | null;
   regionLoading: boolean;
 }) {
+  useTargetDebug(`near-you-${side}`, region);
   const { listings, total, loading } = useCarouselListings(
     {
       listingType: side,
@@ -428,7 +413,8 @@ function NearYouRow({
 
   return (
     <ListingRow
-      title={NEAR_YOU_TITLE[side]}
+      title={region?.source === 'rotation' ? MARKET_TITLE[side] : NEAR_YOU_TITLE[side]}
+      targetSource={region?.source}
       href={
         region
           ? searchTargetUrl(
@@ -539,6 +525,7 @@ function SavedLikeRow({
     <ListingRow
       // The saved read has not settled yet, so no city exists. The skeleton shows the generic title.
       title={save ? `More homes in ${save.city}` : 'More homes like the ones you saved'}
+      targetSource={save ? 'saved-home' : undefined}
       href={
         save
           ? searchTargetUrl(
@@ -568,18 +555,30 @@ const COMING_SOON_TITLE: Record<ListingSide, string> = {
 };
 
 /** "Coming soon" (#392): listed early, showings not started. Hidden while empty and settled. */
-function ComingSoonRow({ side }: { side: ListingSide }) {
-  const place = useLastSearchedPlace();
-  // Scoped to the visitor's own last-searched place (#416) even with no subtitle to name it —
-  // relevance the copy doesn't have to spell out.
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    status: ['Coming Soon'],
-    sort: 'newest',
-    listingType: side,
-    pageSize: CAROUSEL_PAGE_SIZE,
-    city: place?.city,
-    state: place?.state,
-  });
+function ComingSoonRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug(`coming-soon-${side}`, place);
+  // Scoped to the home target even with no subtitle to name it. While the target resolves, the
+  // row waits. With no target at all, it shows the platform-wide row.
+  const { listings, total, loading, failed, refetch } = useCarouselListings(
+    {
+      status: ['Coming Soon'],
+      sort: 'newest',
+      listingType: side,
+      pageSize: CAROUSEL_PAGE_SIZE,
+      city: place?.city,
+      state: place?.state,
+    },
+    placeLoading,
+    placeLoading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -587,6 +586,7 @@ function ComingSoonRow({ side }: { side: ListingSide }) {
   return (
     <ListingRow
       title={COMING_SOON_TITLE[side]}
+      targetSource={place?.source}
       href={searchHref(side, {
         status: 'Coming Soon',
         ...(place ? { city: place.city, state: place.state } : {}),
@@ -689,27 +689,40 @@ function PriceSortToggle({
  * "Cheapest homes for sale" / "Priciest rentals" (#478): a pure price sort with no price cap, so
  * the row never empties because of one. The toggle re-queries this one carousel. A seller-withheld
  * price sorts last in both directions and the floor drops it, so it never shows. Scoped to the
- * visitor's last searched place, else the IP region, like the other rows.
+ * home target, like the other rows.
  */
-function PriceSortRow({ side, region }: { side: ListingSide; region: Region | null }) {
+function PriceSortRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
   const [sort, setSort] = useState<PriceSort>('price-asc');
-  const place = useLastSearchedPlace() ?? region;
+  useTargetDebug(`price-sort-${side}`, place);
 
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    listingType: side,
-    sort,
-    minPrice: PRICE_FLOOR[side],
-    ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES } : {}),
-    pageSize: CAROUSEL_PAGE_SIZE,
-    city: place?.city,
-    state: place?.state,
-  });
+  const { listings, total, loading, failed, refetch } = useCarouselListings(
+    {
+      listingType: side,
+      sort,
+      minPrice: PRICE_FLOOR[side],
+      ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES } : {}),
+      pageSize: CAROUSEL_PAGE_SIZE,
+      city: place?.city,
+      state: place?.state,
+    },
+    placeLoading,
+    placeLoading,
+  );
 
   if (!loading && !failed && total === 0) return null;
 
   return (
     <ListingRow
       title={PRICE_SORT_TITLE[side][sort]}
+      targetSource={place?.source}
       // "See all" carries the same floor and types, so the search page matches the row.
       href={searchHref(side, {
         sort,
@@ -815,9 +828,13 @@ function TrustBlock() {
  */
 export default function HomePageContent() {
   const rentFirst = useRentFirst();
-  const { region, loading: regionLoading } = useRegion();
   const { user, savedPropertyIds } = useApp();
   const { save: latestSave, loading: saveLoading } = useLatestSave(user?.email ?? null);
+  const { target: region, loading: regionLoading } = useHomeTarget({
+    signedIn: !!user,
+    savedHome: latestSave ? { city: latestSave.city, state: latestSave.state } : null,
+    savedPending: saveLoading,
+  });
   const savedLike = user ? (
     <SavedLikeRow
       key="saved-like"
@@ -834,13 +851,17 @@ export default function HomePageContent() {
     <NearYouRow key="near-you-rent" side="rent" region={region} regionLoading={regionLoading} />
   );
   const justListedSale = <JustListedRow key="just-listed-sale" side="sale" />;
-  const comingSoonSale = <ComingSoonRow key="coming-soon-sale" side="sale" />;
+  const comingSoonSale = (
+    <ComingSoonRow key="coming-soon-sale" side="sale" place={region} placeLoading={regionLoading} />
+  );
   const priceDrops = <PriceDropsRow key="price-drops" />;
   const justListedRent = <JustListedRow key="just-listed-rent" side="rent" />;
-  const comingSoonRent = <ComingSoonRow key="coming-soon-rent" side="rent" />;
+  const comingSoonRent = (
+    <ComingSoonRow key="coming-soon-rent" side="rent" place={region} placeLoading={regionLoading} />
+  );
 
   const priceSortRows = (rentFirst ? (['rent', 'sale'] as const) : (['sale', 'rent'] as const)).map(
-    (side) => <PriceSortRow key={side} side={side} region={region} />,
+    (side) => <PriceSortRow key={side} side={side} place={region} placeLoading={regionLoading} />,
   );
 
   const rows = rentFirst

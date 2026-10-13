@@ -34,10 +34,10 @@ import FilterModal, { countActiveFilters } from '@/components/FilterModal';
 import {
   applyLandInterlock,
   filtersToSearchParams,
-  parseFiltersFromSearchParams,
   parsePageFromSearchParams,
 } from '@/lib/listing-filters';
 import {
+  type ListingsEnvelope,
   type MapBounds,
   maxReachablePage,
   type NeighborhoodRow,
@@ -46,6 +46,7 @@ import {
 import { formatBounds, roundBounds, sameBounds, VIEWPORT_PARAM } from '@/lib/map-bounds';
 import { AREA_PARAM, areaToParam } from '@/lib/draw-area';
 import { useListingSearch } from '@/lib/useListingSearch';
+import { parseQueryFilters } from '@/lib/search-place';
 import { useNeighborhoodGroups } from '@/lib/useNeighborhoodGroups';
 import { useBrokerGroups, useBrokerName } from '@/lib/useBrokerGroups';
 import { useZipGroups, useZipTotal } from '@/lib/useZipGroups';
@@ -120,6 +121,11 @@ export interface SearchExperienceProps {
    * query string and never into the applied-filter count: the path already says them.
    */
   place?: SearchPathPlace;
+  /**
+   * The first page of results, fetched on the server (#841), so a crawler sees the cards in the
+   * HTML. Used for the first render only. It answers the filters and page of the initial URL.
+   */
+  initialResults?: ListingsEnvelope;
 }
 
 export interface SearchPathPlace {
@@ -135,15 +141,6 @@ export interface SearchPathPlace {
   query?: string;
 }
 
-/** Filters from the query string. On a search path, `type` belongs to the place, not the filters. */
-function parseQueryFilters(params: URLSearchParams, place: SearchPathPlace | undefined) {
-  if (!place) return parseFiltersFromSearchParams(params);
-  const own = new URLSearchParams(params);
-  own.delete('type');
-  own.delete('listingType');
-  return parseFiltersFromSearchParams(own);
-}
-
 /**
  * The search results experience: the split map/grid layout, its filters, sort and paging.
  *
@@ -156,6 +153,7 @@ export default function SearchExperience({
   ownsUrl = true,
   deferred = false,
   place,
+  initialResults,
 }: SearchExperienceProps) {
   const {
     savedHomes,
@@ -267,13 +265,11 @@ export default function SearchExperience({
     return rest;
   }, [requestFilters]);
   /**
-   * One `search` event per change of the filters. A map pan changes only `bounds`, which `mapFilters`
-   * leaves out, so a pan counts nothing. The event carries no filter value (#725).
+   * One `search` event per change of the filters, sent when the results arrive (below). A map pan
+   * changes only `bounds`, which `mapFilters` leaves out, so a pan counts nothing.
    */
   const searchKey = JSON.stringify(mapFilters);
-  useEffect(() => {
-    trackEvent('search', { surface: 'search' });
-  }, [searchKey]);
+  const sentSearchKey = useRef<string | null>(null);
   /** The neighborhood the view is drilled into: from the neighborhood path, else from the query. */
   const drilledName = requestFilters.neighborhood;
   // Two-phase geocode:
@@ -561,7 +557,22 @@ export default function SearchExperience({
     requestFilters,
     grouped ? 1 : page,
     !deferred,
+    initialResults,
   );
+
+  // `useListingSearch` turns `loading` on in its own effect, so the render where `searchKey`
+  // changes still holds the old total. Send only for a key whose request was seen loading.
+  const loadingKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (status === 'loading') loadingKey.current = searchKey;
+    if (status !== 'ready' || loadingKey.current !== searchKey) return;
+    if (sentSearchKey.current === searchKey) return;
+    sentSearchKey.current = searchKey;
+    trackEvent('search', {
+      surface: 'search',
+      props: { result_count: total, is_zero_result: total === 0 },
+    });
+  }, [status, searchKey, total]);
 
   // Pins carry a listing id, a save keys on the home (#25). Every row of a saved home gets the saved
   // pin. A viewport-only pin has no home id, so it shows saved only when it is the listing saved from.
@@ -1287,13 +1298,16 @@ export default function SearchExperience({
             ) : (
               <>
                 <div className={`grid ${RESULTS_GRID_GAP_CLASS} ${RESULTS_GRID_COLUMNS_CLASS}`}>
-                  {results.map((l) => (
+                  {results.map((l, i) => (
                     <div
                       key={l.id}
                       onMouseEnter={() => setHoveredId(l.id)}
                       onMouseLeave={() => setHoveredId(null)}
                     >
-                      <ListingCard listing={l} />
+                      <ListingCard
+                        listing={l}
+                        track={{ listType: 'grid', rowId: 'search', position: i }}
+                      />
                     </div>
                   ))}
                 </div>

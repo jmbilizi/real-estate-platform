@@ -1,10 +1,13 @@
 /** @jest-environment node */
 import type { ListingCardRow } from '@cribstop/property-contracts';
 import {
+  AI_SEARCH_BOTS,
+  AI_TRAINING_BOTS,
   chunk,
   chunkCount,
   isIndexableOrigin,
   isSitemapEligible,
+  llmsTxtFor,
   PRODUCTION_ORIGIN,
   robotsFor,
   SITEMAP_CHUNK_SIZE,
@@ -27,8 +30,9 @@ describe('robotsFor', () => {
   it('allows crawling and names the sitemap index on the production origin', () => {
     const robots = robotsFor(PRODUCTION_ORIGIN);
     expect(robots.sitemap).toBe(`${PRODUCTION_ORIGIN}/sitemap-index.xml`);
-    expect(robots.rules).toMatchObject({ allow: '/' });
-    const disallow = (robots.rules as { disallow: string[] }).disallow;
+    const rules = robots.rules as { userAgent: string | string[]; disallow: string[] }[];
+    const disallow = rules[0].disallow;
+    expect(rules[0].userAgent).toBe('*');
     expect(disallow).toEqual(
       expect.arrayContaining([
         '/api/',
@@ -40,6 +44,32 @@ describe('robotsFor', () => {
         '/secure-account',
       ]),
     );
+  });
+
+  it('gives search bots every `*` disallow and no /property/ block', () => {
+    const rules = robotsFor(PRODUCTION_ORIGIN).rules as {
+      userAgent: string[];
+      disallow: string[];
+    }[];
+    const group = rules.find((r) => r.userAgent.includes('OAI-SearchBot'));
+    expect(group?.userAgent).toEqual([...AI_SEARCH_BOTS]);
+    expect(group?.userAgent).toEqual(
+      expect.arrayContaining(['Claude-SearchBot', 'PerplexityBot', 'ChatGPT-User', 'Claude-User']),
+    );
+    expect(group?.disallow).toEqual(rules[0].disallow);
+    expect(group?.disallow).not.toContain('/property/');
+  });
+
+  it('blocks training bots on /property/ and repeats every `*` disallow', () => {
+    const rules = robotsFor(PRODUCTION_ORIGIN).rules as {
+      userAgent: string[];
+      allow: string;
+      disallow: string[];
+    }[];
+    const group = rules.find((r) => r.userAgent.includes('GPTBot'));
+    expect(group?.userAgent).toEqual([...AI_TRAINING_BOTS]);
+    expect(group?.allow).toBe('/');
+    expect(group?.disallow).toEqual(expect.arrayContaining([...rules[0].disallow, '/property/']));
   });
 
   it.each([
@@ -54,6 +84,24 @@ describe('robotsFor', () => {
   it('tolerates a trailing slash on the production origin', () => {
     expect(isIndexableOrigin(`${PRODUCTION_ORIGIN}/`)).toBe(true);
   });
+});
+
+describe('llmsTxtFor', () => {
+  it('describes the brand, area and sitemap index, and lists no listing URL', () => {
+    const body = llmsTxtFor(PRODUCTION_ORIGIN) ?? '';
+    expect(body).toMatch(/^# Cribstop/);
+    expect(body).toContain('Real Broker, LLC');
+    expect(body).toContain('MD, DC, and VA');
+    expect(body).toContain(`${PRODUCTION_ORIGIN}/sitemap-index.xml`);
+    expect(body).not.toContain('/property/');
+  });
+
+  it.each([['https://dev.cribstop.com'], ['https://cribstop.com.evil.example'], [null]])(
+    'returns null off production (%s)',
+    (origin) => {
+      expect(llmsTxtFor(origin)).toBeNull();
+    },
+  );
 });
 
 describe('isSitemapEligible', () => {

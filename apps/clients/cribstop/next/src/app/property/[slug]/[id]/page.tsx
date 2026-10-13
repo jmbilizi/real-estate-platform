@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { idSchema, type PropertyPage } from '@cribstop/property-contracts';
+import JsonLd from '@/components/JsonLd';
 import { ListingErrorState } from '@/components/listing/ListingStates';
 import PropertyPageView, { PropertyHistory } from '@/components/listing/PropertyPageView';
 import StandaloneListingView from '@/components/listing/StandaloneListingView';
@@ -11,6 +12,7 @@ import {
   type PropertyPageState,
 } from '@/lib/api/property-page';
 import { BRAND } from '@/lib/brand';
+import { listingJsonLd } from '@/lib/listing-jsonld';
 import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
 import { publishableOrigin } from '@/lib/publishable-origin';
 
@@ -96,16 +98,21 @@ export default async function PropertyRoute({ params }: RouteProps) {
     state: listing.state,
   }).toString();
 
+  const jsonLd = listingJsonLd(listing, publishableOrigin());
+
   return (
-    <StandaloneListingView
-      id={listing.id}
-      initialState={{ status: 'ready', listing }}
-      cityQuery={cityQuery}
-      statusLabel={page.marketStatus}
-      nearby={page.nearby}
-      propertyPanel={
-        page.history.length > 0 ? <PropertyHistory entries={page.history} /> : undefined
-      }
-    />
+    <>
+      {jsonLd ? <JsonLd data={jsonLd} /> : null}
+      <StandaloneListingView
+        id={listing.id}
+        initialState={{ status: 'ready', listing }}
+        cityQuery={cityQuery}
+        statusLabel={page.marketStatus}
+        nearby={page.nearby}
+        propertyPanel={
+          page.history.length > 0 ? <PropertyHistory entries={page.history} /> : undefined
+        }
+      />
+    </>
   );
 }

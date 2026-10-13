@@ -146,20 +146,35 @@ describe('listingMetadata — required labels survive truncation', () => {
     );
   });
 
-  it('puts every owed sentence ahead of the optional facts, which a truncated card may lose', () => {
-    const description = metaFor({ source: 'brightMLS', isSample: true, sponsored: true })
-      .description as string;
+  it('leads with the facts, then attribution (#843)', () => {
+    const description = metaFor({ source: 'brightMLS', isSample: false }).description as string;
+
+    expect(description.startsWith('$750,000 · 3 bd · 2 ba · 1,800 sqft · Single Family in')).toBe(
+      true,
+    );
+    const facts = description.indexOf('3 bd');
+    for (const attribution of [
+      'Listed by',
+      'Information provided by Bright MLS.',
+      'Real Broker, LLC operates',
+    ]) {
+      expect(description.indexOf(attribution)).toBeGreaterThan(facts);
+    }
+  });
+
+  it('puts the sample and sponsored labels ahead of the facts', () => {
+    const description = metaFor({ isSample: true, sponsored: true }).description as string;
     const facts = description.indexOf('3 bd');
 
-    for (const owed of [
-      SAMPLE_SHARE_LABEL,
-      SPONSORED_SHARE_LABEL,
-      'Real Broker, LLC operates',
-      'Information provided by Bright MLS.',
-      'Listed by',
-    ]) {
-      expect(description.indexOf(owed)).toBeLessThan(facts);
-    }
+    expect(description.indexOf(SAMPLE_SHARE_LABEL)).toBeLessThan(facts);
+    expect(description.indexOf(SPONSORED_SHARE_LABEL)).toBeLessThan(facts);
+  });
+
+  it('names the area from the neighborhood, never the street, for a masked row', () => {
+    const description = metaFor({ address: null, latitude: null, longitude: null })
+      .description as string;
+
+    expect(description).toContain('in Downtown, Bethesda.');
   });
 
   it('keeps a sample row out of the search index', () => {

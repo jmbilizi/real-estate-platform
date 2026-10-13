@@ -38,6 +38,7 @@ import {
 import { clearSaved, type SavedEntry, saveEntry } from '@/lib/store/slices/favoritesSlice';
 import { removeHome, syncSavedHomes, toggleHome } from '@/lib/saved-sync';
 import { trackEvent } from '@/lib/analytics';
+import { recordFeedItem } from '@/lib/feed-profile';
 import { addToast } from '@/lib/store/slices/toastSlice';
 
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
@@ -73,7 +74,7 @@ interface AppContextValue {
   ) => Promise<CompleteSignupOutcome>;
   logout: () => void;
   /** Flips the home of a listing, so every listing of that home flips together. */
-  toggleSave: (listing: { id: string; propertyId: string }) => void;
+  toggleSave: (listing: { id: string; propertyId: string; city?: string; state?: string }) => void;
   /** Removes a saved home by property id, for a home with no listing to flip. */
   removeSaved: (propertyId: string) => void;
   /** Adds homes the server reports as saved. Never removes one. */
@@ -283,12 +284,29 @@ export function useApp(): AppContextValue {
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(
-    (listing: { id: string; propertyId: string }) => {
+    (listing: {
+      id: string;
+      propertyId: string;
+      listingType?: string;
+      city?: string;
+      state?: string;
+    }) => {
       const signedIn = store.getState().auth.user !== null;
       const alreadySaved = store
         .getState()
         .favorites.homes.some((h) => h.propertyId === listing.propertyId);
-      if (!alreadySaved) trackEvent('listing_save', { listingId: listing.id });
+      if (!alreadySaved) {
+        trackEvent('listing_save', { listingId: listing.id });
+        recordFeedItem(
+          listing.id,
+          'save',
+          listing.listingType === 'rent' ? 'rent' : 'sale',
+          Date.now(),
+          listing,
+        );
+      } else {
+        trackEvent('listing_unsave', { listingId: listing.id });
+      }
       void toggleHome(store, listing, signedIn, notifyError(dispatch));
     },
     [dispatch],

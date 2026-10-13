@@ -452,43 +452,2475 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
-      "AnalyticsEventRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "event": {
-            "enum": [
-              "search",
-              "listing_view",
-              "listing_save",
-              "lead_submit",
-            ],
-            "type": "string",
-          },
-          "listingId": {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-            "type": "string",
-          },
-          "sessionId": {
-            "pattern": "^[A-Za-z0-9_-]{8,64}$",
-            "type": "string",
-          },
-          "surface": {
-            "enum": [
-              "search",
-              "map",
-              "detail",
-              "favorites",
-            ],
-            "type": "string",
-          },
+      "AnalyticsEventBatch": {
+        "items": {
+          "$ref": "#/components/schemas/AnalyticsEventRequest",
         },
-        "required": [
-          "event",
-          "surface",
-          "sessionId",
+        "maxItems": 50,
+        "minItems": 1,
+        "type": "array",
+      },
+      "AnalyticsEventRequest": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "listing_view",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "page_view",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "title_key": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "session_start",
+                ],
+                "type": "string",
+              },
+              "is_new_anon": {
+                "type": "boolean",
+              },
+              "landing_path": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "card_position": {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "listing_impression",
+                ],
+                "type": "string",
+              },
+              "list_type": {
+                "enum": [
+                  "grid",
+                  "map",
+                  "favorites",
+                  "similar",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "rank_algo": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "rank_score": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "row_id": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "row_position": {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "card_position": {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "listing_click",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "row_id": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "target": {
+                "enum": [
+                  "card",
+                  "photo",
+                  "cta",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "element_id": {
+                "enum": [
+                  "header_search",
+                  "header_sign_in",
+                  "footer_analytics_opt_out",
+                  "filter_open",
+                  "sort_change",
+                  "map_toggle",
+                  "list_toggle",
+                  "save_search",
+                  "share_open",
+                  "tour_cta",
+                  "contact_cta",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "ui_click",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+              "element_id",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "active_ms": {
+                "maximum": 1000000,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "dwell_bucket": {
+                "enum": [
+                  "0-5",
+                  "5-30",
+                  "30-120",
+                  "120+",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "dwell",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "scroll_depth_pct": {
+                "maximum": 100,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "search",
+                ],
+                "type": "string",
+              },
+              "filters": {
+                "additionalProperties": false,
+                "properties": {
+                  "area_key": {
+                    "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                    "type": "string",
+                  },
+                  "baths": {
+                    "maximum": 20,
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "beds": {
+                    "maximum": 20,
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "price_max": {
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "price_min": {
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "integer",
+                  },
+                  "type": {
+                    "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                    "type": "string",
+                  },
+                },
+                "type": "object",
+              },
+              "is_zero_result": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "result_count": {
+                "maximum": 1000000,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "sort": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "source": {
+                "enum": [
+                  "box",
+                  "filter",
+                  "map",
+                  "saved",
+                ],
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "search_zero_result_text",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "query_text": {
+                "maxLength": 200,
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+              "query_text",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "bbox_cell": {
+                "pattern": "^-?\\d{1,3}\\.\\d{2}:-?\\d{1,3}\\.\\d{2}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "map_move",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "result_count": {
+                "maximum": 1000000,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "trigger": {
+                "enum": [
+                  "pan",
+                  "zoom",
+                  "draw",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "zoom": {
+                "maximum": 22,
+                "minimum": 0,
+                "type": "integer",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+              "bbox_cell",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "listing_save",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "src": {
+                "pattern": "^home:[A-Za-z0-9_.-]{1,40}:\\d{1,3}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "listing_unsave",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "channel": {
+                "enum": [
+                  "copy",
+                  "sms",
+                  "email",
+                  "native",
+                ],
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "listing_share",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "lead_open",
+                ],
+                "type": "string",
+              },
+              "form_type": {
+                "enum": [
+                  "tour",
+                  "info",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "step": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "lead_start",
+                ],
+                "type": "string",
+              },
+              "form_type": {
+                "enum": [
+                  "tour",
+                  "info",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "step": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "lead_submit",
+                ],
+                "type": "string",
+              },
+              "form_type": {
+                "enum": [
+                  "tour",
+                  "info",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "src": {
+                "pattern": "^home:[A-Za-z0-9_.-]{1,40}:\\d{1,3}$",
+                "type": "string",
+              },
+              "step": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "lead_error",
+                ],
+                "type": "string",
+              },
+              "form_type": {
+                "enum": [
+                  "tour",
+                  "info",
+                ],
+                "type": "string",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "step": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "entry_point": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "auth_identify_shown",
+                ],
+                "type": "string",
+              },
+              "is_new_account": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "method": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "entry_point": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "auth_code_sent",
+                ],
+                "type": "string",
+              },
+              "is_new_account": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "method": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "entry_point": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "auth_code_verified",
+                ],
+                "type": "string",
+              },
+              "is_new_account": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "method": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "entry_point": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "auth_signup_done",
+                ],
+                "type": "string",
+              },
+              "is_new_account": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "method": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "entry_point": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "error_code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "auth_fail",
+                ],
+                "type": "string",
+              },
+              "is_new_account": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "method": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "component_key": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "client_error",
+                ],
+                "type": "string",
+              },
+              "http_status": {
+                "maximum": 599,
+                "minimum": 100,
+                "type": "integer",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "route_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "code": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "component_key": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "api_error",
+                ],
+                "type": "string",
+              },
+              "http_status": {
+                "maximum": 599,
+                "minimum": 100,
+                "type": "integer",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "route_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "feed_impression",
+                ],
+                "type": "string",
+              },
+              "explore": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "model_version": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "position": {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "row_id": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "variant": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+              "row_id",
+              "position",
+              "listing_id",
+              "variant",
+              "model_version",
+              "explore",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anon_id": {
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string",
+              },
+              "app_version": {
+                "pattern": "^[A-Za-z0-9._+-]{1,32}$",
+                "type": "string",
+              },
+              "device": {
+                "enum": [
+                  "mobile",
+                  "tablet",
+                  "desktop",
+                ],
+                "type": "string",
+              },
+              "event": {
+                "enum": [
+                  "feed_click",
+                ],
+                "type": "string",
+              },
+              "explore": {
+                "type": "boolean",
+              },
+              "listingId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "listing_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string",
+              },
+              "model_version": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "path_template": {
+                "pattern": "^\\/[A-Za-z0-9_\\-/[\\].]{0,119}$",
+                "type": "string",
+              },
+              "position": {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer",
+              },
+              "referrer_host": {
+                "pattern": "^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$",
+                "type": "string",
+              },
+              "row_id": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+              "sessionId": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "session_id": {
+                "pattern": "^[A-Za-z0-9_-]{8,64}$",
+                "type": "string",
+              },
+              "surface": {
+                "enum": [
+                  "search",
+                  "map",
+                  "detail",
+                  "favorites",
+                  "home",
+                  "auth",
+                ],
+                "type": "string",
+              },
+              "utm_campaign": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_medium": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "utm_source": {
+                "pattern": "^[a-z0-9_.-]{1,64}$",
+                "type": "string",
+              },
+              "variant": {
+                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "event",
+              "surface",
+              "row_id",
+              "position",
+              "listing_id",
+              "variant",
+              "model_version",
+              "explore",
+            ],
+            "type": "object",
+          },
         ],
-        "type": "object",
       },
       "BrokersResponse": {
         "additionalProperties": false,
@@ -4448,13 +6880,20 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
     },
     "/analytics/events": {
       "post": {
-        "description": "Cookieless funnel counting. The service stores the event name, the surface, the listing id when present, a random per-tab session id and the server time. It stores no header, IP address, account or free text. With ANALYTICS_ENABLED=false it stores nothing and still answers 204.",
+        "description": "Analytics contract v2. The body is one event, or an array of up to 50 events. Each event has its own allow-listed properties. The service stores the event, the common properties, a random anonymous id and session id, and the server time. It stores no header, IP address, user agent, name, email or phone. The one free-text property is the scrubbed zero-result search text. With ANALYTICS_ENABLED=false it stores nothing and still answers 204.",
         "operationId": "recordAnalyticsEvent",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AnalyticsEventRequest",
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/AnalyticsEventRequest",
+                  },
+                  {
+                    "$ref": "#/components/schemas/AnalyticsEventBatch",
+                  },
+                ],
               },
             },
           },
@@ -4485,7 +6924,7 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             "description": "Unexpected server error. The body carries no detail by design.",
           },
         },
-        "summary": "Count one funnel event",
+        "summary": "Record one analytics event",
       },
     },
     "/home-feed": {

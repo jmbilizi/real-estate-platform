@@ -3,7 +3,7 @@ import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
-import { analyticsEventRequestSchema } from './analytics-event';
+import { analyticsEventBatchSchema, analyticsEventRequestSchema } from './analytics-event';
 import { homeFeedRequestSchema, homeFeedResponseSchema } from './home-feed';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
@@ -125,6 +125,7 @@ function componentSchemas() {
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
+  registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
   registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
   registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -763,17 +764,23 @@ export function toOpenApiDocument() {
       '/analytics/events': {
         post: {
           operationId: 'recordAnalyticsEvent',
-          summary: 'Count one funnel event',
+          summary: 'Record one analytics event',
           description:
-            'Cookieless funnel counting. The service stores the event name, the surface, the ' +
-            'listing id when present, a random per-tab session id and the server time. It stores ' +
-            'no header, IP address, account or free text. With ANALYTICS_ENABLED=false it stores ' +
-            'nothing and still answers 204.',
+            'Analytics contract v2. The body is one event, or an array of up to 50 events. Each event has its own allow-listed properties. The ' +
+            'service stores the event, the common properties, a random anonymous id and session id, ' +
+            'and the server time. It stores no header, IP address, user agent, name, email or phone. ' +
+            'The one free-text property is the scrubbed zero-result search text. With ' +
+            'ANALYTICS_ENABLED=false it stores nothing and still answers 204.',
           requestBody: {
             required: true,
             content: {
               'application/json': {
-                schema: { $ref: '#/components/schemas/AnalyticsEventRequest' },
+                schema: {
+                  oneOf: [
+                    { $ref: '#/components/schemas/AnalyticsEventRequest' },
+                    { $ref: '#/components/schemas/AnalyticsEventBatch' },
+                  ],
+                },
               },
             },
           },

@@ -151,6 +151,8 @@ function OffMarketPropertyView({
         <div id="nearby" className="mt-6">
           <ListingRow
             title="Nearby homes"
+            rowId="nearby"
+            listType="similar"
             listings={nearby}
             max={6}
             sectionClassName="pt-2"

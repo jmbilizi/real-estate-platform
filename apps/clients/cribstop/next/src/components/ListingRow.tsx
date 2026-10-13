@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import ListingCard from './ListingCard';
+import type { CardTrack } from '@/lib/useCardTracking';
 import { CARD_HOVER_CLASS } from '@/components/cardHover';
 import {
   CAROUSEL_ITEM_CLASS,
@@ -39,6 +40,22 @@ interface Props {
   onRetry?: () => void;
   /** Control between the title and the see-all chip, on the title's first line (#484). */
   headerExtra?: ReactNode;
+  /** Which home-target source chose this row's place. Output only, for debugging and tests. */
+  targetSource?: string;
+  /** Stable row name for analytics (#826). Defaults to a slug of the title. */
+  rowId?: string;
+  /** Where the row sits, for analytics. Defaults to `grid`. */
+  listType?: CardTrack['listType'];
+  /** Set only for a ranked home-feed row. Adds `feed_impression` and `feed_click`. */
+  feed?: CardTrack['feed'];
+}
+
+function slugRowId(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
 }
 
 /** The carousel's per-card width breakpoints, shared by real cards and their loading skeletons. */
@@ -55,14 +72,22 @@ export default function ListingRow({
   failed = false,
   onRetry,
   headerExtra,
+  targetSource,
+  rowId,
+  listType = 'grid',
+  feed,
 }: Props) {
+  const trackRowId = rowId ?? slugRowId(title);
   // Show max+1 cards so See all is always after scroll
   const showSeeAll = !loading && listings.length > max;
   const visible = showSeeAll ? listings.slice(0, max + 1) : listings;
   const { scrollerRef, atStart, atEnd, scroll } = useCarouselScroll([loading, visible.length]);
 
   return (
-    <section className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}>
+    <section
+      className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}
+      data-target-source={targetSource}
+    >
       {/* `gap-1.5`, not `gap-1` (#447): the title/chip link's `before:-bottom-1.5` hit area reaches
           6px below its own box, so a smaller gap here would let that invisible hit area cover the
           top of `subtitle`'s text. */}
@@ -269,7 +294,10 @@ export default function ListingRow({
             // Otherwise, render a normal listing card
             return (
               <div key={l.id} className={CARD_WIDTH_CLASS}>
-                <ListingCard listing={l} />
+                <ListingCard
+                  listing={l}
+                  track={{ listType, rowId: trackRowId, position: i, ...(feed ? { feed } : {}) }}
+                />
               </div>
             );
           })}

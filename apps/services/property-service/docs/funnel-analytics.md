@@ -1,24 +1,55 @@
-# Funnel analytics (#725)
+# Analytics events (#725, #824)
 
-The web app posts four events to `POST /api/events`. The route forwards them to property-service
-through the gateway at `/property/analytics/events`.
+The web app posts events to `POST /api/events`. The route forwards them to property-service through
+the gateway at `/property/analytics/events`. One contract defines every event:
+`libs/property-contracts/src/analytics-event.ts`. The contract names no analytics tool.
+
+## Add an event in 3 steps
+
+1. Add one entry to `EVENT_PROPS` in `analytics-event.ts`. List only the properties the event
+   accepts. Use an existing property type, or add a strict one. No property may hold free text, a
+   name, an email or a phone number.
+2. Add the event to the table in `analytics-event.spec.ts`. Run
+   `pnpm exec nx test property-contracts`. Update the OpenAPI snapshot with `-u` and read the diff.
+3. Call `trackEvent` in the web app. Do not write a migration. The event-specific values go in the
+   `props` column.
+
+Add a property to an existing event in the same file. No migration is needed for that either. A
+property that needs its own column or index is the one case that needs a migration. Today the
+columns are the common properties, `listing_id`, `row_id` and `query_text`.
 
 ## Stored fields
 
-| Table              | Fields                                                                     | Kept    |
-| ------------------ | -------------------------------------------------------------------------- | ------- |
-| `analytics_events` | `occurred_at` (server UTC), `event`, `surface`, `listing_id`, `session_id` | 30 days |
-| `analytics_daily`  | `day`, `event`, `surface`, `count`                                         | forever |
+| Table              | Fields                                                                                                                                                                                    | Kept                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `analytics_events` | `occurred_at` (server UTC), `event`, `surface`, `session_id`, `anon_id`, `listing_id`, `row_id`, the common properties, `props` (JSON), `schema_version`, `query_text` (zero-result only) | 13 months. `query_text` rows: 30 days. |
+| `analytics_daily`  | `day`, `event`, `surface`, `row_id`, `count`                                                                                                                                              | forever                                |
 
-Nothing else is stored. The service stores no cookie, IP address, user agent, account id, email,
-search word or free text. `session_id` is a random code held in browser tab memory.
+The service stores no IP address and no user agent. `anon_id` is a random code that the browser
+keeps in localStorage and rotates after 13 months. The service stores no account id.
 
-Events: `search`, `listing_view`, `listing_save`, `lead_submit`. Surfaces: `search`, `map`,
-`detail`, `favorites`.
+A purge job runs hourly. It deletes zero-result text rows after 30 days and all other raw rows after
+13 months. The daily count for a row is written in the same statement as the row, so the aggregate
+exists before the purge runs.
+
+## Sinks
+
+The route sends each valid event to a list of sinks (`src/analytics/sink.ts`). The database sink is
+the system of record. A second sink for an external tool is one more implementation of
+`AnalyticsSink`, added in `createSinks` behind a flag. Its failure never fails the call. No external
+sink exists.
+
+## Batches
+
+The body is one event or an array of 1 to 50 events. One bad event rejects the array. Send
+impressions in arrays: the gateway allows 120 requests per minute per client.
 
 ## Switch
 
 Set `ANALYTICS_ENABLED=false` on property-service or the web app. The route then stores nothing.
+
+A request with `Sec-GPC: 1` also stores nothing. The web helper `trackEvent` sends nothing when
+Global Privacy Control is on or the footer "Personalise my home page" switch is off.
 
 ## Daily funnel
 
@@ -29,7 +60,7 @@ SELECT * FROM analytics_funnel_daily_v ORDER BY day DESC;
 Columns: `searches`, `detail_views`, `saves`, `requests`, `search_to_view_rate`,
 `view_to_request_rate`. A rate is `NULL` when its divisor is zero.
 
-The raw rows give per-session paths for the last 30 days:
+The raw rows give per-session paths for the last 13 months:
 
 ```sql
 SELECT session_id, array_agg(event ORDER BY occurred_at) FROM analytics_events GROUP BY session_id;
