@@ -72,7 +72,7 @@ type Region = { city: string; state: string };
 /** Logs which source a row used. Off unless the debug flag is set. */
 function useTargetDebug(row: string, target: HomeTarget | null) {
   useEffect(() => {
-    if (!homeTargetDebugEnabled()) return;
+    if (!target || !homeTargetDebugEnabled()) return;
     const used = target ? `${target.source} ${target.city}, ${target.state}` : 'none';
     console.info(`[home-target] ${row}: ${used}`);
   }, [row, target]);
