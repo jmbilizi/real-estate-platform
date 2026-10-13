@@ -27,8 +27,9 @@ namespace AccountService.Tests.Helpers
             "no-reply@cribstop.com",
             "contact@cribstop.com",
             "person@example.com",
-            $"{SecretCode} is your Cribstop code",
-            $"Your Cribstop code:\n\n{SecretCode}\n\nCribstop is brokered by Real Broker, LLC.");
+            "Your Cribstop verification code",
+            $"Your Cribstop code:\n\n{SecretCode}\n\nCribstop is brokered by Real Broker, LLC.",
+            $"<p>{SecretCode}</p>");
 
         [Fact]
         public async Task DeliverAsync_WhenNotConfigured_SendsNothing_AndLogsTheSuppressedEvent()

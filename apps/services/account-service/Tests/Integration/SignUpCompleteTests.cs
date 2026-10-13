@@ -363,7 +363,7 @@ namespace AccountService.Tests.Integration
         private static async Task<string> ProofAsync(AccountRecoveryFactory factory, HttpClient client, string email)
         {
             (await client.PostAsJsonAsync(StartPath, new { email })).StatusCode.Should().Be(HttpStatusCode.OK);
-            var code = factory.AlreadyRegisteredNotices.Last(m => m.Kind == EmailKind.Code).Subject.Split(' ')[0];
+            var code = factory.AlreadyRegisteredNotices.Last(m => m.Kind == EmailKind.Code).CodeFromBody();
             var verify = await client.PostAsJsonAsync(VerifyPath, new { email, code });
             verify.StatusCode.Should().Be(HttpStatusCode.OK);
             return (await verify.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("signupProof").GetString()!;
