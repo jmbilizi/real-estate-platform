@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { maxReachablePage, PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import { ListingsApiError, searchListings } from '@/lib/api/listings';
 import { PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
@@ -116,6 +117,36 @@ beforeEach(() => {
 afterEach(() => {
   mockedSearchListings.mockReset();
   (global.fetch as jest.Mock).mockReset();
+});
+
+describe('SearchExperience server HTML (#841)', () => {
+  it('holds a link for each server-fetched card and does not fetch again', async () => {
+    const rows = Array.from({ length: 20 }, (_, i) =>
+      aListingCardRow({
+        id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+        propertyPath: `/property/home-${i}/11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+      }),
+    );
+    const html = renderToString(
+      <SearchExperience
+        initialQuery=""
+        initialResults={{ ...envelope(), results: rows, total: 20 } as never}
+      />,
+    );
+    const links = new Set(html.match(/href="\/property\/[^"]+"/g));
+    expect(links.size).toBe(20);
+    expect(html).not.toContain('animate-pulse');
+    expect(html).toContain(rows[0].officeName);
+
+    render(
+      <SearchExperience
+        initialQuery=""
+        initialResults={{ ...envelope(), results: rows, total: 20 } as never}
+      />,
+    );
+    await waitFor(() => expect(screen.getAllByRole('link').length).toBeGreaterThan(0));
+    expect(mockedSearchListings).not.toHaveBeenCalled();
+  });
 });
 
 describe('SearchExperience follows the URL it is given', () => {
