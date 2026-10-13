@@ -724,12 +724,13 @@ export function toOpenApiDocument() {
       '/analytics/events': {
         post: {
           operationId: 'recordAnalyticsEvent',
-          summary: 'Count one funnel event',
+          summary: 'Record one analytics event',
           description:
-            'Cookieless funnel counting. The service stores the event name, the surface, the ' +
-            'listing id when present, a random per-tab session id and the server time. It stores ' +
-            'no header, IP address, account or free text. With ANALYTICS_ENABLED=false it stores ' +
-            'nothing and still answers 204.',
+            'Analytics contract v2. The body is one event with its own allow-listed properties. The ' +
+            'service stores the event, the common properties, a random anonymous id and session id, ' +
+            'and the server time. It stores no header, IP address, user agent, name, email or phone. ' +
+            'The one free-text property is the scrubbed zero-result search text. With ' +
+            'ANALYTICS_ENABLED=false it stores nothing and still answers 204.',
           requestBody: {
             required: true,
             content: {
