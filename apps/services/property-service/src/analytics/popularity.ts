@@ -6,8 +6,9 @@ const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const REFRESH_STATEMENT_TIMEOUT_MS = 60_000;
 /** Spreads the first run over 0 to 5 minutes, so pods that start together do not refresh together. */
 const MAX_START_JITTER_MS = 5 * 60 * 1000;
-/** Arbitrary constant that names this refresh in `pg_try_advisory_lock`. */
-export const REFRESH_LOCK_KEY = 832_014;
+/** Two-key advisory lock: a namespace plus an id, so the lock cannot collide with the one-key locks elsewhere. */
+export const REFRESH_LOCK_NAMESPACE = 832;
+export const REFRESH_LOCK_ID = 1;
 
 export type RefreshResult = { refreshed: true; ms: number } | { refreshed: false };
 
@@ -16,16 +17,23 @@ export type RefreshResult = { refreshed: true; ms: number } | { refreshed: false
  * connection: the lock belongs to the session that took it.
  */
 export async function refreshListingPopularity(db: ReadClient): Promise<RefreshResult> {
-  const lock = await db.query<{ locked: boolean }>('SELECT pg_try_advisory_lock($1) AS locked', [
-    REFRESH_LOCK_KEY,
-  ]);
+  const lock = await db.query<{ locked: boolean }>(
+    'SELECT pg_try_advisory_lock($1, $2) AS locked',
+    [REFRESH_LOCK_NAMESPACE, REFRESH_LOCK_ID],
+  );
   if (!lock.rows[0]?.locked) return { refreshed: false };
   const started = Date.now();
   try {
     await db.query('REFRESH MATERIALIZED VIEW CONCURRENTLY listing_popularity_14d');
     return { refreshed: true, ms: Date.now() - started };
   } finally {
-    await db.query('SELECT pg_advisory_unlock($1)', [REFRESH_LOCK_KEY]);
+    // A failed unlock must not hide the refresh error. The caller destroys the connection on
+    // failure, and Postgres then frees the lock.
+    await db
+      .query('SELECT pg_advisory_unlock($1, $2)', [REFRESH_LOCK_NAMESPACE, REFRESH_LOCK_ID])
+      .catch((error: unknown) => {
+        console.error('Listing popularity unlock failed:', error);
+      });
   }
 }
 
@@ -51,15 +59,24 @@ let refreshPool: Pool | null = null;
 async function runOnce(): Promise<void> {
   refreshPool ??= createRefreshPool();
   const client = await refreshPool.connect();
+  // A checked-out client has no pool listener. A dropped connection must not crash the pod.
+  const onError = (error: Error): void => {
+    console.error('Popularity refresh connection error:', error);
+  };
+  client.on('error', onError);
+  let failed = true;
   try {
     const result = await refreshListingPopularity(client);
+    failed = false;
     if (result.refreshed) {
       console.info(`Listing popularity refreshed in ${result.ms} ms`);
     } else {
       console.debug('Listing popularity refresh skipped: another pod holds the lock');
     }
   } finally {
-    client.release();
+    client.off('error', onError);
+    // `release(true)` destroys the connection, so Postgres frees any lock still held.
+    client.release(failed);
   }
 }
 

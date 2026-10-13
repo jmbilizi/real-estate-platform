@@ -4,7 +4,8 @@ import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { closePool, getPool } from '../src/db/pool';
 import {
-  REFRESH_LOCK_KEY,
+  REFRESH_LOCK_ID,
+  REFRESH_LOCK_NAMESPACE,
   refreshListingPopularity as refreshOn,
 } from '../src/analytics/popularity';
 
@@ -169,13 +170,17 @@ describe('refresh lock (#832)', () => {
   it('skips when another session holds the lock, and refreshes once it is free', async () => {
     const holder = await pool().connect();
     try {
-      const taken = await holder.query('SELECT pg_try_advisory_lock($1) AS locked', [
-        REFRESH_LOCK_KEY,
+      const taken = await holder.query('SELECT pg_try_advisory_lock($1, $2) AS locked', [
+        REFRESH_LOCK_NAMESPACE,
+        REFRESH_LOCK_ID,
       ]);
       expect(taken.rows[0].locked).toBe(true);
       expect(await refreshListingPopularity()).toEqual({ refreshed: false });
     } finally {
-      await holder.query('SELECT pg_advisory_unlock($1)', [REFRESH_LOCK_KEY]);
+      await holder.query('SELECT pg_advisory_unlock($1, $2)', [
+        REFRESH_LOCK_NAMESPACE,
+        REFRESH_LOCK_ID,
+      ]);
       holder.release();
     }
     expect(await refreshListingPopularity()).toMatchObject({ refreshed: true });
