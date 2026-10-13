@@ -4,6 +4,7 @@ import { BRAND } from '@/lib/brand';
 import {
   formatClosePrice,
   formatDwellingStats,
+  formatListingLocation,
   formatListingPrice,
   formatListingProvenance,
   formatLotSize,
@@ -49,19 +50,18 @@ export function listingMetadata(listing: ListingDetailView, origin: string | nul
   ].filter(Boolean);
 
   /*
-   * Required text first, optional text last.
-   *
-   * Every unfurl surface truncates a description — Twitter near 200 characters — so whatever sits
-   * at the tail is what a recipient never reads. The labels, the brokerage, the provenance
-   * sentence and the listing office are all owed; the price and the bed/bath line are not. So the
-   * facts go last, and are the only part a cut can take.
+   * Facts first, then attribution (#843). A snippet or an AI answer quotes the start of the
+   * description, so the start carries beds, baths, price and area. The sample and sponsored labels
+   * still lead: they are short, and a sample row is `noindex`. The listing office, the provenance
+   * line and the brokerage follow.
    */
+  const location = formatListingLocation(listing.neighborhood, listing.city, listing.state);
   const description = [
     ...shareDisclosures(listing),
-    SITE_SENTENCE,
-    ...(provenance ? [provenance] : []),
+    `${facts.join(' · ')} in ${location}.`,
     `Listed by ${listing.listedBy}.`,
-    `${facts.join(' · ')}.`,
+    ...(provenance ? [provenance] : []),
+    SITE_SENTENCE,
   ].join(' ');
 
   /*
