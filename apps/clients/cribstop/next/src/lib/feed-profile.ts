@@ -7,6 +7,7 @@
 
 export const FEED_PROFILE_KEY = 'cribstop.feedProfile.v1';
 export const PERSONALISE_KEY = 'cribstop.personalise';
+export const ANON_ID_KEY = 'cribstop.anonId.v1';
 export const PERSONALISE_EVENT = 'cribstop:personalise-change';
 export const MAX_PROFILE_ITEMS = 50;
 export const MAX_PROFILE_PLACES = 5;
@@ -19,10 +20,15 @@ export interface FeedProfileItem {
   kind: FeedItemKind;
   side: FeedSide;
   at: number;
+  /** Where the listing is. Used only on this device to infer the target place (#834). */
+  city?: string;
+  state?: string;
 }
 
+export type FeedRequestItem = Omit<FeedProfileItem, 'city' | 'state'>;
+
 export interface FeedRequestProfile {
-  items: FeedProfileItem[];
+  items: FeedRequestItem[];
   places: string[];
 }
 
@@ -52,6 +58,7 @@ export function setPersonalisation(enabled: boolean): void {
     if (enabled) window.localStorage.removeItem(PERSONALISE_KEY);
     else {
       window.localStorage.setItem(PERSONALISE_KEY, 'off');
+      window.localStorage.removeItem(ANON_ID_KEY);
       clearFeedProfile();
     }
   } catch {
@@ -70,7 +77,8 @@ function isItem(v: any): v is FeedProfileItem {
   );
 }
 
-function readItems(): FeedProfileItem[] {
+/** The stored items with their places. For on-device use only. */
+export function readItems(): FeedProfileItem[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(FEED_PROFILE_KEY) ?? 'null');
     return Array.isArray(parsed?.items) ? parsed.items.filter(isItem) : [];
@@ -85,19 +93,40 @@ export function recordFeedItem(
   kind: FeedItemKind,
   side: FeedSide = 'sale',
   now: number = Date.now(),
+  place?: { city?: string | null; state?: string | null },
 ): void {
   if (!listingId || !isPersonalisationEnabled()) return;
+  getVisitStart();
   try {
     const existing = readItems();
     const wasSaved = existing.some((i) => i.listingId === listingId && i.kind === 'save');
-    const items = [
-      { listingId, kind: wasSaved ? 'save' : kind, side, at: now } as FeedProfileItem,
-      ...existing.filter((i) => i.listingId !== listingId),
-    ].slice(0, MAX_PROFILE_ITEMS);
+    const entry: FeedProfileItem = { listingId, kind: wasSaved ? 'save' : kind, side, at: now };
+    if (place?.city && place.state) {
+      entry.city = place.city;
+      entry.state = place.state;
+    }
+    const items = [entry, ...existing.filter((i) => i.listingId !== listingId)].slice(
+      0,
+      MAX_PROFILE_ITEMS,
+    );
     window.localStorage.setItem(FEED_PROFILE_KEY, JSON.stringify({ v: 1, items }));
   } catch {
     // A full or blocked store must not affect the page.
   }
+}
+
+const VISIT_START_KEY = 'cribstop.visitStart';
+
+/** Epoch ms of the first listing view or home load in this tab session. */
+export function getVisitStart(now: number = Date.now()): number {
+  try {
+    const stored = Number(window.sessionStorage.getItem(VISIT_START_KEY));
+    if (stored) return stored;
+    window.sessionStorage.setItem(VISIT_START_KEY, String(now));
+  } catch {
+    // Storage is blocked. The visit then starts now.
+  }
+  return now;
 }
 
 export function clearFeedProfile(): void {
@@ -125,5 +154,6 @@ function readPlaces(): string[] {
 /** The profile for the feed request body. Null when personalisation is off: send nothing. */
 export function getFeedRequestProfile(): FeedRequestProfile | null {
   if (!isPersonalisationEnabled()) return null;
-  return { items: readItems(), places: readPlaces() };
+  const items = readItems().map(({ city: _city, state: _state, ...rest }) => rest);
+  return { items, places: readPlaces() };
 }

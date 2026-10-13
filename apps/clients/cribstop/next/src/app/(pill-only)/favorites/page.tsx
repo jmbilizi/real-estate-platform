@@ -209,10 +209,13 @@ export default function FavoritesPage() {
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {/* min-w-0: a grid item's min width is its content, so a truncated address would widen the
               single mobile column and scroll the page sideways. */}
-          {visible.map((item) => (
+          {visible.map((item, i) => (
             <div key={item.propertyId} className="min-w-0" data-favorite-cell>
               {item.kind === 'listed' ? (
-                <ListingCard listing={item.card} />
+                <ListingCard
+                  listing={item.card}
+                  track={{ listType: 'favorites', rowId: 'favorites', position: i }}
+                />
               ) : (
                 <OffMarketHomeCard home={item.home} onRemove={removeSaved} />
               )}

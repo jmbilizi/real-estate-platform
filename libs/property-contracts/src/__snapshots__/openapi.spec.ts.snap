@@ -3069,6 +3069,199 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "HomeFeedRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "additionalProperties": false,
+            "default": null,
+            "nullable": true,
+            "properties": {
+              "items": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer",
+                    },
+                    "kind": {
+                      "enum": [
+                        "view",
+                        "save",
+                      ],
+                      "type": "string",
+                    },
+                    "listingId": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string",
+                    },
+                    "side": {
+                      "enum": [
+                        "sale",
+                        "rent",
+                      ],
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "listingId",
+                    "kind",
+                    "side",
+                    "at",
+                  ],
+                  "type": "object",
+                },
+                "maxItems": 50,
+                "type": "array",
+              },
+              "places": {
+                "items": {
+                  "maxLength": 120,
+                  "type": "string",
+                },
+                "maxItems": 5,
+                "type": "array",
+              },
+            },
+            "required": [
+              "items",
+              "places",
+            ],
+            "type": "object",
+          },
+          "radiusKm": {
+            "default": 20,
+            "maximum": 100,
+            "minimum": 1,
+            "nullable": true,
+            "type": "number",
+          },
+          "side": {
+            "default": "sale",
+            "enum": [
+              "sale",
+              "rent",
+            ],
+            "type": "string",
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "city": {
+                "pattern": "^[\\p{L}\\p{N} .,'-]{1,80}$",
+                "type": "string",
+              },
+              "lat": {
+                "maximum": 90,
+                "minimum": -90,
+                "type": "number",
+              },
+              "lng": {
+                "maximum": 180,
+                "minimum": -180,
+                "type": "number",
+              },
+              "state": {
+                "pattern": "^[A-Za-z]{2}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "city",
+              "state",
+            ],
+            "type": "object",
+          },
+          "variant": {
+            "default": "v1",
+            "pattern": "^[A-Za-z0-9_-]{1,32}$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "profile",
+          "target",
+          "radiusKm",
+          "side",
+          "variant",
+        ],
+        "type": "object",
+      },
+      "HomeFeedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "modelVersion": {
+            "type": "string",
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "listings": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "explore": {
+                        "type": "boolean",
+                      },
+                      "listing": {
+                        "$ref": "#/components/schemas/ListingCardRow",
+                      },
+                    },
+                    "required": [
+                      "listing",
+                      "explore",
+                    ],
+                    "type": "object",
+                  },
+                  "type": "array",
+                },
+                "modelVersion": {
+                  "type": "string",
+                },
+                "rowId": {
+                  "enum": [
+                    "picked",
+                    "new",
+                    "price-drops",
+                    "near-you",
+                    "just-listed",
+                    "coming-soon",
+                  ],
+                  "type": "string",
+                },
+                "title": {
+                  "type": "string",
+                },
+                "variant": {
+                  "type": "string",
+                },
+              },
+              "required": [
+                "rowId",
+                "title",
+                "modelVersion",
+                "variant",
+                "listings",
+              ],
+              "type": "object",
+            },
+            "type": "array",
+          },
+          "variant": {
+            "type": "string",
+          },
+        },
+        "required": [
+          "modelVersion",
+          "variant",
+          "rows",
+        ],
+        "type": "object",
+      },
       "ListingCardRow": {
         "additionalProperties": false,
         "properties": {
@@ -6732,6 +6925,55 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           },
         },
         "summary": "Record one analytics event",
+      },
+    },
+    "/home-feed": {
+      "post": {
+        "description": "The v1 rules ranker (#835). The body carries the local feed profile, the target place, the radius and the side. The service ranks active and coming-soon listings with six features and builds the rows in page order. A later row never repeats a listing of an earlier row. The service stores and logs no profile. Every row carries modelVersion and variant for the feed events. The search sort stays free of per-user signals.",
+        "operationId": "getHomeFeed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HomeFeedRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeFeedResponse",
+                },
+              },
+            },
+            "description": "The rows. A row with fewer than 4 cards is left out.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown field or malformed value.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Ranked home-page rows for one visitor",
       },
     },
     "/listings": {

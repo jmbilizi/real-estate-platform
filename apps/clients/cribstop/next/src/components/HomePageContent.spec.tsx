@@ -10,6 +10,14 @@ jest.mock('@/lib/api/listings', () => ({
   getNeighborhoods: jest.fn(),
 }));
 
+// No licensed market by default, so a visitor with no signal has no target (the pre-#834 shape).
+// One test pushes a market in to cover the cold-start rotation.
+
+jest.mock('@/config/licensed-markets.json', () => ({ __esModule: true, default: [] }));
+const mockMarkets: { city: string; state: string }[] = jest.requireMock(
+  '@/config/licensed-markets.json',
+).default;
+
 // HomePageContent itself does not read useApp()/listingType (#361, #392) — but ListingCard,
 // rendered inside every carousel row, still calls useApp() for save/unsave. Without this mock the
 // cards throw for lack of a react-redux Provider, unrelated to what this file is testing.
@@ -433,6 +441,24 @@ describe('HomePageContent', () => {
         expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument();
         expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument();
       });
+    });
+
+    it('falls to the licensed market with a neutral title when there is no signal (#834)', async () => {
+      mockMarkets.push({ city: 'Arlington', state: 'VA' });
+      try {
+        render(<HomePageContent />);
+
+        await waitFor(() =>
+          expect(mockedSearchListings).toHaveBeenCalledWith(
+            expect.objectContaining({ listingType: 'sale', city: 'Arlington', state: 'VA' }),
+            expect.anything(),
+          ),
+        );
+        expect(await screen.findByText('Homes for sale')).toBeInTheDocument();
+        expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument();
+      } finally {
+        mockMarkets.length = 0;
+      }
     });
 
     it('renders "Homes for sale near you" first, scoped to the resolved region', async () => {

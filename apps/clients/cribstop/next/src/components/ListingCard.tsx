@@ -2,6 +2,8 @@
 
 import { Copy, Heart, Share2 } from 'lucide-react';
 import ListingCardMenu from '@/components/ListingCardMenu';
+import { trackEvent } from '@/lib/analytics';
+import { type CardTrack, useCardTracking } from '@/lib/useCardTracking';
 import { CARD_HOVER_CLASS } from '@/components/cardHover';
 import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
@@ -36,7 +38,14 @@ import {
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 
-export default function ListingCard({ listing }: { listing: ListingCardRow }) {
+export default function ListingCard({
+  listing,
+  track,
+}: {
+  listing: ListingCardRow;
+  track?: CardTrack;
+}) {
+  const { impressionRef, reportClick } = useCardTracking(listing.id, track);
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
   const saved = isSaved(listing.propertyId);
@@ -57,7 +66,11 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
    * local state — see `lib/listing-panel` — and the whole row goes with it, which is what lets the
    * panel open on this listing's own address, badges, price and photo instead of on grey blocks.
    */
-  const openPanel = () => openListingPanel(listing.id, listing);
+  const feedSrc = track?.feed ? `home:${track.rowId}:${track.position}` : undefined;
+  const openPanel = () => {
+    reportClick();
+    openListingPanel(listing.id, listing, feedSrc);
+  };
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
   const isParcel = listing.propertyType === 'Land';
@@ -98,6 +111,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share(buildListingShare(listing, url));
+        trackEvent('listing_share', { listingId: listing.id, props: { channel: 'native' } });
         return;
       } catch (err) {
         // A dismissed share sheet is a choice, not a failure — see ListingDetailContent's own
@@ -105,8 +119,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
         if ((err as { name?: string } | null)?.name === 'AbortError') return;
       }
     }
-    if (await copyToClipboard(url)) toast('Link copied');
-    else toast('We could not copy the link.', 'error');
+    if (await copyToClipboard(url)) {
+      trackEvent('listing_share', { listingId: listing.id, props: { channel: 'copy' } });
+      toast('Link copied');
+    } else toast('We could not copy the link.', 'error');
   }
 
   /** #433/#452. The more-options menu's one item: a direct copy, no share-sheet attempt. Closing
@@ -115,8 +131,10 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
     e.preventDefault();
     e.stopPropagation();
     const url = listingShareUrl(listing.propertyPath, shareOrigin());
-    if (await copyToClipboard(url)) toast('Link copied');
-    else toast('We could not copy the link.', 'error');
+    if (await copyToClipboard(url)) {
+      trackEvent('listing_share', { listingId: listing.id, props: { channel: 'copy' } });
+      toast('Link copied');
+    } else toast('We could not copy the link.', 'error');
   }
 
   /**
@@ -178,6 +196,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
      * respectively lead a user to try.
      */
     <div
+      ref={impressionRef}
       role="link"
       tabIndex={0}
       aria-label={`View listing at ${formatCardAddress(listing)}`}
@@ -486,7 +505,7 @@ export default function ListingCard({ listing }: { listing: ListingCardRow }) {
            * is the one keyboard stop.
            */}
           <a
-            href={listing.propertyPath}
+            href={feedSrc ? `${listing.propertyPath}?src=${feedSrc}` : listing.propertyPath}
             tabIndex={-1}
             onClick={(e) => {
               if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {

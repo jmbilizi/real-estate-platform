@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import ListingCard from './ListingCard';
+import type { CardTrack } from '@/lib/useCardTracking';
 import { CARD_HOVER_CLASS } from '@/components/cardHover';
 import {
   CAROUSEL_ITEM_CLASS,
@@ -41,6 +42,22 @@ interface Props {
   headerExtra?: ReactNode;
   /** Which home-target source chose this row's place. Output only, for debugging and tests. */
   targetSource?: string;
+  /** Stable row name for analytics (#826). Defaults to a slug of the title. */
+  rowId?: string;
+  /** Where the row sits, for analytics. Defaults to `grid`. */
+  listType?: CardTrack['listType'];
+  /** Set only for a ranked home-feed row. Adds `feed_impression` and `feed_click`. */
+  feed?: Omit<NonNullable<CardTrack['feed']>, 'explore'>;
+  /** Ids of the exploration-slot cards in a feed row. */
+  exploreIds?: ReadonlySet<string>;
+}
+
+function slugRowId(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
 }
 
 /** The carousel's per-card width breakpoints, shared by real cards and their loading skeletons. */
@@ -58,7 +75,12 @@ export default function ListingRow({
   onRetry,
   headerExtra,
   targetSource,
+  rowId,
+  listType = 'grid',
+  feed,
+  exploreIds,
 }: Props) {
+  const trackRowId = rowId ?? slugRowId(title);
   // Show max+1 cards so See all is always after scroll
   const showSeeAll = !loading && listings.length > max;
   const visible = showSeeAll ? listings.slice(0, max + 1) : listings;
@@ -275,7 +297,15 @@ export default function ListingRow({
             // Otherwise, render a normal listing card
             return (
               <div key={l.id} className={CARD_WIDTH_CLASS}>
-                <ListingCard listing={l} />
+                <ListingCard
+                  listing={l}
+                  track={{
+                    listType,
+                    rowId: trackRowId,
+                    position: i,
+                    ...(feed ? { feed: { ...feed, explore: exploreIds?.has(l.id) ?? false } } : {}),
+                  }}
+                />
               </div>
             );
           })}

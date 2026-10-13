@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type {
+  HomeFeedResponse,
   NeighborhoodRow as NeighborhoodApiRow,
   PropertyType,
 } from '@cribstop/property-contracts';
@@ -14,8 +15,11 @@ import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow, ListingsMeta } from '@/lib/types';
 import { searchTargetUrl } from '@/lib/search-place';
 import { formatRelativeTime } from '@/lib/format';
-import { type HomeTarget, homeTargetDebugEnabled } from '@/lib/home-target';
+import { homeTargetDebugEnabled, type InferredTarget, prefersRentFirst } from '@/lib/home-target';
+import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
 import { useHomeTarget } from '@/lib/useHomeTarget';
+import { feedRowTitle, type HomeFeedFlags } from '@/lib/home-feed';
+import { useHomeFeed } from '@/lib/useHomeFeed';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import {
@@ -56,24 +60,31 @@ function lastSearchedSide(): ListingSide | null {
   return latestRecentSearch()?.listingType === 'rent' ? 'rent' : null;
 }
 
-/** True once the client has read a rent last search. `false` until then (and forever if there is
- *  none) — server render always sees no history. */
+/** True once the client has read a rent last search, or mostly rent views in 7 days. `false` until
+ *  then (and forever if there is none) — server render always sees no history. */
 function useRentFirst(): boolean {
   const [rentFirst, setRentFirst] = useState(false);
   useEffect(() => {
-    setRentFirst(lastSearchedSide() === 'rent');
+    const views = isPersonalisationEnabled()
+      ? readItems()
+          .filter((i) => i.kind === 'view')
+          .map((i) => ({ side: i.side, at: i.at }))
+      : [];
+    setRentFirst(prefersRentFirst({ lastSearchSide: lastSearchedSide(), views }));
   }, []);
   return rentFirst;
 }
 
-/** A place a row scopes to. `HomeTarget` adds the source that chose it (`lib/home-target.ts`). */
+/** A place a row scopes to. `InferredTarget` adds the source, confidence and radius (`lib/home-target.ts`). */
 type Region = { city: string; state: string };
 
 /** Logs which source a row used. Off unless the debug flag is set. */
-function useTargetDebug(row: string, target: HomeTarget | null) {
+function useTargetDebug(row: string, target: InferredTarget | null) {
   useEffect(() => {
     if (!target || !homeTargetDebugEnabled()) return;
-    console.info(`[home-target] ${row}: ${target.source} ${target.city}, ${target.state}`);
+    console.info(
+      `[home-target] ${row}: ${target.source} ${target.city}, ${target.state} C=${target.confidence.toFixed(2)} r=${target.radiusKm ?? 'state'}`,
+    );
   }, [row, target]);
 }
 
@@ -366,6 +377,12 @@ const NEAR_YOU_TITLE: Record<ListingSide, string> = {
   rent: 'Rentals near you',
 };
 
+/** The cold-start market (#834) is not the visitor's place, so its row does not say "near you". */
+const MARKET_TITLE: Record<ListingSide, string> = {
+  sale: 'Homes for sale',
+  rent: 'Rentals',
+};
+
 /** "Near you" (#363): the home page's first row. One stable component throughout — its query
  *  goes from skipped to region-scoped in place, rather than swapping in a freshly-mounted child
  *  once the region resolves. Hidden while the region is unknown or absent, and while it resolves
@@ -377,7 +394,7 @@ function NearYouRow({
   regionLoading,
 }: {
   side: ListingSide;
-  region: HomeTarget | null;
+  region: InferredTarget | null;
   regionLoading: boolean;
 }) {
   useTargetDebug(`near-you-${side}`, region);
@@ -399,7 +416,7 @@ function NearYouRow({
 
   return (
     <ListingRow
-      title={NEAR_YOU_TITLE[side]}
+      title={region?.source === 'rotation' ? MARKET_TITLE[side] : NEAR_YOU_TITLE[side]}
       targetSource={region?.source}
       href={
         region
@@ -547,7 +564,7 @@ function ComingSoonRow({
   placeLoading,
 }: {
   side: ListingSide;
-  place: HomeTarget | null;
+  place: InferredTarget | null;
   placeLoading: boolean;
 }) {
   useTargetDebug(`coming-soon-${side}`, place);
@@ -683,7 +700,7 @@ function PriceSortRow({
   placeLoading,
 }: {
   side: ListingSide;
-  place: HomeTarget | null;
+  place: InferredTarget | null;
   placeLoading: boolean;
 }) {
   const [sort, setSort] = useState<PriceSort>('price-asc');
@@ -804,6 +821,53 @@ function TrustBlock() {
   );
 }
 
+/** Rows in the feed skeleton. A typical warm feed has this many rows above the price-sort rows. */
+const FEED_SKELETON_ROWS = 3;
+
+/** Card-row placeholders. Same row component and padding as real rows, with an empty title line. */
+function FeedSkeleton() {
+  return (
+    <div aria-hidden="true" data-testid="home-feed-skeleton">
+      {Array.from({ length: FEED_SKELETON_ROWS }, (_, i) => (
+        <ListingRow
+          key={i}
+          title={' '}
+          listings={[]}
+          loading
+          max={7}
+          sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The ranked rows (#836). A row sets `feed`, so each card sends `feed_impression` and
+ * `feed_click` with the row, position, variant and model version. The title is the server's. It
+ * names only a place the visitor chose or acted on (`titleSafeTarget`).
+ */
+function FeedRows({ feed }: { feed: HomeFeedResponse }) {
+  return (
+    <>
+      {feed.rows
+        .filter((row) => row.listings.length > 0)
+        .map((row) => (
+          <ListingRow
+            key={row.rowId}
+            title={feedRowTitle(row.rowId, row.title)}
+            rowId={row.rowId}
+            listings={row.listings.map((item) => item.listing)}
+            exploreIds={new Set(row.listings.filter((i) => i.explore).map((i) => i.listing.id))}
+            feed={{ variant: row.variant, modelVersion: row.modelVersion }}
+            max={8}
+            sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+          />
+        ))}
+    </>
+  );
+}
+
 /**
  * Row order (#394 stakeholder ruling, #363): "Near you" leads the body, sale then rent — the
  * first row a visitor sees is scoped to their own region, not a platform-wide feed. Just listed
@@ -812,7 +876,7 @@ function TrustBlock() {
  * search was rent, both the "Near you" pair and the rentals cluster move up — `useRentFirst` is
  * the only thing that changes; nothing about the rows themselves does.
  */
-export default function HomePageContent() {
+export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags }) {
   const rentFirst = useRentFirst();
   const { user, savedPropertyIds } = useApp();
   const { save: latestSave, loading: saveLoading } = useLatestSave(user?.email ?? null);
@@ -821,6 +885,7 @@ export default function HomePageContent() {
     savedHome: latestSave ? { city: latestSave.city, state: latestSave.state } : null,
     savedPending: saveLoading,
   });
+  const feedState = useHomeFeed(homeFeed, region, regionLoading, rentFirst ? 'rent' : 'sale');
   const savedLike = user ? (
     <SavedLikeRow
       key="saved-like"
@@ -872,9 +937,23 @@ export default function HomePageContent() {
         comingSoonRent,
       ];
 
+  // Today's rows are the default for every path that is not a ready feed: flag off, control arm,
+  // opt-out, a cold visit, an error and a fallback answer. A visitor never sees an empty page.
+  const body =
+    feedState.status === 'ready' ? (
+      <>
+        <FeedRows feed={feedState.feed} />
+        {savedLike}
+      </>
+    ) : feedState.status === 'pending' ? (
+      <FeedSkeleton />
+    ) : (
+      rows
+    );
+
   return (
     <>
-      {rows}
+      {body}
 
       {priceSortRows}
 

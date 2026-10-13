@@ -131,6 +131,11 @@ export default function ListingDetailContent({
     if (typeof navigator.share === 'function') {
       try {
         await navigator.share(buildListingShare(listing, url));
+        trackEvent('listing_share', {
+          surface: 'detail',
+          listingId: listing.id,
+          props: { channel: 'native' },
+        });
         return;
       } catch (err) {
         /*
@@ -145,8 +150,14 @@ export default function ListingDetailContent({
       }
     }
 
-    if (await copyToClipboard(url)) toast('Link copied');
-    else toast('We could not copy the link.', 'error');
+    if (await copyToClipboard(url)) {
+      trackEvent('listing_share', {
+        surface: 'detail',
+        listingId: listing.id,
+        props: { channel: 'copy' },
+      });
+      toast('Link copied');
+    } else toast('We could not copy the link.', 'error');
   }
 
   const [fetched, setFetched] = useState<NearbyState>({ status: 'loading', results: [] });
@@ -155,7 +166,13 @@ export default function ListingDetailContent({
 
   useEffect(() => {
     trackEvent('listing_view', { surface: 'detail', listingId: listing.id });
-    recordFeedItem(listing.id, 'view', listing.listingType === 'rent' ? 'rent' : 'sale');
+    recordFeedItem(
+      listing.id,
+      'view',
+      listing.listingType === 'rent' ? 'rent' : 'sale',
+      Date.now(),
+      listing,
+    );
   }, [listing.id]);
 
   useEffect(() => {
@@ -647,6 +664,8 @@ export default function ListingDetailContent({
             {/* No side inset: the body's gutter already aligns the title with the panels above. */}
             <ListingRow
               title="Nearby homes"
+              rowId="nearby"
+              listType="similar"
               listings={nearbyRows}
               max={6}
               href={nearbyHref}

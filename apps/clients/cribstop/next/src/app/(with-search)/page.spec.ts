@@ -1,10 +1,10 @@
 jest.mock('@/components/HomePageContent', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/ScrollSentinel', () => ({ __esModule: true, default: () => null }));
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import * as page from './page';
 import JsonLd from '@/components/JsonLd';
-
-const { generateMetadata } = page;
 
 describe('home page rendering mode', () => {
   const saved = process.env.SITE_ORIGIN;
@@ -44,7 +44,7 @@ describe('home page metadata', () => {
 
   it('has title, description, canonical and Open Graph', () => {
     process.env.SITE_ORIGIN = 'https://example.com/';
-    const meta = generateMetadata();
+    const meta = page.generateMetadata();
 
     expect(meta.title).toEqual({ absolute: 'Real Broker, LLC — Find Your Next Home' });
     expect(meta.description).toContain('Real Broker, LLC');
@@ -58,6 +58,14 @@ describe('home page metadata', () => {
   it('publishes no canonical without a vouched origin', () => {
     delete process.env.SITE_ORIGIN;
 
-    expect(generateMetadata().alternates).toBeUndefined();
+    expect(page.generateMetadata().alternates).toBeUndefined();
+  });
+});
+
+describe('home page module', () => {
+  // The feed flags come from /api/feed-config (#836), never from the page module.
+  it('does not read the home feed flags', () => {
+    const source = readFileSync(join(__dirname, 'page.tsx'), 'utf8');
+    expect(source).not.toMatch(/HOME_FEED/);
   });
 });
