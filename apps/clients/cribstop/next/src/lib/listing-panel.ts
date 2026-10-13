@@ -106,7 +106,7 @@ function panelPath(id: string, row?: ListingCardRow): string {
  * click. The `pushState` after it is bookkeeping: it makes the open shareable, reloadable and
  * closable with the Back button, and it costs nothing because it is not a navigation.
  */
-export function openListingPanel(id: string, row?: ListingCardRow): void {
+export function openListingPanel(id: string, row?: ListingCardRow, src?: string): void {
   openedRows.set(id, row);
   openPanel = { id, row };
   emit();
@@ -114,7 +114,7 @@ export function openListingPanel(id: string, row?: ListingCardRow): void {
   const path = panelPath(id, row);
   openedPaths.set(path, id);
   if (typeof window !== 'undefined' && window.location.pathname !== path) {
-    window.history.pushState(null, '', path);
+    window.history.pushState(null, '', src ? `${path}?src=${src}` : path);
   }
 }
 

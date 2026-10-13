@@ -92,6 +92,7 @@ describe('ListingCard analytics (#826)', () => {
     };
     expect(mockTrackEvent).toHaveBeenCalledWith('feed_impression', feedBody);
     expect(mockTrackEvent).toHaveBeenCalledWith('feed_click', feedBody);
+    expect(screen.getAllByRole('link')[1].getAttribute('href')).toContain('?src=home:near-you:2');
   });
 
   it('sends no feed event for a flag-off row, and nothing for a card with no track', () => {

@@ -66,9 +66,10 @@ export default function ListingCard({
    * local state — see `lib/listing-panel` — and the whole row goes with it, which is what lets the
    * panel open on this listing's own address, badges, price and photo instead of on grey blocks.
    */
+  const feedSrc = track?.feed ? `home:${track.rowId}:${track.position}` : undefined;
   const openPanel = () => {
     reportClick();
-    openListingPanel(listing.id, listing);
+    openListingPanel(listing.id, listing, feedSrc);
   };
 
   const isSold = listing.listingType === 'sold' || listing.status === 'Sold';
@@ -504,7 +505,7 @@ export default function ListingCard({
            * is the one keyboard stop.
            */}
           <a
-            href={listing.propertyPath}
+            href={feedSrc ? `${listing.propertyPath}?src=${feedSrc}` : listing.propertyPath}
             tabIndex={-1}
             onClick={(e) => {
               if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {

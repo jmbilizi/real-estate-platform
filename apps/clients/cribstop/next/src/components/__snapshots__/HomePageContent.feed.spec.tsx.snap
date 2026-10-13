@@ -1,0 +1,16 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`HomePageContent home feed (#836) flag off renders exactly today's rows and never calls the feed 1`] = `
+[
+  "Homes for sale near you",
+  "Rentals near you",
+  "Newest homes for sale",
+  "Be first to see homes coming for sale",
+  "Price drops on homes for sale",
+  "Newest rentals",
+  "See new rentals before they're listed",
+  "Cheapest homes for sale",
+  "Cheapest rentals",
+  "Real listings, updated 5 months ago",
+]
+`;
