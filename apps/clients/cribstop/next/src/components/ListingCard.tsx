@@ -497,7 +497,25 @@ export default function ListingCard({
         {/* #458. The property address is secondary now that price leads: normal weight, the same
             13px/18px system face and `ink-body` color tier as the attribution row below it. */}
         <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px] tracking-[-0.01em] text-ink-body">
-          {formatCardAddress(listing)}
+          {/*
+           * #841. A real link, so a crawler reads the listing URL from the server HTML. A plain
+           * click still opens the panel through the card handler. A modified click or a middle
+           * click keeps the browser default and opens the page. Out of the tab order: the card
+           * is the one keyboard stop.
+           */}
+          <a
+            href={listing.propertyPath}
+            tabIndex={-1}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+                e.stopPropagation();
+                return;
+              }
+              e.preventDefault();
+            }}
+          >
+            {formatCardAddress(listing)}
+          </a>
         </h3>
 
         {/*

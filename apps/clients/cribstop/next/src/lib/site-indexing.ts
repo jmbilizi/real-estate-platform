@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import type { ListingCardRow } from '@cribstop/property-contracts';
+import { BRAND } from '@/lib/brand';
 
 /** The one origin search engines may index. Every other origin, or none, is disallow-all. */
 export const PRODUCTION_ORIGIN = 'https://cribstop.com';
@@ -28,14 +29,64 @@ export function sitemapIndexUrl(origin: string): string {
   return `${origin.replace(/\/$/, '')}/sitemap-index.xml`;
 }
 
+/**
+ * Crawler tokens, checked 2026-10-13 against each vendor's docs. Search and user-initiated bots
+ * give citations in answers. Training bots use content for model training. Review quarterly (#849).
+ */
+export const AI_SEARCH_BOTS = [
+  'Googlebot',
+  'Bingbot',
+  'OAI-SearchBot',
+  'Claude-SearchBot',
+  'PerplexityBot',
+  'ChatGPT-User',
+  'Claude-User',
+] as const;
+
+export const AI_TRAINING_BOTS = ['GPTBot', 'ClaudeBot', 'Google-Extended', 'CCBot'] as const;
+
+/** Licensed MLS data. Training bots stay out of listing pages. */
+export const TRAINING_DISALLOWED_PATHS = ['/property/'] as const;
+
 export function robotsFor(origin: string | null): MetadataRoute.Robots {
   if (origin === null || !isIndexableOrigin(origin)) {
     return { rules: { userAgent: '*', disallow: '/' } };
   }
+  // A named bot group replaces the `*` group, so each group repeats every `*` disallow.
   return {
-    rules: { userAgent: '*', allow: '/', disallow: [...DISALLOWED_PATHS] },
+    rules: [
+      { userAgent: '*', allow: '/', disallow: [...DISALLOWED_PATHS] },
+      { userAgent: [...AI_SEARCH_BOTS], allow: '/', disallow: [...DISALLOWED_PATHS] },
+      {
+        userAgent: [...AI_TRAINING_BOTS],
+        allow: '/',
+        disallow: [...DISALLOWED_PATHS, ...TRAINING_DISALLOWED_PATHS],
+      },
+    ],
     sitemap: sitemapIndexUrl(origin),
   };
+}
+
+/** The `/llms.txt` body (llmstxt.org). Never lists listing URLs. Null off production. */
+export function llmsTxtFor(origin: string | null): string | null {
+  if (origin === null || !isIndexableOrigin(origin)) return null;
+  const base = origin.replace(/\/$/, '');
+  return [
+    `# ${BRAND.siteName}`,
+    '',
+    `> ${BRAND.siteName} (${BRAND.siteDomain}) is a home search site. It is brokered by ${BRAND.brokerage}, licensed in ${BRAND.licensedStates}. Listing data comes from Bright MLS.`,
+    '',
+    '## Service area',
+    '',
+    `- ${BRAND.licensedStates}`,
+    '',
+    '## Resources',
+    '',
+    `- [Sitemap index](${sitemapIndexUrl(base)}): all indexable pages`,
+    `- [Homes for sale](${base}/homes-for-sale): search`,
+    `- [Homes for rent](${base}/homes-for-rent): search`,
+    '',
+  ].join('\n');
 }
 
 /**

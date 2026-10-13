@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
+import type { ListingsEnvelope } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import type { SearchFilters } from '@/lib/types';
 import { ListingsApiError, type ListingsErrorCode, searchListings } from '@/lib/api/listings';
@@ -80,18 +81,36 @@ export function useListingSearch(
   filters: SearchFilters,
   page: number,
   enabled = true,
+  initial?: ListingsEnvelope,
 ): ListingSearchResult {
-  const [state, setState] = useState<SearchState>({
-    results: [],
-    total: 0,
-    echo: null,
-    pageCount: 1,
-    pageSize: PAGE_SIZE_DEFAULT,
-    appliedFilters: {},
-    status: 'loading',
-    error: null,
-    errorCode: null,
-  });
+  // #841. The server's first page seeds the first render, so the HTML holds the cards. The first
+  // effect run then skips its fetch. Any later change of filters or page fetches as usual.
+  const seeded = useRef(initial !== undefined);
+  const [state, setState] = useState<SearchState>(() =>
+    initial
+      ? {
+          results: initial.results,
+          total: initial.total,
+          echo: { requested: page, applied: initial.page },
+          pageCount: initial.pageCount,
+          pageSize: initial.pageSize,
+          appliedFilters: initial.appliedFilters,
+          status: 'ready',
+          error: null,
+          errorCode: null,
+        }
+      : {
+          results: [],
+          total: 0,
+          echo: null,
+          pageCount: 1,
+          pageSize: PAGE_SIZE_DEFAULT,
+          appliedFilters: {},
+          status: 'loading',
+          error: null,
+          errorCode: null,
+        },
+  );
 
   const { toast } = useToast();
   const [attempt, setAttempt] = useState(0);
@@ -109,6 +128,10 @@ export function useListingSearch(
 
   useEffect(() => {
     if (!enabled) return;
+    if (seeded.current) {
+      seeded.current = false;
+      return;
+    }
 
     const controller = new AbortController();
     let active = true;

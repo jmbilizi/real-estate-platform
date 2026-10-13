@@ -4,6 +4,9 @@ import { searchRouteProps } from './search-route';
 
 jest.mock('@/app/api/_lib/nominatim-fetch', () => ({ proxyNominatim: jest.fn() }));
 jest.mock('@/app/api/_lib/gateway', () => ({ fetchGateway: jest.fn() }));
+jest.mock('@/app/api/_lib/listings-gateway', () => ({
+  proxyListingsRead: jest.fn(async () => ({ ok: false })),
+}));
 
 const VIEWPORT = 'viewport=-77.0602,38.7977,-77.0301,38.8189';
 
