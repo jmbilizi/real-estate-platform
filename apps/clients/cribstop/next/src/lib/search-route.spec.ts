@@ -1,9 +1,14 @@
 import { parseSearchPath } from '@cribstop/property-contracts';
 import { fetchGateway } from '@/app/api/_lib/gateway';
-import type { Geocoder } from './place-resolve';
+import { clearResolvedPlaces, type Geocoder } from './place-resolve';
 import { searchRouteProps } from './search-route';
 
 jest.mock('@/app/api/_lib/nominatim-fetch', () => ({ proxyNominatim: jest.fn() }));
+// No suggest data: a city or ZIP falls back to the geocoder fake of each test.
+jest.mock('@/app/api/_lib/listings-gateway', () => ({
+  proxyListingsRead: jest.fn(async () => ({ ok: false })),
+}));
+beforeEach(() => clearResolvedPlaces());
 // A neighborhood resolves from our own data (#533). The gateway call returns the rows a test sets.
 jest.mock('@/app/api/_lib/gateway', () => ({ fetchGateway: jest.fn() }));
 const mockedGateway = fetchGateway as jest.Mock;
