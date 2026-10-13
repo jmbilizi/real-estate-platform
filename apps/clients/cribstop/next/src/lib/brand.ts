@@ -67,7 +67,7 @@ export const BRAND = {
   licensedMarketNames: LICENSED_STATE_CODES.map((code) => LICENSED_STATE_NAMES[code]),
 
   /** Public profile URLs of the brokerage, for the `sameAs` field of its structured data (#844). */
-  brokerageProfileUrls: ['https://therealbrokerage.com'] as readonly string[],
+  brokerageProfileUrls: ['https://onereal.com'] as readonly string[],
 
   /**
    * Licence numbers by state code. Empty until the real numbers are known: structured data
