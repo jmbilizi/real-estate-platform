@@ -1,9 +1,16 @@
-# Patch Nginx Ingress Controller service to add Hetzner LoadBalancer location annotation
-# This tells the Cloud Controller Manager where to create the load balancer
+# Patch Nginx Ingress Controller service for the Hetzner load balancer.
 apiVersion: v1
 kind: Service
 metadata:
   name: ingress-nginx-controller
   namespace: ingress-nginx
   annotations:
+    # Tells the Cloud Controller Manager where to create the load balancer.
     load-balancer.hetzner.cloud/location: ash # Ashburn, Virginia (matches cluster location)
+    # PROXY protocol keeps the visitor IP (#853). Pair with use-proxy-protocol in
+    # patches/configmaps/ingress-nginx-controller.configmap.yaml. infra:validate fails on a mismatch.
+    load-balancer.hetzner.cloud/uses-proxyprotocol: "true"
+    # A hostname makes the Service status carry no IP. Without it, kube-proxy sends in-cluster
+    # traffic to the load balancer IP straight to nginx with no PROXY header, and nginx rejects it.
+    # The cert-manager HTTP-01 self-check is such traffic. The value only needs to be a valid name.
+    load-balancer.hetzner.cloud/hostname: lb.ingress-nginx.invalid

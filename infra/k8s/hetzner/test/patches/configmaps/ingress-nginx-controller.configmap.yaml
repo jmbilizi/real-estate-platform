@@ -1,0 +1,10 @@
+# Read the visitor IP from the PROXY header the Hetzner load balancer sends (#853).
+# Pair with uses-proxyprotocol in patches/services/ingress-nginx-controller.service.yaml.
+# Keep use-forwarded-headers off (base patch, #143): a client X-Forwarded-For stays untrusted.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+data:
+  use-proxy-protocol: "true"
