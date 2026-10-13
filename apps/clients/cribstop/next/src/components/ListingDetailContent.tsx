@@ -45,6 +45,7 @@ import { useToast } from '@/lib/useToast';
 import { searchTargetUrl } from '@/lib/search-place';
 import type { ListingCardRow } from '@/lib/types';
 import { trackEvent } from '@/lib/analytics';
+import { recordFeedItem } from '@/lib/feed-profile';
 
 interface Props {
   listing: ListingDetailView;
@@ -154,6 +155,7 @@ export default function ListingDetailContent({
 
   useEffect(() => {
     trackEvent('listing_view', { surface: 'detail', listingId: listing.id });
+    recordFeedItem(listing.id, 'view', listing.listingType === 'rent' ? 'rent' : 'sale');
   }, [listing.id]);
 
   useEffect(() => {
