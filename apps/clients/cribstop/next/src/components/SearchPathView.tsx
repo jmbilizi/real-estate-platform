@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { ParsedSearchPath } from '@cribstop/property-contracts';
 import SearchExperience from '@/components/SearchExperience';
-import { ListingErrorState } from '@/components/listing/ListingStates';
 import { loadInitialResults } from '@/lib/api/listings-initial';
 import { BRAND } from '@/lib/brand';
 import { searchRouteProps } from '@/lib/search-route';
@@ -23,14 +22,9 @@ export default async function SearchPathView({
   const props = await searchRouteProps(parsed, params);
   if (props.status === 'redirect') permanentRedirect(props.to);
   if (props.status === 'not-found') notFound();
-  if (props.status === 'error') {
-    return (
-      <ListingErrorState
-        message="We could not look up this place just now. Please try again."
-        className="mx-auto my-16 max-w-lg"
-      />
-    );
-  }
+  // A lookup failure is a server error, never a 404 or a 200 page. A crawler retries a 5xx and keeps
+  // the URL. An App Router page cannot set `Retry-After`, so the error boundary answers 500.
+  if (props.status === 'error') throw new Error('Place lookup failed');
   const initialResults = await loadInitialResults(props.initialQuery, props.place);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
   return (

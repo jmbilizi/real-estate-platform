@@ -55,6 +55,14 @@ describe('SearchPathView (#533)', () => {
     expect(grid.props.initialResults).toBe(results);
   });
 
+  it('throws on a failed place lookup, so the answer is a 5xx and never a 404 (#841)', async () => {
+    (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'error' });
+    await expect(
+      SearchPathView({ parsed: parsed as never, params: new URLSearchParams() }),
+    ).rejects.toThrow('Place lookup failed');
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
   it('renders the not-found page for a slug that matches nothing', async () => {
     (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'not-found' });
     await expect(

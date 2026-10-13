@@ -6,7 +6,12 @@ import { parseGroupState } from '@/lib/group-by';
 import { parsePageFromSearchParams } from '@/lib/listing-filters';
 import { parseQueryFilters } from '@/lib/search-place';
 import type { SearchFilters } from '@/lib/types';
-import { toSearchParams } from './listings';
+import { type ListingSearchQuery, toSearchParams } from './listings';
+
+/** The upstream query for a request, after the proxy allowlist. The read cache keys on it. */
+export function initialQueryFor(request: ListingSearchQuery): string {
+  return buildListingsQuery(toSearchParams(request));
+}
 
 /**
  * The first page of a search path, fetched on the server (#841), so the first HTML holds the
@@ -32,7 +37,8 @@ export async function loadInitialResults(
   };
   try {
     const clientIp = clientIpOf(await headers());
-    const response = await proxyListingsRead('', buildListingsQuery(toSearchParams(request)), {
+    const response = await proxyListingsRead('', initialQueryFor(request), {
+      cache: true,
       clientIp,
     });
     if (!response.ok) return undefined;
