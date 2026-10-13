@@ -13,6 +13,8 @@
 
 const LB_ANNOTATION = 'load-balancer.hetzner.cloud/uses-proxyprotocol';
 const HOSTNAME_ANNOTATION = 'load-balancer.hetzner.cloud/hostname';
+const PRIVATE_IP_ANNOTATION = 'load-balancer.hetzner.cloud/use-private-ip';
+const CIDR_KEY = 'proxy-real-ip-cidr';
 const NGINX_KEY = 'use-proxy-protocol';
 const SERVICE_NAME = 'ingress-nginx-controller';
 
@@ -50,17 +52,50 @@ function findProxyProtocolProblems(documents, { provider } = {}) {
     ];
   }
 
-  if (lbOn && nginxOn && !service.metadata.annotations?.[HOSTNAME_ANNOTATION]) {
-    return [
-      {
+  if (lbOn && nginxOn) {
+    const annotations = service.metadata.annotations ?? {};
+    const problems = [];
+    if (!annotations[HOSTNAME_ANNOTATION]) {
+      problems.push({
         headline: 'PROXY protocol is on without a load balancer hostname',
         detail: [
           `Set ${HOSTNAME_ANNOTATION}. Without it, in-cluster traffic to the LB IP skips the PROXY header.`,
           'The cert-manager HTTP-01 self-check is such traffic, so certificates stop issuing.',
         ],
         items: [HOSTNAME_ANNOTATION],
-      },
-    ];
+      });
+    }
+    // A forged PROXY header lets a client pick its own IP. Trust it only from the load balancer.
+    const cidrs = String(configMap.data?.[CIDR_KEY] ?? '')
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cidrs.length === 0 || cidrs.some((c) => c === '0.0.0.0/0' || c === '::/0')) {
+      problems.push({
+        headline: 'PROXY protocol is on and any peer is trusted to set the client IP',
+        detail: [
+          `Set ${CIDR_KEY} to the private subnet of the load balancer. Missing or 0.0.0.0/0 lets a client forge its IP.`,
+        ],
+        items: [`${CIDR_KEY}=${configMap.data?.[CIDR_KEY] ?? '(unset)'}`],
+      });
+    }
+    if (
+      !isOn(annotations[PRIVATE_IP_ANNOTATION]) ||
+      service.spec?.externalTrafficPolicy !== 'Local'
+    ) {
+      problems.push({
+        headline: 'The trusted CIDR only holds with a private LB and source IP kept',
+        detail: [
+          `Set ${PRIVATE_IP_ANNOTATION}: "true" so the peer is a private address.`,
+          'Set spec.externalTrafficPolicy: Local so kube-proxy does not rewrite a public peer to a node address.',
+        ],
+        items: [
+          `${PRIVATE_IP_ANNOTATION}=${annotations[PRIVATE_IP_ANNOTATION]}`,
+          `externalTrafficPolicy=${service.spec?.externalTrafficPolicy}`,
+        ],
+      });
+    }
+    if (problems.length > 0) return problems;
   }
 
   if (lbOn === nginxOn) return [];
@@ -76,4 +111,11 @@ function findProxyProtocolProblems(documents, { provider } = {}) {
   ];
 }
 
-module.exports = { findProxyProtocolProblems, LB_ANNOTATION, HOSTNAME_ANNOTATION, NGINX_KEY };
+module.exports = {
+  findProxyProtocolProblems,
+  LB_ANNOTATION,
+  HOSTNAME_ANNOTATION,
+  PRIVATE_IP_ANNOTATION,
+  CIDR_KEY,
+  NGINX_KEY,
+};

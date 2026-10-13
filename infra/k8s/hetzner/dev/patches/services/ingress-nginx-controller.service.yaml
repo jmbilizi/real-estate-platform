@@ -10,7 +10,14 @@ metadata:
     # PROXY protocol keeps the visitor IP (#853). Pair with use-proxy-protocol in
     # patches/configmaps/ingress-nginx-controller.configmap.yaml. infra:validate fails on a mismatch.
     load-balancer.hetzner.cloud/uses-proxyprotocol: "true"
+    # The load balancer reaches nodes over the private network (10.0.0.0/16, cluster-config.yaml),
+    # so nginx sees a private peer and can trust the PROXY header from that subnet only.
+    load-balancer.hetzner.cloud/use-private-ip: "true"
     # A hostname makes the Service status carry no IP. Without it, kube-proxy sends in-cluster
     # traffic to the load balancer IP straight to nginx with no PROXY header, and nginx rejects it.
     # The cert-manager HTTP-01 self-check is such traffic. The value only needs to be a valid name.
     load-balancer.hetzner.cloud/hostname: lb.ingress-nginx.invalid
+spec:
+  # Keep the source address. With Cluster, kube-proxy rewrites a direct public peer to a node
+  # address inside proxy-real-ip-cidr, and that peer could then forge a PROXY header.
+  externalTrafficPolicy: Local

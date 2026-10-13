@@ -6,13 +6,25 @@ const {
   findProxyProtocolProblems,
   LB_ANNOTATION,
   HOSTNAME_ANNOTATION,
+  PRIVATE_IP_ANNOTATION,
+  CIDR_KEY,
   NGINX_KEY,
 } = require('./proxy-protocol');
 
-const service = (annotations) => ({
+const service = (annotations, spec = {}) => ({
   kind: 'Service',
   metadata: { name: 'ingress-nginx-controller', annotations },
+  spec,
 });
+
+const GOOD_LB = {
+  [LB_ANNOTATION]: 'true',
+  [HOSTNAME_ANNOTATION]: 'lb.example.invalid',
+  [PRIVATE_IP_ANNOTATION]: 'true',
+};
+const GOOD_SPEC = { externalTrafficPolicy: 'Local' };
+const GOOD_CM = { [NGINX_KEY]: 'true', [CIDR_KEY]: '10.0.0.0/16' };
+
 const configMap = (data) => ({
   kind: 'ConfigMap',
   metadata: { name: 'ingress-nginx-controller' },
@@ -20,10 +32,7 @@ const configMap = (data) => ({
 });
 
 test('hetzner: both on with a hostname passes', () => {
-  const docs = [
-    service({ [LB_ANNOTATION]: 'true', [HOSTNAME_ANNOTATION]: 'lb.example.invalid' }),
-    configMap({ [NGINX_KEY]: 'true' }),
-  ];
+  const docs = [service(GOOD_LB, GOOD_SPEC), configMap(GOOD_CM)];
   assert.deepEqual(findProxyProtocolProblems(docs, { provider: 'hetzner' }), []);
 });
 
@@ -45,7 +54,8 @@ test('hetzner: nginx only fails', () => {
 });
 
 test('hetzner: both on without a hostname fails', () => {
-  const docs = [service({ [LB_ANNOTATION]: 'true' }), configMap({ [NGINX_KEY]: 'true' })];
+  const lb = { ...GOOD_LB, [HOSTNAME_ANNOTATION]: undefined };
+  const docs = [service(lb, GOOD_SPEC), configMap(GOOD_CM)];
   const problems = findProxyProtocolProblems(docs, { provider: 'hetzner' });
   assert.equal(problems.length, 1);
   assert.match(problems[0].headline, /hostname/);
@@ -75,4 +85,28 @@ test('local provider: either side on fails', () => {
   const lbOnly = [service({ [LB_ANNOTATION]: 'true' }), configMap({})];
   assert.equal(findProxyProtocolProblems(nginxOnly, { provider: 'podman' }).length, 1);
   assert.equal(findProxyProtocolProblems(lbOnly, { provider: 'podman' }).length, 1);
+});
+
+const hetznerProblems = (lb, spec, cm) =>
+  findProxyProtocolProblems([service(lb, spec), configMap(cm)], { provider: 'hetzner' });
+
+test('hetzner: a missing proxy-real-ip-cidr fails', () => {
+  const problems = hetznerProblems(GOOD_LB, GOOD_SPEC, { [NGINX_KEY]: 'true' });
+  assert.match(problems[0].headline, /any peer is trusted/);
+});
+
+test('hetzner: proxy-real-ip-cidr 0.0.0.0/0 fails, also inside a list', () => {
+  for (const cidr of ['0.0.0.0/0', '10.0.0.0/16, 0.0.0.0/0', '::/0']) {
+    const problems = hetznerProblems(GOOD_LB, GOOD_SPEC, { ...GOOD_CM, [CIDR_KEY]: cidr });
+    assert.match(problems[0].headline, /any peer is trusted/, cidr);
+  }
+});
+
+test('hetzner: no private IP or a Cluster traffic policy fails', () => {
+  const noPrivate = { ...GOOD_LB, [PRIVATE_IP_ANNOTATION]: undefined };
+  assert.match(hetznerProblems(noPrivate, GOOD_SPEC, GOOD_CM)[0].headline, /private LB/);
+  assert.match(
+    hetznerProblems(GOOD_LB, { externalTrafficPolicy: 'Cluster' }, GOOD_CM)[0].headline,
+    /private LB/,
+  );
 });

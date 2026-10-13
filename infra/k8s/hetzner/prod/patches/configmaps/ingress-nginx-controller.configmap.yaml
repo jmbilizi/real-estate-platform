@@ -1,5 +1,7 @@
 # Read the visitor IP from the PROXY header the Hetzner load balancer sends (#853).
 # Pair with uses-proxyprotocol in patches/services/ingress-nginx-controller.service.yaml.
+# Trust the PROXY header only from the load balancer private subnet (private_network.subnet in
+# cluster/cluster-config.yaml). The default 0.0.0.0/0 lets any client forge its IP (#811).
 # Keep use-forwarded-headers off (base patch, #143): a client X-Forwarded-For stays untrusted.
 apiVersion: v1
 kind: ConfigMap
@@ -8,3 +10,4 @@ metadata:
   namespace: ingress-nginx
 data:
   use-proxy-protocol: "true"
+  proxy-real-ip-cidr: "10.0.0.0/16"
