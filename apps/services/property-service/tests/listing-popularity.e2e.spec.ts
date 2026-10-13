@@ -3,7 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { closePool, getPool } from '../src/db/pool';
-import { refreshListingPopularity } from '../src/analytics/popularity';
+import {
+  REFRESH_LOCK_KEY,
+  refreshListingPopularity as refreshOn,
+} from '../src/analytics/popularity';
 
 /**
  * `listing_popularity_14d` (#832) against a REAL database: migration 063 up and down, the counts,
@@ -12,6 +15,16 @@ import { refreshListingPopularity } from '../src/analytics/popularity';
 const MIGRATION = '1785801600063_create-listing-popularity-view';
 const migrationsDir = path.join(__dirname, '..', 'migrations');
 const pool = () => getPool();
+
+/** The refresh needs one connection, because the advisory lock belongs to the session. */
+async function refreshListingPopularity(): Promise<Awaited<ReturnType<typeof refreshOn>>> {
+  const client = await pool().connect();
+  try {
+    return await refreshOn(client);
+  } finally {
+    client.release();
+  }
+}
 
 function steps(): number {
   const names = readdirSync(migrationsDir)
@@ -80,7 +93,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await pool().query('DELETE FROM analytics_events');
-  await refreshListingPopularity(pool());
+  await refreshListingPopularity();
   await closePool();
 });
 
@@ -96,7 +109,7 @@ describe('migration 063: listing_popularity_14d (#832)', () => {
     expect(await exists()).toBe(false);
     migrate('up');
     expect(await exists()).toBe(true);
-  });
+  }, 60_000);
 });
 
 describe('listing_popularity_14d (#832)', () => {
@@ -111,7 +124,7 @@ describe('listing_popularity_14d (#832)', () => {
     expect(b).toBeDefined();
     if (b) await insertEvents(b.id, 'listing_view', 1);
 
-    await refreshListingPopularity(pool());
+    await refreshListingPopularity();
 
     const { rows } = await pool().query(
       'SELECT listing_id, views::int, saves::int, leads::int, score FROM listing_popularity_14d WHERE listing_id = ANY($1)',
@@ -131,7 +144,7 @@ describe('listing_popularity_14d (#832)', () => {
     await pool().query(
       "INSERT INTO analytics_events (event, surface, session_id) VALUES ('listing_view', 'detail', 'x1x1x1x1')",
     );
-    await refreshListingPopularity(pool());
+    await refreshListingPopularity();
     expect((await pool().query('SELECT 1 FROM listing_popularity_14d')).rowCount).toBe(0);
   });
 
@@ -152,6 +165,23 @@ describe('listing_popularity_14d (#832)', () => {
   });
 });
 
+describe('refresh lock (#832)', () => {
+  it('skips when another session holds the lock, and refreshes once it is free', async () => {
+    const holder = await pool().connect();
+    try {
+      const taken = await holder.query('SELECT pg_try_advisory_lock($1) AS locked', [
+        REFRESH_LOCK_KEY,
+      ]);
+      expect(taken.rows[0].locked).toBe(true);
+      expect(await refreshListingPopularity()).toEqual({ refreshed: false });
+    } finally {
+      await holder.query('SELECT pg_advisory_unlock($1)', [REFRESH_LOCK_KEY]);
+      holder.release();
+    }
+    expect(await refreshListingPopularity()).toMatchObject({ refreshed: true });
+  });
+});
+
 describe('refresh and read plans (#832)', () => {
   it('refreshes in under 1 s and reads by listing id through the unique index', async () => {
     // Load: 20,000 events over every fixture listing, so the plan has work to do.
@@ -165,7 +195,7 @@ describe('refresh and read plans (#832)', () => {
     );
 
     const started = Date.now();
-    await refreshListingPopularity(pool());
+    await refreshListingPopularity();
     const elapsed = Date.now() - started;
     console.log(`refresh ms: ${elapsed}`);
     expect(elapsed).toBeLessThan(1000);

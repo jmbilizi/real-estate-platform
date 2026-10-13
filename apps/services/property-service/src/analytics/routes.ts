@@ -86,8 +86,6 @@ function startPurgeTimer(db: ReadClient): void {
 
 export interface AnalyticsRouterDeps {
   pool: ReadClient;
-  /** Pool for the hourly popularity refresh. Defaults to `pool`. */
-  refreshPool?: ReadClient;
   /** Read per request so a test or an operator can switch it without a new router. */
   enabled?: () => boolean;
 }
@@ -98,7 +96,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   let inFlight = 0;
   // A timer, not a per-write check, so an idle pod still deletes rows older than 30 days.
   startPurgeTimer(deps.pool);
-  startPopularityRefreshTimer(deps.refreshPool ?? deps.pool);
+  startPopularityRefreshTimer();
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');
