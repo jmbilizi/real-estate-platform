@@ -636,7 +636,9 @@ describe('ListingCard', () => {
 
     it('keeps the address at normal weight, not bold', () => {
       render(<ListingCard listing={aListingCardRow()} />);
-      const address = screen.getByText('100 Test St, Bethesda, MD 20814');
+      const address = screen
+        .getByText('100 Test St, Bethesda, MD 20814')
+        .closest('h3') as HTMLElement;
 
       expect(address).toHaveClass('font-normal');
       expect(address.className).not.toMatch(/font-(medium|semibold|bold)\b/);
@@ -776,7 +778,7 @@ describe('ListingCard', () => {
       const row = aListingCardRow({ id: 'row-1' });
       render(<ListingCard listing={row} />);
 
-      fireEvent.click(screen.getByRole('link'));
+      fireEvent.click(screen.getByRole('link', { name: /View listing/ }));
 
       // Asserted immediately after the event, with no `await` and no timer: had this gone through
       // a navigation, nothing would be open yet.
@@ -786,7 +788,7 @@ describe('ListingCard', () => {
     it('hands the whole row over, so the panel can open on the listing rather than on a skeleton', () => {
       render(<ListingCard listing={aListingCardRow({ id: 'row-1', address: '9 Elm St' })} />);
 
-      fireEvent.click(screen.getByRole('link'));
+      fireEvent.click(screen.getByRole('link', { name: /View listing/ }));
 
       expect(getListingPanel()?.row?.address).toBe('9 Elm St');
     });
@@ -794,7 +796,7 @@ describe('ListingCard', () => {
     it('puts the listing in the address bar without leaving the page', () => {
       render(<ListingCard listing={aListingCardRow({ id: 'row-1' })} />);
 
-      fireEvent.click(screen.getByRole('link'));
+      fireEvent.click(screen.getByRole('link', { name: /View listing/ }));
 
       expect(window.location.pathname).toBe(
         '/property/100-test-st-bethesda-md/11111111-1111-4111-8111-111111111111',
@@ -805,15 +807,26 @@ describe('ListingCard', () => {
     it.each(['Enter', ' '])('opens on %s, so the card is not mouse-only', (key) => {
       render(<ListingCard listing={aListingCardRow({ id: 'row-1' })} />);
 
-      fireEvent.keyDown(screen.getByRole('link'), { key });
+      fireEvent.keyDown(screen.getByRole('link', { name: /View listing/ }), { key });
 
       expect(getListingPanel()?.id).toBe('row-1');
+    });
+
+    it('carries a real listing URL for crawlers and keeps a plain click on the panel (#841)', () => {
+      const row = aListingCardRow({ id: 'row-1' });
+      render(<ListingCard listing={row} />);
+
+      const anchor = screen.getByRole('link', { name: /^100 Test St/ });
+      expect(anchor).toHaveAttribute('href', row.propertyPath);
+
+      fireEvent.click(anchor);
+      expect(getListingPanel()).toEqual({ id: 'row-1', row });
     });
 
     it('is reachable by keyboard at all — focusable, named, and announced as a link', () => {
       render(<ListingCard listing={aListingCardRow()} />);
 
-      const card = screen.getByRole('link');
+      const card = screen.getByRole('link', { name: /View listing/ });
       expect(card).toHaveAttribute('tabIndex', '0');
       expect(card).toHaveAccessibleName(/100 Test St/);
     });

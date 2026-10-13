@@ -13,6 +13,10 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/components/SearchExperience', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/lib/search-route', () => ({ searchRouteProps: jest.fn() }));
 
+jest.mock('@/lib/api/listings-initial', () => ({ loadInitialResults: jest.fn() }));
+
+import { renderToStaticMarkup } from 'react-dom/server';
+import { loadInitialResults } from '@/lib/api/listings-initial';
 import { searchRouteProps } from '@/lib/search-route';
 
 const parsed = parseSearchPath(['alexandria-va', 'old-town-neighborhood', 'homes-for-sale']);
@@ -31,6 +35,24 @@ describe('SearchPathView (#533)', () => {
     expect(permanentRedirect).toHaveBeenCalledWith(
       '/alexandria-va/old-town-neighborhood/homes-for-sale',
     );
+  });
+
+  it('renders one H1 and hands the server results to the grid (#841)', async () => {
+    const results = { results: [], total: 0, page: 1, pageSize: 20, pageCount: 1 };
+    (searchRouteProps as jest.Mock).mockResolvedValue({
+      status: 'found',
+      initialQuery: '',
+      place: { label: 'Alexandria, VA', filters: {}, query: '', searchPlace: null },
+    });
+    (loadInitialResults as jest.Mock).mockResolvedValue(results);
+    const view = await SearchPathView({ parsed: parsed as never, params: new URLSearchParams() });
+    const html = renderToStaticMarkup(view);
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html).toContain('Homes for sale in Alexandria, VA');
+    expect(loadInitialResults).toHaveBeenCalledWith('', expect.objectContaining({ filters: {} }));
+    const grid = (view as { props: { children: { props: { initialResults: unknown } }[] } }).props
+      .children[1];
+    expect(grid.props.initialResults).toBe(results);
   });
 
   it('renders the not-found page for a slug that matches nothing', async () => {

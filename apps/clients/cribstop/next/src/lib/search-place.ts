@@ -18,6 +18,15 @@ import { bareDC, bareZip, stateAbbr } from '@/lib/search-utils';
 
 export type ListingTypeChoice = NonNullable<SearchFilters['listingType']> | 'all';
 
+/** Filters from the query string. On a search path, `type` belongs to the place, not the filters. */
+export function parseQueryFilters(params: URLSearchParams, place: unknown): SearchFilters {
+  if (!place) return parseFiltersFromSearchParams(params);
+  const own = new URLSearchParams(params);
+  own.delete('type');
+  own.delete('listingType');
+  return parseFiltersFromSearchParams(own);
+}
+
 /** Where a search bar pick goes. */
 export type SearchTarget =
   | { readonly kind: 'place'; readonly place: SearchPlace }

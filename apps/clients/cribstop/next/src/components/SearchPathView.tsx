@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import type { ParsedSearchPath } from '@cribstop/property-contracts';
 import SearchExperience from '@/components/SearchExperience';
 import { ListingErrorState } from '@/components/listing/ListingStates';
+import { loadInitialResults } from '@/lib/api/listings-initial';
 import { BRAND } from '@/lib/brand';
 import { searchRouteProps } from '@/lib/search-route';
 
@@ -30,7 +31,18 @@ export default async function SearchPathView({
       />
     );
   }
-  return <SearchExperience initialQuery={props.initialQuery} place={props.place} />;
+  const initialResults = await loadInitialResults(props.initialQuery, props.place);
+  const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
+  return (
+    <>
+      {props.place.label && <h1 className="sr-only">{`${noun} in ${props.place.label}`}</h1>}
+      <SearchExperience
+        initialQuery={props.initialQuery}
+        place={props.place}
+        initialResults={initialResults}
+      />
+    </>
+  );
 }
 
 export async function searchPathMetadata(
