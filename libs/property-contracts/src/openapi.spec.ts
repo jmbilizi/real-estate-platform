@@ -34,6 +34,7 @@ describe('toOpenApiDocument', () => {
       '/agent/leads/{id}/decline',
       '/agent/leads/{id}/status',
       '/analytics/events',
+      '/home-feed',
       '/listings',
       '/listings/brokers',
       '/listings/map',

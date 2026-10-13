@@ -4,6 +4,7 @@ import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
 import { analyticsEventBatchSchema, analyticsEventRequestSchema } from './analytics-event';
+import { homeFeedRequestSchema, homeFeedResponseSchema } from './home-feed';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
 import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
 import { listingsMetaSchema } from './listings-meta';
@@ -125,6 +126,8 @@ function componentSchemas() {
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
   registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
+  registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
+  registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
@@ -714,6 +717,42 @@ export function toOpenApiDocument() {
                 'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
                 'the read endpoints above — because this limit is enforced by the service ' +
                 'itself (keyed on the path parameter), not by the gateway.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/home-feed': {
+        post: {
+          operationId: 'getHomeFeed',
+          summary: 'Ranked home-page rows for one visitor',
+          description:
+            'The v1 rules ranker (#835). The body carries the local feed profile, the target ' +
+            'place, the radius and the side. The service ranks active and coming-soon listings ' +
+            'with six features and builds the rows in page order. A later row never repeats a ' +
+            'listing of an earlier row. The service stores and logs no profile. Every row ' +
+            'carries modelVersion and variant for the feed events. The search sort stays ' +
+            'free of per-user signals.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HomeFeedRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The rows. A row with fewer than 4 cards is left out.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/HomeFeedResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown field or malformed value.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

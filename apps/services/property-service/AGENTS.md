@@ -789,6 +789,25 @@ the Property API document. Never publish a second document.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
 
+## Home feed (`src/home-feed/`)
+
+`POST /home-feed` (#835). The gateway exposes it as `POST /property/home-feed`. It ranks the home
+page rows for one visitor. `sort=recommended` stays free of per-user signals. Personal ranking lives
+only here.
+
+- The body carries the local feed profile (#833). The service stores nothing and logs no profile.
+  Pass any logged body through `redact.ts`. The response is `no-store`.
+- `ranker/v1-weights.ts` holds the weights and `FEATURE_KEYS`, the Fair Housing allowlist. Six
+  features only. A new feature needs a compliance review and a change to the allowlist test. A
+  weight change is a new `MODEL_VERSION`.
+- `candidates.ts` reads `listing_search_v`, so every suppression applies. The radius uses the
+  coordinate index through a bounding box, then `ST_DWithin`. The read has a `LIMIT`, a statement
+  timeout and no exact count. Keep it that way (#755).
+- Rows build in page order. A later row never repeats a listing. A row under 4 cards hides. MMR uses
+  lambda 0.7 and at most 2 cards per listing office per row. One slot in 8 is an exploration card
+  with `explore: true`.
+- Every row carries `modelVersion` and `variant` for the feed events (#824).
+
 ## What I'm looking for (`src/looking-for/`)
 
 `GET /looking-for`, `PUT|DELETE /looking-for/{id}` (#768). The gateway exposes them as
