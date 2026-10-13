@@ -107,7 +107,11 @@ function landingProps(): Record<string, string> {
       if (/^[a-z0-9_.-]{1,64}$/.test(v)) landing[name] = v;
     }
     const host = document.referrer ? new URL(document.referrer).hostname.toLowerCase() : '';
-    if (host && host !== window.location.hostname && /^[a-z0-9][a-z0-9.-]{0,98}$/.test(host)) {
+    if (
+      host &&
+      host !== window.location.hostname &&
+      /^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$/.test(host)
+    ) {
       landing['referrer_host'] = host;
     }
   } catch {

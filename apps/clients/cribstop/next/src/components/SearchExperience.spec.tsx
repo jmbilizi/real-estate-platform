@@ -710,6 +710,20 @@ describe('search analytics (#826)', () => {
     expect(JSON.stringify(mockTrackEvent.mock.calls)).not.toContain('Alexandria');
   });
 
+  it('sends the new count after a filter change, not the old one', async () => {
+    mockedSearchListings.mockResolvedValue({
+      ...envelope(),
+      results: [aListingCardRow(), aListingCardRow({ id: 'second' })],
+      total: 2,
+    });
+    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+    rerender(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(2));
+    expect(searchCalls()[1][1].props).toEqual({ result_count: 0, is_zero_result: true });
+  });
+
   it('sends nothing while the request is still loading', () => {
     mockedSearchListings.mockReturnValue(new Promise(() => undefined));
     render(<SearchExperience initialQuery="q=Alexandria" />);

@@ -25,8 +25,16 @@ function feedOptions(listingId: string, track: CardTrack, feed: NonNullable<Card
   };
 }
 
+/** The contract caps a position at 200, and one invalid event rejects its whole batch. */
+const MAX_POSITION = 200;
+
 /** The impression ref and the click reporter for one listing card. */
-export function useCardTracking(listingId: string, track: CardTrack | undefined) {
+export function useCardTracking(listingId: string, rawTrack: CardTrack | undefined) {
+  const track = rawTrack && {
+    ...rawTrack,
+    position: Math.min(rawTrack.position, MAX_POSITION),
+    rowId: rawTrack.rowId || 'row',
+  };
   const impressionRef = useImpression<HTMLDivElement>(
     track ? `${track.listType}:${track.rowId}:${listingId}` : null,
     () => {

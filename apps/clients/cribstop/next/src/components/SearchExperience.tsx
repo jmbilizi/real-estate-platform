@@ -561,8 +561,13 @@ export default function SearchExperience({
     !deferred,
   );
 
+  // `useListingSearch` turns `loading` on in its own effect, so the render where `searchKey`
+  // changes still holds the old total. Send only for a key whose request was seen loading.
+  const loadingKey = useRef<string | null>(null);
   useEffect(() => {
-    if (status !== 'ready' || sentSearchKey.current === searchKey) return;
+    if (status === 'loading') loadingKey.current = searchKey;
+    if (status !== 'ready' || loadingKey.current !== searchKey) return;
+    if (sentSearchKey.current === searchKey) return;
     sentSearchKey.current = searchKey;
     trackEvent('search', {
       surface: 'search',

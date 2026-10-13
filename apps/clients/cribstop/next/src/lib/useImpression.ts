@@ -34,33 +34,41 @@ export function useImpression<T extends Element>(
       cleanup.current = null;
       if (!el || !key || typeof IntersectionObserver === 'undefined') return;
       let timer: ReturnType<typeof setTimeout> | null = null;
+      let inView = false;
       const stop = () => {
         if (timer) clearTimeout(timer);
         timer = null;
       };
+      const arm = () => {
+        if (timer || counted.has(key)) return;
+        timer = setTimeout(() => {
+          timer = null;
+          // A hidden tab counts nothing. `onVisible` arms the timer again.
+          if (document.hidden || counted.has(key)) return;
+          counted.add(key);
+          cleanup.current?.();
+          callback.current();
+        }, IMPRESSION_DWELL_MS);
+      };
+      const onVisible = () => {
+        if (!document.hidden && inView) arm();
+      };
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            if (entry.isIntersecting && entry.intersectionRatio >= IMPRESSION_VISIBLE_RATIO) {
-              if (timer || counted.has(key)) continue;
-              timer = setTimeout(() => {
-                timer = null;
-                if (document.hidden || counted.has(key)) return;
-                counted.add(key);
-                observer.disconnect();
-                callback.current();
-              }, IMPRESSION_DWELL_MS);
-            } else {
-              stop();
-            }
+            inView = entry.isIntersecting && entry.intersectionRatio >= IMPRESSION_VISIBLE_RATIO;
+            if (inView) arm();
+            else stop();
           }
         },
         { threshold: [0, IMPRESSION_VISIBLE_RATIO] },
       );
       observer.observe(el);
+      document.addEventListener('visibilitychange', onVisible);
       cleanup.current = () => {
         stop();
         observer.disconnect();
+        document.removeEventListener('visibilitychange', onVisible);
       };
     },
     [key],

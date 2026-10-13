@@ -14,6 +14,8 @@ export function reportMapMove(
   const zoom = Math.min(22, Math.max(0, Math.round(view.zoom)));
   const lat = (view.south + view.north) / 2;
   const lng = (view.west + view.east) / 2;
+  // One invalid event rejects its whole batch.
+  if (!Number.isFinite(lat + lng)) return previousZoom;
   trackEvent('map_move', {
     surface: 'map',
     props: {

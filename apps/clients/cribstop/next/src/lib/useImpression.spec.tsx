@@ -53,6 +53,19 @@ describe('useImpression', () => {
     expect(on).not.toHaveBeenCalled();
   });
 
+  it('counts a card still in view when the tab becomes visible again', () => {
+    const on = jest.fn();
+    render(<Card id="a" onImpression={on} />);
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    act(() => setVisibleRatio(1));
+    act(() => void jest.advanceTimersByTime(1000));
+    expect(on).not.toHaveBeenCalled();
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+    act(() => void document.dispatchEvent(new Event('visibilitychange')));
+    act(() => void jest.advanceTimersByTime(1000));
+    expect(on).toHaveBeenCalledTimes(1);
+  });
+
   it('counts a re-render and a remount once per page view', () => {
     const on = jest.fn();
     const { rerender, unmount } = render(<Card id="a" onImpression={on} />);
