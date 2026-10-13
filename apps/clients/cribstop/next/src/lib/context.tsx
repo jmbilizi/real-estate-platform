@@ -292,6 +292,8 @@ export function useApp(): AppContextValue {
       if (!alreadySaved) {
         trackEvent('listing_save', { listingId: listing.id });
         recordFeedItem(listing.id, 'save', listing.listingType === 'rent' ? 'rent' : 'sale');
+      } else {
+        trackEvent('listing_unsave', { listingId: listing.id });
       }
       void toggleHome(store, listing, signedIn, notifyError(dispatch));
     },
