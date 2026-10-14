@@ -5,6 +5,7 @@ import DismissButton from '@/components/DismissButton';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
+import { enrichNearbyLocal } from '@/lib/nearby-enrich';
 import {
   fetchNearbyLocationsByType,
   formatLocationLabel,
@@ -676,25 +677,7 @@ export default function CompactSearchBar({
                   signal,
                 );
                 const hintState = address?.state || address?.state_code || '';
-                const enriched = await Promise.all(
-                  results.map(async (loc) => {
-                    try {
-                      const resp = await fetch(
-                        `/api/geocode/reverse?lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
-                        { signal },
-                      );
-                      if (resp.ok) {
-                        const data = await resp.json();
-                        if (data && data.address) {
-                          return { ...loc, address: data.address };
-                        }
-                      }
-                    } catch (e: any) {
-                      if (e?.name !== 'AbortError') console.error('[Nominatim] Enrich failed', e);
-                    }
-                    return { ...loc, _hint_state: hintState };
-                  }),
-                );
+                const enriched = await enrichNearbyLocal(results, hintState);
                 if (signal.aborted) return;
                 nearbyForKey.current = geoKey;
                 setNearbyLocations(enriched);
@@ -729,25 +712,7 @@ export default function CompactSearchBar({
         const results = await fetchNearbyLocationsByType(lat, lon, placeType, 20000, signal);
         // Enrich each result with Nominatim reverse geocode for address
         const hintState = address?.state || address?.state_code || '';
-        const enriched = await Promise.all(
-          results.map(async (loc) => {
-            try {
-              const resp = await fetch(
-                `/api/geocode/reverse?lat=${loc.lat}&lon=${loc.lon}&zoom=10&addressdetails=1`,
-                { signal },
-              );
-              if (resp.ok) {
-                const data = await resp.json();
-                if (data && data.address) {
-                  return { ...loc, address: data.address };
-                }
-              }
-            } catch (e: any) {
-              if (e?.name !== 'AbortError') console.error('[Nominatim] Enrich failed', e);
-            }
-            return { ...loc, _hint_state: hintState };
-          }),
-        );
+        const enriched = await enrichNearbyLocal(results, hintState);
         if (signal.aborted) return;
         nearbyForKey.current = key;
         setNearbyLocations(enriched);
