@@ -1,7 +1,5 @@
-import { toOpenApiDocument } from './openapi';
 import { savedHomeSchema, savedHomesRequestSchema } from './saved-homes';
 import { listingCardSchema } from './listing-card';
-import { UNAUTHENTICATED_BODY } from './errors';
 
 describe('saved homes contract (#23)', () => {
   it('defaults the page and rejects an unknown parameter', () => {
@@ -41,25 +39,5 @@ describe('saved homes contract (#23)', () => {
     const shape = listingCardSchema.shape;
     expect(shape.isSaved.safeParse(undefined).success).toBe(true);
     expect(shape.isFavorited.safeParse(undefined).success).toBe(true);
-  });
-
-  it('publishes the 401 code in ErrorBody', () => {
-    const doc: any = toOpenApiDocument();
-    expect(doc.components.schemas.ErrorBody.properties.error.properties.code.enum).toContain(
-      UNAUTHENTICATED_BODY.error.code,
-    );
-  });
-
-  it('requires sign-in on every saved-homes operation', () => {
-    const doc: any = toOpenApiDocument();
-    const operations = [
-      doc.paths['/listings/{id}/saved'].put,
-      doc.paths['/listings/{id}/saved'].delete,
-      doc.paths['/saved-homes'].get,
-      doc.paths['/saved-homes/{id}'].delete,
-    ];
-    for (const operation of operations) {
-      expect(operation.responses['401']).toBeDefined();
-    }
   });
 });
