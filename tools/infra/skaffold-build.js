@@ -22,6 +22,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { applyLocalRetention } = require('./registry-retention');
+const { resolveContainerEngine } = require('../docker/container-engine');
 const { ensureWorkspaceCerts } = require('./workspace-certs');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
@@ -136,6 +137,8 @@ function ensureWorkspaceCertsDir() {
   }
 }
 
+let engine;
+
 function buildImage(image) {
   // Ensure the .workspace-certs/ directory exists before the build so that the
   // BuildKit bind mount in the Dockerfile does not fail on a fresh clone.
@@ -163,8 +166,8 @@ function buildImage(image) {
     image,
     '.',
   ];
-  const status = run('podman', args);
-  must(status, 'podman build failed');
+  const status = run(engine, args);
+  must(status, `${engine} build failed`);
 }
 
 function pushImage(image) {
@@ -176,19 +179,19 @@ function pushImage(image) {
     image.startsWith('localhost/');
 
   const args = ['push'];
-  if (isLocalHttpRegistry) {
+  if (isLocalHttpRegistry && engine === 'podman') {
     args.push('--tls-verify=false');
   }
   args.push(image);
 
-  const status = run('podman', args);
-  must(status, 'podman push failed');
+  const status = run(engine, args);
+  must(status, `${engine} push failed`);
 }
 
 function cleanupOnFailure(image) {
   // Best-effort cleanup to avoid leaking disk space during failing build loops.
-  run('podman', ['rmi', '-f', image], { stdio: ['ignore', 'ignore', 'ignore'] });
-  run('podman', ['image', 'prune', '-f'], { stdio: ['ignore', 'ignore', 'ignore'] });
+  run(engine, ['rmi', '-f', image], { stdio: ['ignore', 'ignore', 'ignore'] });
+  run(engine, ['image', 'prune', '-f'], { stdio: ['ignore', 'ignore', 'ignore'] });
 }
 
 async function main() {
@@ -196,6 +199,10 @@ async function main() {
   if (!image) {
     throw new Error('Skaffold did not provide IMAGE env var');
   }
+
+  const resolved = resolveContainerEngine();
+  engine = resolved.engine;
+  console.log(`Container engine: ${engine} (${resolved.source})`);
 
   const pushImageRequested = String(process.env.PUSH_IMAGE || '').toLowerCase() === 'true';
 
