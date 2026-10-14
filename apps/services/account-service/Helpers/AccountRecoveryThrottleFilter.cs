@@ -88,6 +88,14 @@ internal sealed class AccountRecoveryThrottleFilter(
                 allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.EmailChangeScope);
                 break;
 
+            case DeviceSignInRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.DeviceCodeScope);
+                break;
+
+            case DeviceSignInResendRequest deviceResend:
+                allowed = this.TrySignUpSend(deviceResend.Email, clientAddress, out retryAfter, AccountRecoveryRateLimiter.DeviceCodeScope);
+                break;
+
             case SecureAccountRequest:
                 allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.SecureAccountScope);
                 break;
@@ -169,6 +177,8 @@ internal sealed class AccountRecoveryThrottleFilter(
                 or EmailChangeStartRequest
                 or EmailChangeVerifyRequest
                 or SecureAccountRequest
+                or DeviceSignInRequest
+                or DeviceSignInResendRequest
                 or LoginRequest)
             {
                 return context.Arguments[i];
