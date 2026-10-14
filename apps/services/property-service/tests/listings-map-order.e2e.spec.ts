@@ -86,7 +86,7 @@ describe('GET /listings/map order (#548)', () => {
 
   afterAll(async () => {
     await pool.query('DELETE FROM listings WHERE office_name = $1', [MARKER]);
-    await pool.query(`DELETE FROM properties WHERE address_key LIKE $1 || '%'`, [MARKER]);
+    await pool.query("DELETE FROM properties WHERE address_key LIKE $1 || '%'", [MARKER]);
     await closePool();
   });
 
