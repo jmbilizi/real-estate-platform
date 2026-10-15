@@ -71,6 +71,9 @@ internal sealed partial class PostmarkDeliveryQueue(
     internal event Action<OutboundEmail>? Delivered;
 
     /// <inheritdoc/>
+    public bool CanSend => options.Value.IsConfigured;
+
+    /// <inheritdoc/>
     public Task SendAsync(OutboundEmail message, CancellationToken cancellationToken = default) =>
         this.queue.Writer.WriteAsync(message, cancellationToken).AsTask();
 
@@ -89,14 +92,14 @@ internal sealed partial class PostmarkDeliveryQueue(
                 // message queued after it would then go undelivered, forever, with no further log
                 // (#138 code review). DeliverAsync already handles every failure mode this
                 // transport anticipates; this is the backstop for the one it does not.
-                LogFailed(logger, message.Kind, Recipient(message), Detail(message, ex.Message));
+                LogQueueFault(logger, message.Kind, Recipient(message), ex.GetType().Name);
             }
 
             this.Delivered?.Invoke(message);
         }
     }
 
-    [LoggerMessage(1370, LogLevel.Warning, "{Kind} for {To} was not sent: Postmark is not configured for this environment. The message was discarded.", EventName = "PostmarkSendSuppressed")]
+    [LoggerMessage(1370, LogLevel.Error, "{Kind} for {To} was not sent: Postmark is not configured for this environment. The message was discarded.", EventName = "PostmarkSendSuppressed")]
     private static partial void LogSuppressed(ILogger logger, EmailKind kind, string to);
 
     [LoggerMessage(1371, LogLevel.Information, "{Kind} for {To} accepted by Postmark, MessageID {MessageId}.", EventName = "PostmarkSendAccepted")]
@@ -107,6 +110,10 @@ internal sealed partial class PostmarkDeliveryQueue(
 
     [LoggerMessage(1373, LogLevel.Error, "{Kind} for {To} could not be delivered after retries: {Detail}", EventName = "PostmarkSendFailedAfterRetries")]
     private static partial void LogFailed(ILogger logger, EmailKind kind, string to, string detail);
+
+    // The type name only: an exception message can echo the recipient or the token.
+    [LoggerMessage(1374, LogLevel.Error, "{Kind} for {To} was dropped by the delivery queue: {ExceptionType}.", EventName = "PostmarkQueueFault")]
+    private static partial void LogQueueFault(ILogger logger, EmailKind kind, string to, string exceptionType);
 
     // A code message logs by kind only: the address would tie a login attempt to a person in the logs.
     private static string Recipient(OutboundEmail message) =>

@@ -28,10 +28,8 @@ describe('search slice carries no occupancy state (#34)', () => {
 
   it('enumerates exactly the search fields the bar still collects', () => {
     expect(Object.keys(initialSearchState).sort()).toEqual([
-      'searchDateRange',
       'searchListingType',
       'searchLocation',
-      'searchMoveInDate',
       'searchPriceIdx',
       'searchSuggestion',
     ]);
@@ -48,7 +46,7 @@ describe('search slice carries no occupancy state (#34)', () => {
 
 describe("the search bar has no 'who' panel (#34)", () => {
   it('enumerates only the three surviving segments', () => {
-    expect([...SEARCH_PANELS]).toEqual(['where', 'when', 'what']);
+    expect([...SEARCH_PANELS]).toEqual(['where', 'what']);
   });
 
   it("cannot name 'who' as a panel", () => {

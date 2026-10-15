@@ -53,6 +53,15 @@ const IDENTITY_LABELS = ['app', 'app.kubernetes.io/name'];
 /** Kinds the deploy pipeline applies, waits on, restarts and rolls back. */
 const WORKLOAD_KINDS = ['StatefulSet', 'Deployment', 'DaemonSet'];
 
+/**
+ * Scheduled kinds need a deploy-control owner but never join the rollout-wait or rollback lists.
+ * `kubectl rollout status` does not support them.
+ */
+const SCHEDULED_KINDS = ['CronJob', 'Job'];
+
+/** Kinds that must have exactly one deploy-control owner. */
+const OWNED_KINDS = [...WORKLOAD_KINDS, ...SCHEDULED_KINDS];
+
 const WEBHOOK_KINDS = ['ValidatingWebhookConfiguration', 'MutatingWebhookConfiguration'];
 
 /** Admission operations that can reject another lane's apply. */
@@ -252,13 +261,14 @@ function resolveDeployScope({
   for (const document of documents) {
     if (!document || !document.kind) continue;
     const owners = ownersOf(document, keys);
+    const needsOwner = OWNED_KINDS.includes(document.kind);
     const isWorkload = WORKLOAD_KINDS.includes(document.kind);
 
     for (const owner of owners) {
       documentsByService.get(owner.value).push(document);
     }
 
-    if (!isWorkload) continue;
+    if (!needsOwner) continue;
 
     const ref = resourceRef(document);
     if (owners.length === 0) {
@@ -272,6 +282,7 @@ function resolveDeployScope({
       ambiguous.push({ ...ref, owners: owners.map((owner) => `${owner.label}=${owner.value}`) });
       continue;
     }
+    if (!isWorkload) continue;
     workloads.push({
       ...ref,
       service: owners[0].value,
@@ -574,6 +585,7 @@ if (require.main === module) {
 module.exports = {
   IDENTITY_LABELS,
   WORKLOAD_KINDS,
+  SCHEDULED_KINDS,
   identityCandidates,
   ownersOf,
   pluralizeKind,

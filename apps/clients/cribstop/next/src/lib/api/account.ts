@@ -1,3 +1,9 @@
+import {
+  DEFAULT_PASSWORD_POLICY,
+  type PasswordClass,
+  type PasswordPolicy,
+} from '@/lib/password-rules';
+
 interface LoginRequest {
   email: string;
   password: string;
@@ -172,9 +178,42 @@ export class CodesUnavailableError extends Error {
   }
 }
 
+/** A 422 from the email-code endpoints: mail to this address cannot be delivered (#664). */
+export class UndeliverableEmailError extends Error {
+  constructor() {
+    super('Email to this address cannot be delivered');
+    this.name = 'UndeliverableEmailError';
+  }
+}
+
+/** Why a code send queued no code (#813). */
+export type CodeNotSentReason =
+  | 'cooldown'
+  | 'hourly_cap'
+  | 'daily_cap'
+  | 'network_cap'
+  | 'locked'
+  | 'pending'
+  | 'notice';
+
+const NOT_SENT_REASONS: readonly CodeNotSentReason[] = [
+  'cooldown',
+  'hourly_cap',
+  'daily_cap',
+  'network_cap',
+  'locked',
+  'pending',
+  'notice',
+];
+
 export interface CodeTiming {
   resendAfterSeconds: number;
   expiresInSeconds: number;
+  /**
+   * Set when the call queued no code. An answer from an older API has no `sent` field, which
+   * reads as sent.
+   */
+  notSentReason?: CodeNotSentReason;
 }
 
 export interface IdentifyResult extends CodeTiming {
@@ -194,21 +233,38 @@ async function postJson(path: string, payload: unknown): Promise<Response> {
 
 function toTiming(body: Record<string, unknown> | null): CodeTiming {
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0);
-  return {
+  const timing: CodeTiming = {
     resendAfterSeconds: num(body?.resendAfterSeconds),
     expiresInSeconds: num(body?.expiresInSeconds),
   };
+  if (body?.sent === false) {
+    const reason = body?.reason as CodeNotSentReason;
+    // An unknown reason still must not read as sent.
+    timing.notSentReason = NOT_SENT_REASONS.includes(reason) ? reason : 'cooldown';
+  }
+  return timing;
+}
+
+async function readCodeAnswer(res: Response, failure: string) {
+  const body = await res.json().catch(() => null);
+  if (res.status === 422 && body?.error === 'undeliverable') throw new UndeliverableEmailError();
+  // A send call changes nothing, so a gateway 502 or 504 is the same outage as a 503.
+  if (res.status >= 500) throw new CodesUnavailableError();
+  if (!res.ok) throw new Error(failure);
+  return body as Record<string, unknown> | null;
 }
 
 /**
  * Email-first entry call. The answer reveals only the next step, never the account itself.
- * Throws RateLimitError on 429 and CodesUnavailableError on 503.
+ * Throws RateLimitError on 429, UndeliverableEmailError on 422 and CodesUnavailableError on 5xx.
  */
 export async function identifyEmail(email: string): Promise<IdentifyResult> {
   const res = await postJson('/api/account/identify', { email });
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error('Unable to continue');
-  return { next: body?.next === 'password' ? 'password' : 'code', ...toTiming(body) };
+  const body = await readCodeAnswer(res, 'Unable to continue');
+  return {
+    next: body?.next === 'password' ? 'password' : 'code',
+    ...toTiming(body),
+  };
 }
 
 export type VerifyCodeResult =
@@ -231,8 +287,7 @@ export async function verifySignupCode(email: string, code: string): Promise<Ver
 
 export async function resendSignupCode(email: string): Promise<CodeTiming> {
   const res = await postJson('/api/account/signup/resend', { email });
-  if (!res.ok) throw new Error('Unable to send a new code');
-  return toTiming(await res.json().catch(() => null));
+  return toTiming(await readCodeAnswer(res, 'Unable to send a new code'));
 }
 
 export async function changeSignupEmail(oldEmail: string, newEmail: string): Promise<CodeTiming> {
@@ -241,10 +296,25 @@ export async function changeSignupEmail(oldEmail: string, newEmail: string): Pro
   return toTiming(await res.json().catch(() => null));
 }
 
-export type PasswordRejectionCode = 'too_short' | 'too_long' | 'breached';
+export type PasswordRejectionCode =
+  | 'too_short'
+  | 'missing_upper'
+  | 'missing_lower'
+  | 'missing_digit'
+  | 'missing_symbol'
+  | 'too_long'
+  | 'breached';
 
 function knownRejections(errors: unknown): PasswordRejectionCode[] {
-  const known: PasswordRejectionCode[] = ['too_short', 'too_long', 'breached'];
+  const known: PasswordRejectionCode[] = [
+    'too_short',
+    'missing_upper',
+    'missing_lower',
+    'missing_digit',
+    'missing_symbol',
+    'too_long',
+    'breached',
+  ];
   return Array.isArray(errors)
     ? errors.filter((e): e is PasswordRejectionCode => known.includes(e as PasswordRejectionCode))
     : [];
@@ -403,23 +473,36 @@ export async function changePassword(payload: {
   throw new Error('Unable to change the password');
 }
 
-export const DEFAULT_PASSWORD_MIN_LENGTH = 15;
-let cachedPasswordMinLength: number | null = null;
+let cachedPasswordPolicy: PasswordPolicy | null = null;
 
-/** Minimum password length from /api/account/password-policy. Falls back to the default. */
-export async function getPasswordMinLength(): Promise<number> {
-  if (cachedPasswordMinLength !== null) return cachedPasswordMinLength;
+/** The password policy from /api/account/password-policy. Falls back to the default. */
+export async function getPasswordPolicy(): Promise<PasswordPolicy> {
+  if (cachedPasswordPolicy !== null) return cachedPasswordPolicy;
   try {
     const res = await fetch('/api/account/password-policy');
     if (res.ok) {
       const body = await res.json().catch(() => null);
-      if (typeof body?.minLength === 'number' && body.minLength > 0) {
-        cachedPasswordMinLength = body.minLength;
-        return body.minLength;
+      if (
+        Number.isInteger(body?.minLength) &&
+        Number.isInteger(body?.passphraseLength) &&
+        body.minLength > 0 &&
+        body.passphraseLength >= body.minLength
+      ) {
+        const classes: PasswordClass[] = Array.isArray(body.requiredClasses)
+          ? body.requiredClasses.filter((c: unknown): c is PasswordClass =>
+              ['upper', 'lower', 'digit', 'symbol'].includes(c as string),
+            )
+          : DEFAULT_PASSWORD_POLICY.requiredClasses;
+        cachedPasswordPolicy = {
+          minLength: body.minLength,
+          passphraseLength: body.passphraseLength,
+          requiredClasses: classes,
+        };
+        return cachedPasswordPolicy;
       }
     }
   } catch {
     // Network failure. Use the default below.
   }
-  return DEFAULT_PASSWORD_MIN_LENGTH;
+  return DEFAULT_PASSWORD_POLICY;
 }

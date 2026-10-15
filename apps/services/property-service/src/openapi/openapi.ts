@@ -1,0 +1,1538 @@
+import { z } from 'zod';
+import {
+  agentLeadDeclineRequestSchema,
+  agentLeadDetailSchema,
+  agentLeadsEnvelopeSchema,
+  agentLeadsRequestSchema,
+  agentLeadStatusRequestSchema,
+  agentLeadTransitionResponseSchema,
+  agentProfileSchema,
+  analyticsEventBatchSchema,
+  analyticsEventRequestSchema,
+  brokersRequestSchema,
+  brokersResponseSchema,
+  createAgentProfileRequestSchema,
+  errorBodySchema,
+  homeFeedRequestSchema,
+  homeFeedResponseSchema,
+  idSchema,
+  listingCardSchema,
+  listingDetailSchema,
+  listingInquiryRequestSchema,
+  listingInquiryResponseSchema,
+  listingsEnvelopeSchema,
+  listingsMetaSchema,
+  lookingForInvalidBodySchema,
+  lookingForListSchema,
+  lookingForRequestSchema,
+  lookingForSchema,
+  mapRequestSchema,
+  mapResponseSchema,
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  neighborhoodsRequestSchema,
+  neighborhoodsResponseSchema,
+  PAGE_SIZE_DEFAULT,
+  propertyLookupResponseSchema,
+  propertyPageSchema,
+  savedHomesEnvelopeSchema,
+  savedHomesRequestSchema,
+  savedStateSchema,
+  searchRequestSchema,
+  staffAgentsEnvelopeSchema,
+  staffAgentsRequestSchema,
+  staffLeadAssignRequestSchema,
+  staffLeadAssignResponseSchema,
+  staffLeadDetailSchema,
+  staffLeadMetricsRequestSchema,
+  staffLeadMetricsSchema,
+  staffLeadNoteRequestSchema,
+  staffLeadNoteSchema,
+  staffLeadsEnvelopeSchema,
+  staffLeadsRequestSchema,
+  staffLeadTransitionRequestSchema,
+  staffLeadTransitionResponseSchema,
+  staffLeadUnassignRequestSchema,
+  staffMeSchema,
+  suggestRequestSchema,
+  suggestResponseSchema,
+  updateAgentProfileRequestSchema,
+  zipsRequestSchema,
+  zipsResponseSchema,
+} from '@cribstop/property-contracts';
+
+/**
+ * `unrepresentable` is deliberately left at its default (`'throw'`), not `'any'`. `'any'` would
+ * make the next schema change that adds a transform on an output path render as a silent `{}` in
+ * this frozen contract instead of failing the test run — exactly the trap this package's own
+ * AGENTS.md warns about. If a future schema genuinely can't be represented, the fix is to reshape
+ * the schema (as `queryInt`/`queryBathCount` already do for coerced query params), not to paper
+ * over it here.
+ */
+const schema = (value: z.ZodType, io: 'input' | 'output' = 'output') =>
+  z.toJSONSchema(value, { target: 'openapi-3.0', io });
+
+/** Query parameters, derived from the request schema so the two cannot drift. */
+function searchParameters(requestSchema: z.ZodType = searchRequestSchema) {
+  const requestJsonSchema = schema(requestSchema, 'input') as {
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+  return Object.entries(requestJsonSchema.properties).map(([name, propertySchema]) => {
+    const parameter: Record<string, unknown> = {
+      name,
+      in: 'query',
+      required: requestJsonSchema.required?.includes(name) ?? false,
+      schema: propertySchema,
+    };
+    if (name === 'amenities') {
+      // `style`/`explode` are the only OpenAPI-level vocabulary for how an array-typed query
+      // parameter serializes; `form`/`explode: false` documents the comma-list form
+      // (`?amenities=Pool,Garage`) this schema's `anyOf` schema advertises but which is otherwise
+      // invisible to a codegen tool. The repeated-parameter form this schema also accepts
+      // (`?amenities=Pool&amenities=Garage`) has no keyword of its own here, so it stays called
+      // out in the schema's own `description` instead (#47 review, M3).
+      parameter['style'] = 'form';
+      parameter['explode'] = false;
+    }
+    return parameter;
+  });
+}
+
+/**
+ * The five response/error schemas in one `z.toJSONSchema()` call over a registry, rather than
+ * five independent calls. `listingCardSchema` is the exact same schema instance embedded inside
+ * `listingsEnvelopeSchema` (`results: z.array(listingCardSchema)`), and only a single shared call
+ * lets Zod's identity-based dedup notice that and emit a `$ref` instead of inlining the ~40-field
+ * card a second time. (`ListingDetail.listing` does NOT dedup this way — it's a genuinely
+ * different schema, built via `listingCardSchema.omit(...).extend(...)`, so it is a distinct
+ * object with no shared identity to detect; it stays inline.)
+ *
+ * The registry's `uri` callback is what makes `$ref` point at `#/components/schemas/<id>` instead
+ * of a bare id, but as a side effect Zod also stamps a `$id` keyword onto every registered
+ * top-level schema so its own resolver can find them again — `$id` is not a valid OpenAPI 3.0
+ * Schema Object keyword, so it's stripped from each schema before publishing.
+ */
+function componentSchemas() {
+  const registry = z.registry<{ id: string }>();
+  registry.add(listingCardSchema, { id: 'ListingCardRow' });
+  registry.add(listingsEnvelopeSchema, { id: 'ListingsEnvelope' });
+  registry.add(listingDetailSchema, { id: 'ListingDetail' });
+  registry.add(propertyPageSchema, { id: 'PropertyPage' });
+  registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
+  registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(suggestResponseSchema, { id: 'SuggestResponse' });
+  registry.add(neighborhoodsResponseSchema, { id: 'NeighborhoodsResponse' });
+  registry.add(zipsResponseSchema, { id: 'ZipsResponse' });
+  registry.add(brokersResponseSchema, { id: 'BrokersResponse' });
+  registry.add(mapResponseSchema, { id: 'MapResponse' });
+  registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
+  registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
+  registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
+  registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
+  registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
+  registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
+  registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
+  registry.add(savedStateSchema, { id: 'SavedState' });
+  registry.add(lookingForRequestSchema, { id: 'LookingForRequest' });
+  registry.add(lookingForSchema, { id: 'LookingFor' });
+  registry.add(lookingForListSchema, { id: 'LookingForList' });
+  registry.add(lookingForInvalidBodySchema, { id: 'LookingForInvalidBody' });
+  registry.add(staffMeSchema, { id: 'StaffMe' });
+  registry.add(staffLeadsEnvelopeSchema, { id: 'StaffLeadsEnvelope' });
+  registry.add(staffLeadDetailSchema, { id: 'StaffLeadDetail' });
+  registry.add(staffLeadMetricsSchema, { id: 'StaffLeadMetrics' });
+  registry.add(staffLeadTransitionRequestSchema, { id: 'StaffLeadTransitionRequest' });
+  registry.add(staffLeadTransitionResponseSchema, { id: 'StaffLeadTransitionResponse' });
+  registry.add(staffLeadNoteRequestSchema, { id: 'StaffLeadNoteRequest' });
+  registry.add(staffLeadNoteSchema, { id: 'StaffLeadNote' });
+  registry.add(agentProfileSchema, { id: 'AgentProfile' });
+  registry.add(staffAgentsEnvelopeSchema, { id: 'StaffAgentsEnvelope' });
+  registry.add(createAgentProfileRequestSchema, { id: 'CreateAgentProfileRequest' });
+  registry.add(updateAgentProfileRequestSchema, { id: 'UpdateAgentProfileRequest' });
+  registry.add(staffLeadAssignRequestSchema, { id: 'StaffLeadAssignRequest' });
+  registry.add(staffLeadAssignResponseSchema, { id: 'StaffLeadAssignResponse' });
+  registry.add(staffLeadUnassignRequestSchema, { id: 'StaffLeadUnassignRequest' });
+  registry.add(agentLeadsEnvelopeSchema, { id: 'AgentLeadsEnvelope' });
+  registry.add(agentLeadDetailSchema, { id: 'AgentLeadDetail' });
+  registry.add(agentLeadDeclineRequestSchema, { id: 'AgentLeadDeclineRequest' });
+  registry.add(agentLeadStatusRequestSchema, { id: 'AgentLeadStatusRequest' });
+  registry.add(agentLeadTransitionResponseSchema, { id: 'AgentLeadTransitionResponse' });
+  registry.add(errorBodySchema, { id: 'ErrorBody' });
+
+  const { schemas } = z.toJSONSchema(registry, {
+    target: 'openapi-3.0',
+    uri: (id) => `#/components/schemas/${id}`,
+  });
+
+  for (const componentSchema of Object.values(schemas)) {
+    delete (componentSchema as { $id?: unknown }).$id;
+  }
+
+  return schemas;
+}
+
+/**
+ * Documented on every operation, because every operation can emit it: the service's error boundary
+ * turns any unhandled rejection into a 500 carrying `INTERNAL_ERROR_BODY`. Leaving it undocumented
+ * meant a client generated from this document had no branch that could deserialise a response the
+ * service really sends — the same drift class this package exists to prevent, just in the direction
+ * nobody checks.
+ *
+ * 429 is deliberately NOT documented here: rate limiting is enforced by the gateway's Ocelot route
+ * configuration, not by this service, so it is not this document's claim to make. The gateway's own
+ * 429/502/503 contract lives in `@cribstop/gateway-contracts` instead (#177).
+ */
+const serverErrorResponse = {
+  description: 'Unexpected server error. The body carries no detail by design.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
+const unavailableResponse = {
+  description:
+    'account-service did not answer, so the session is unknown. Retry. This is not a sign-out.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
+const unauthenticatedResponse = {
+  description: 'No valid credential. The body gives no reason.',
+  content: {
+    'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+  },
+};
+
+const forbiddenResponse = {
+  description: 'A valid credential with none of the allowed roles (`forbidden`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffBadRequestResponse = {
+  description: 'Invalid or unknown parameter or body field (`invalid_request`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffNotFoundResponse = {
+  description: 'No lead has this id (`not_found`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffAgentNotFoundResponse = {
+  description: 'No agent profile has this id (`not_found`).',
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+};
+
+const staffConflictResponse = (description: string) => ({
+  description,
+  content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } } },
+});
+
+const staffAgentIdParameter = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: schema(idSchema, 'input'),
+};
+
+const staffLeadIdParameter = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: schema(idSchema, 'input'),
+};
+
+/**
+ * The whole OpenAPI document, derived from the schemas. Never hand-write a parallel spec file:
+ * it becomes a second source of truth that drifts from the routes silently.
+ *
+ * Path templates MUST stay byte-identical to the gateway route file's DownstreamPathTemplate
+ * values, or MMLib.SwaggerForOcelot leaves them untransformed and the published spec 404s.
+ */
+export function toOpenApiDocument() {
+  return {
+    openapi: '3.0.3',
+    info: {
+      // `<Domain> Service`, matching every other entry the gateway aggregates (`Account Service`,
+      // `Inference Service`). Deliberately NOT named for a client: `cribstop-next` is one consumer
+      // of this document, not its owner, and a document named for one client is wrong the moment a
+      // second one (an agent tool, a partner feed) reads it. Deliberately not "Listings API"
+      // either: property-service owns the whole Communities → Properties → Units → Listings
+      // hierarchy, so `listings` is one resource within this API rather than the name of it. The
+      // paths below stay `/listings/*` and mirror the gateway's DownstreamPathTemplate values — a
+      // service name is not a resource name, and the `/property/*` namespace is applied by the
+      // gateway's upstream templates, not restated here.
+      title: 'Property Service',
+      version: '1.0.0',
+      description:
+        "`property-service`'s HTTP API. The service owns the Communities → Properties → Units → " +
+        'Listings hierarchy; `listings` is the resource this version of the document exposes, and ' +
+        'a later resource extends THIS document rather than publishing a second one — the ' +
+        'aggregation key is part of the docs URL, so splitting would break every bookmark. Every ' +
+        'response carries the full ' +
+        'broker/office attribution block (NAR 7.58, PRD §6.2), there is no field-selection ' +
+        'parameter, and unknown query parameters are rejected with 400 — so no caller can omit ' +
+        'it. Results are read through a compliance-enforcing view that applies two distinct ' +
+        'seller opt-outs. A listing withheld from internet display is absent entirely: omitted ' +
+        'from search results and from `total`, and indistinguishable from an unknown id on detail ' +
+        '(the same 404, byte for byte). A listing whose street address is withheld is still ' +
+        'returned, with `address`, `latitude` and `longitude` null together and `unit.unitNumber` ' +
+        'withheld on detail, so the address cannot be reconstructed; such rows remain in `total` ' +
+        'and simply have no map coordinates — never substitute a city or ZIP centroid for them. ' +
+        'Free-text `query` matches title, address, ' +
+        'city, neighborhood and zip — never the description, which is third-party MLS remarks ' +
+        'carrying a moderation state; making it searchable would allow keyword-based steering on ' +
+        'protected-class language (PRD §6.3). A seller may also suppress price, photos, days on ' +
+        'market or price history individually (#53) while the listing stays syndicated; a field ' +
+        'withheld this way is null (or, for photos, reduced to at most one image), and the ' +
+        'listing remains in results and in `total`. See the `minPrice`/`maxPrice`/`sort` ' +
+        'parameter descriptions for how a seller-suppressed price interacts with range filters ' +
+        'and ordering.',
+    },
+    paths: {
+      '/listings': {
+        get: {
+          operationId: 'searchListings',
+          summary: 'Search listings',
+          description:
+            'Sorted with a deterministic total order, so paging is stable. `listingType=all` ' +
+            'covers currently marketed listings and excludes sold; ask for `sold` explicitly.\n\n' +
+            'This is a SEARCH surface, not a bulk-export surface. Paging depth is bounded: ' +
+            `\`(page - 1) * pageSize\` must not exceed ${MAX_RESULT_OFFSET}, so at the default ` +
+            `page size of ${PAGE_SIZE_DEFAULT} the deepest reachable page is ` +
+            `${maxReachablePage(PAGE_SIZE_DEFAULT)}. A request past that window is rejected with ` +
+            '400 and the error code `result_window_exceeded` — it is never silently clamped to ' +
+            'the last valid page, and never answered with an empty 200. There is no parameter ' +
+            'that lifts the bound. To reach listings outside the window, narrow the search with ' +
+            'filters; retrieving the whole set is not a supported operation.\n\n' +
+            'The bound is on depth alone — no filter is required, and an unfiltered search is a ' +
+            'supported browse path. It is also independent of the past-the-end rule: a page ' +
+            'beyond the last result but INSIDE the window is a normal 200 with an empty ' +
+            '`results` array. `total` is always the exact count of the full filtered set, even ' +
+            'when that count exceeds the window — it is never clamped to it.\n\n' +
+            'The optional `bounds` limits the result to a viewport. It is ANDed with every other ' +
+            'filter, so the result is the searched place within the viewport. A listing whose ' +
+            'street address is withheld has no coordinates, so it is not in a viewport result.\n\n' +
+            'The optional `area` is a drawn GeoJSON Polygon. Only listings inside it match. It is ' +
+            'ANDed with every other filter, including `boundary` and `bounds`. A self-intersecting ' +
+            'or zero-area shape is a 400.\n\n' +
+            'A signed-in request also gets `isSaved` and `isFavorited` on each result, resolved ' +
+            'by home, and a `private, no-store` response. A signed-out request never gets them ' +
+            'and is never rejected for lacking a credential.',
+          parameters: searchParameters(),
+          responses: {
+            '200': {
+              description: 'A page of listings with an exact total.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ListingsEnvelope' } },
+              },
+            },
+            '400': {
+              description:
+                'Unknown or invalid query parameter (`invalid_request`), or a page past the ' +
+                'reachable result window (`result_window_exceeded`). The two carry different ' +
+                'error codes because they call for different responses: the first means a ' +
+                'parameter needs fixing, the second that the search needs narrowing — retrying ' +
+                'the same request will never succeed.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/meta': {
+        get: {
+          operationId: 'getListingsMeta',
+          summary: 'Dataset freshness',
+          description:
+            'Callable without running a search. `dataUpdatedAt` is MLS feed freshness, not the ' +
+            'time ingestion ran, and is null when nothing is publishable.',
+          responses: {
+            '200': {
+              description: 'Dataset freshness and provenance.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ListingsMeta' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/suggest': {
+        get: {
+          operationId: 'getListingSuggestions',
+          summary: 'Place suggestions',
+          description:
+            'Prefix match on the city, ZIP and neighborhood of publishable listings, for the ' +
+            'Where field. A ZIP is suggested only for a digit prefix. Cities rank first by ' +
+            'listing count. At most `limit` rows come back.',
+          parameters: searchParameters(suggestRequestSchema),
+          responses: {
+            '200': {
+              description: 'Matching places.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SuggestResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/neighborhoods': {
+        get: {
+          operationId: 'getNeighborhoods',
+          summary: 'Neighborhood groups',
+          description:
+            'Publishable listings grouped by neighborhood. The request takes the `GET /listings` ' +
+            'filters. The groups are the neighborhoods of the listings that search returns. A row ' +
+            'has counts, photos, a centroid and bounds. It has no ranking and no descriptive ' +
+            'word. `key` is the identity. The centroid and bounds use only listings with address ' +
+            'display allowed. `minCount` defaults to 3. Send `minCount=1` for every group. Page ' +
+            'with `limit` and `offset`. `name` is title case, built from the most frequent raw ' +
+            'feed variant in the group. `slug` matches the property page’s slug rules. `total` ' +
+            'in the response is the exact count of matching neighborhoods, never clamped to ' +
+            '`limit`.',
+          parameters: searchParameters(neighborhoodsRequestSchema),
+          responses: {
+            '200': {
+              description: 'Neighborhoods with a listing count at or above minCount.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/NeighborhoodsResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/zips': {
+        get: {
+          operationId: 'getZipGroups',
+          summary: 'ZIP code groups',
+          description:
+            'The listings of a search, grouped by ZIP code. The request takes the `GET /listings` ' +
+            'filters. Each group counts the listing cards that search returns, so the group ' +
+            'counts add up to the search total. `minCount` defaults to 1. Page with `limit` and ' +
+            '`offset`. Order by `count` (default) or `name`. Ties break by `key`. A group has no ' +
+            'ranking and no descriptive word. `total` is the exact count of groups. ' +
+            '`listingTotal` is the exact count of listing cards.',
+          parameters: searchParameters(zipsRequestSchema),
+          responses: {
+            '200': {
+              description: 'ZIP code groups with a listing count at or above minCount.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ZipsResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/brokers': {
+        get: {
+          operationId: 'getBrokerGroups',
+          summary: 'Listing office groups',
+          description:
+            'The listings of a search, grouped by listing office. The request takes the ' +
+            '`GET /listings` filters. Each group counts the listing cards that search returns, so ' +
+            'the group counts add up to the search total. The group key is the MLS office key. ' +
+            'The name is the office name of the most recently updated listing in the group. ' +
+            'Listings with no office key form one group with the key `unlisted`. Order by `count` ' +
+            '(default) or `name`. Ties break by `key`. No office is ranked, featured or left out. ' +
+            '`minCount` defaults to 1. Page with `limit` and `offset`.',
+          parameters: searchParameters(brokersRequestSchema),
+          responses: {
+            '200': {
+              description: 'Listing office groups with a listing count at or above minCount.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/BrokersResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/map': {
+        get: {
+          operationId: 'getListingsMap',
+          summary: 'Map pins for a viewport',
+          description:
+            'Takes the same filters as `/listings`, without paging or sort, plus the viewport ' +
+            '`bounds`. The matching set is the search set limited to the viewport. The response ' +
+            'is one pin per listing, newest first, up to a cap. `total` counts every match in ' +
+            'the viewport, so `total` above the pin count means the cap applied. The response ' +
+            'never holds clusters. A listing whose street address is withheld has no ' +
+            'coordinates, so it is in no pin and not in `total`.',
+          parameters: searchParameters(mapRequestSchema),
+          responses: {
+            '200': {
+              description: 'Pins and the viewport total.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/MapResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}': {
+        get: {
+          operationId: 'getListing',
+          summary: 'Listing detail',
+          description:
+            'Returns the object graph. `unit` is null for a non-subdivided home — meaningful, ' +
+            'not missing. Unknown, removed and seller-suppressed listings are indistinguishable.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ListingDetail' } },
+              },
+            },
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/card': {
+        get: {
+          operationId: 'getListingCard',
+          summary: 'Listing card',
+          description:
+            'Returns the one card row that search returns for this listing, with the same ' +
+            'address suppression. A map pin for a listing outside the current results page ' +
+            'renders its popup card from this. Unknown, removed and seller-suppressed listings ' +
+            'are indistinguishable.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The listing card.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ListingCardRow' } },
+              },
+            },
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/page': {
+        get: {
+          operationId: 'getListingPropertyPage',
+          summary: 'Property page of the home that one listing is on',
+          description:
+            'Returns the same page as /properties/{id}/page for the home of this listing. ' +
+            'A client uses canonicalPath to redirect an old /listing/<id> URL.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The property page.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/PropertyPage' } },
+              },
+            },
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/properties/{id}/page': {
+        get: {
+          operationId: 'getPropertyPage',
+          summary: 'Everything the property page renders, in any market status',
+          description:
+            'The id is the unit id in a subdivided building, else the property id. The response ' +
+            'carries the canonical path and slug, the status label, the display flags, the ' +
+            'latest listing, the compliance-filtered history, nearby active listings and SEO ' +
+            'text. An Off market home returns the property record only, with latestListing null.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The property page.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/PropertyPage' } },
+              },
+            },
+            '404': {
+              description: 'No such home.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/properties/lookup': {
+        get: {
+          operationId: 'lookupProperty',
+          summary: 'Resolve a property path to listings',
+          description:
+            'Takes the two segments of /<city>-<st>/<address-slug>. On a local miss the ' +
+            'service reads that one address from the MLS across all statuses, then resolves again.',
+          parameters: [
+            { name: 'city', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'address', in: 'query', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': {
+              description: 'One or more matches. More than one means the path is ambiguous.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/PropertyLookupResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'The segments do not form a property path.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '404': {
+              description: 'No property at that address.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/inquiries': {
+        post: {
+          operationId: 'createListingInquiry',
+          summary: 'Submit a message or tour request against a listing',
+          description:
+            'Needs a signed-in account with a confirmed email. A request with no valid ' +
+            'credential gets 401 and no listing data. An account with an unconfirmed email ' +
+            'gets 403. The server takes the contact email from the account and ignores ' +
+            '`name` and `email` if the body sends them. ' +
+            '`consentTextVersion` is required for new clients. With `consentToContact` true and ' +
+            'no version, the server records `v1`. `phone` is optional. ' +
+            '`consentToContact` records that the consumer agreed to be contacted. ' +
+            'The server stores the consent text for `consentTextVersion`, the `consentChannels` ' +
+            'and the time. The record starts in the `new` lead status. No public read endpoint ' +
+            'returns it.\n\n' +
+            'Rate-limited per client and per listing; a request over either limit gets 429 with ' +
+            'a `Retry-After` header.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ListingInquiryRequest' },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The inquiry was recorded.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ListingInquiryResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'Unknown field, or `message` missing/empty when `kind` is `message`.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': {
+              description: 'The account email is not confirmed (`forbidden`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
+            '404': {
+              description: 'No such listing, or not publishable through `listing_search_v`.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '429': {
+              description:
+                'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
+                'the read endpoints above — because this limit is enforced by the service ' +
+                'itself (keyed on the path parameter), not by the gateway.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/home-feed': {
+        post: {
+          operationId: 'getHomeFeed',
+          summary: 'Ranked home-page rows for one visitor',
+          description:
+            'The v1 rules ranker (#835). The body carries the local feed profile, the target ' +
+            'place, the radius and the side. The service ranks active and coming-soon listings ' +
+            'with six features and builds the rows in page order. A later row never repeats a ' +
+            'listing of an earlier row. The service stores and logs no profile. Every row ' +
+            'carries modelVersion and variant for the feed events. The search sort stays ' +
+            'free of per-user signals.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HomeFeedRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The rows. A row with fewer than 4 cards is left out.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/HomeFeedResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown field or malformed value.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/analytics/events': {
+        post: {
+          operationId: 'recordAnalyticsEvent',
+          summary: 'Record one analytics event',
+          description:
+            'Analytics contract v2. The body is one event, or an array of up to 50 events. Each event has its own allow-listed properties. The ' +
+            'service stores the event, the common properties, a random anonymous id and session id, ' +
+            'and the server time. It stores no header, IP address, user agent, name, email or phone. ' +
+            'The one free-text property is the scrubbed zero-result search text. With ' +
+            'ANALYTICS_ENABLED=false it stores nothing and still answers 204.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  oneOf: [
+                    { $ref: '#/components/schemas/AnalyticsEventRequest' },
+                    { $ref: '#/components/schemas/AnalyticsEventBatch' },
+                  ],
+                },
+              },
+            },
+          },
+          responses: {
+            '204': { description: 'The event is counted, or analytics is off.' },
+            '400': {
+              description: 'Unknown event name, unknown field or malformed value.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/{id}/saved': {
+        put: {
+          operationId: 'saveListingHome',
+          summary: 'Save the home that one listing is on',
+          description:
+            'Requires sign-in. The service resolves the home of the listing, so the client does ' +
+            'not need a property id. Saving is idempotent: saving a home again, through the same ' +
+            'or another listing, is the same save. A save belongs to the account, never to a role.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The home is saved.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedState' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+        delete: {
+          operationId: 'unsaveListingHome',
+          summary: 'Remove the home that one listing is on from saved homes',
+          description:
+            'Requires sign-in. Removing a home that is not saved is a success with `saved` false.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The home is not saved.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedState' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '404': {
+              description: 'No such listing.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/looking-for': {
+        get: {
+          operationId: 'listLookingFor',
+          summary: 'The "What I’m looking for" preferences of the signed-in account',
+          description:
+            'Requires sign-in. Returns only the calling account’s preferences, newest change ' +
+            'first, with the per-account limit in `max`. A preference sends no email. The ' +
+            'response is `private, no-store`.',
+          responses: {
+            '200': {
+              description: 'The preferences of the account.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingForList' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/looking-for/{id}': {
+        put: {
+          operationId: 'putLookingFor',
+          summary: 'Create or replace one preference',
+          description:
+            'Requires sign-in. The client picks the id. A new id creates the preference (201) ' +
+            'unless the account already holds the limit (409). A known id of the same account ' +
+            'replaces it (200). Places are city and zip only. A start date in the past is ' +
+            'refused. The account comes from the credential, never from the request.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/LookingForRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The preference was replaced.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingFor' } },
+              },
+            },
+            '201': {
+              description: 'The preference was created.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingFor' } },
+              },
+            },
+            '400': {
+              description: 'A refused field (`invalid_request`), named in `fields`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/LookingForInvalidBody' },
+                },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '409': {
+              description: 'The account holds the limit (`conflict`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        delete: {
+          operationId: 'deleteLookingFor',
+          summary: 'Remove one preference',
+          description:
+            'Requires sign-in. Removing an id that is absent, or that belongs to another ' +
+            'account, succeeds and changes nothing.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '204': { description: 'The preference is gone.' },
+            '400': {
+              description: 'The id is not a well-formed id.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/saved-homes': {
+        get: {
+          operationId: 'listSavedHomes',
+          summary: 'The saved homes of the signed-in account',
+          description:
+            'Requires sign-in. Returns only the calling account’s homes, newest save first. ' +
+            'Each row is a home: the property facts plus its current consumer-visible listing, ' +
+            'or `listing` null when it has none. An off-market home is a normal row, never a ' +
+            '404 and never left out. Address and coordinates carry the same masking as search. ' +
+            'The response is `private, no-store`.',
+          parameters: searchParameters(savedHomesRequestSchema),
+          responses: {
+            '200': {
+              description: 'A page of saved homes with an exact total.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedHomesEnvelope' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/saved-homes/{id}': {
+        delete: {
+          operationId: 'unsaveHome',
+          summary: 'Remove a saved home by its home id',
+          description:
+            'Requires sign-in. `id` is the `propertyId` of a saved home. It works for a home with ' +
+            'no consumer-visible listing. Removing a home that is not saved is a success with ' +
+            '`saved` false. A request never touches another account’s saves.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '200': {
+              description: 'The home is not saved.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SavedState' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '404': {
+              description: 'The id is not a well-formed id.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads': {
+        get: {
+          operationId: 'listAgentLeads',
+          summary: 'My leads, for an agent',
+          description:
+            'Requires the Agent role and an active agent profile. Only leads with an open ' +
+            'assignment to the caller profile. Newest assignment first, at most 200. Email and ' +
+            'phone are masked in every row. `emailMasked` is null when the account contact is ' +
+            'unavailable. The response is `private, no-store`.',
+          parameters: searchParameters(agentLeadsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The leads assigned to the caller.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentLeadsEnvelope' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}': {
+        get: {
+          operationId: 'getAgentLead',
+          summary: 'One lead of the caller',
+          description:
+            'Requires the Agent role and an active agent profile. `contact` is null while the ' +
+            'status is `assigned`. Accept reveals it. `contact.name` and `contact.email` are null when ' +
+            'the account contact is unavailable. Every read writes an access-audit row. A ' +
+            'lead that is not assigned to the caller answers 404, never 403.',
+          parameters: [staffLeadIdParameter],
+          responses: {
+            '200': {
+              description: 'The lead.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentLeadDetail' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}/accept': {
+        post: {
+          operationId: 'acceptAgentLead',
+          summary: 'Accept an assigned lead',
+          description:
+            'Requires the Agent role and an active agent profile. Moves `assigned` to ' +
+            '`accepted` and records the accept time. The request has no body.',
+          parameters: [staffLeadIdParameter],
+          responses: {
+            '200': {
+              description: 'The lead moved to `accepted`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AgentLeadTransitionResponse' },
+                },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse('The lead is not `assigned` (`conflict`).'),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}/decline': {
+        post: {
+          operationId: 'declineAgentLead',
+          summary: 'Decline an assigned lead',
+          description:
+            'Requires the Agent role and an active agent profile. The reason comes from a fixed ' +
+            'list. The assignment ends with `declined` and the lead returns to `verified` for ' +
+            'staff to match again. Allowed only while the status is `assigned`.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AgentLeadDeclineRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead returned to `verified`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AgentLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse('The lead is not `assigned` (`conflict`).'),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/agent/leads/{id}/status': {
+        post: {
+          operationId: 'updateAgentLeadStatus',
+          summary: 'Move an accepted lead forward',
+          description:
+            'Requires the Agent role and an active agent profile. The transitions table decides ' +
+            'the order: `contacted`, `touring`, `under_contract`, `closed` or `lost`. The lead ' +
+            'must be accepted first. `closed` and `lost` end the assignment. Each change writes ' +
+            'a status event with the agent as actor.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AgentLeadStatusRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead moved to the new status.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/AgentLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse(
+              'The lead is not accepted, or the transitions table does not allow the change (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/me': {
+        get: {
+          operationId: 'getStaffMe',
+          summary: 'The roles of the signed-in account',
+          description:
+            'Requires sign-in, and no particular role. Returns the roles of the calling account ' +
+            'as a list and nothing else. A buyer-only account gets `["User"]`. The response is ' +
+            '`private, no-store`.',
+          responses: {
+            '200': {
+              description: 'The roles of the calling account.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffMe' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads': {
+        get: {
+          operationId: 'listStaffLeads',
+          summary: 'Buyer requests, for staff',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Newest first, cursor paging, page ' +
+            'size capped at 50. Email and phone are masked. Name and email come from the buyer ' +
+            'account. They are null when the account contact is unavailable. A row has ' +
+            '`possibleDuplicate` when ' +
+            'another open request on the same listing came within seven days from the same buyer ' +
+            'account or phone. The server never merges leads. The response is `private, no-store`.',
+          parameters: searchParameters(staffLeadsRequestSchema),
+          responses: {
+            '200': {
+              description: 'A page of leads.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadsEnvelope' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/metrics': {
+        get: {
+          operationId: 'getStaffLeadMetrics',
+          summary: 'Lead desk metrics',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Counts by status and kind, the ' +
+            'median and 90th percentile time to verify, assign and accept, and the count of ' +
+            'aging leads. `from` and `to` bound the lead creation time and apply to every value. ' +
+            'Durations come from the status events. A duration is null when no lead made the ' +
+            'step. The response holds no personal data and is `private, no-store`.',
+          parameters: searchParameters(staffLeadMetricsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The metrics.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadMetrics' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}': {
+        get: {
+          operationId: 'getStaffLead',
+          summary: 'One buyer request, with full contact details',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Every successful read writes an ' +
+            'access-audit row. `name`, `email` and `verifiedAccount` come from the buyer account. They ' +
+            'are null when the account contact is unavailable. The response is `private, no-store`.',
+          parameters: [staffLeadIdParameter],
+          responses: {
+            '200': {
+              description: 'The lead.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadDetail' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/transition': {
+        post: {
+          operationId: 'transitionStaffLead',
+          summary: 'Move a lead to a new status',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. A Moderator may set `verified`, ' +
+            '`spam` and `rejected`. Admin and SuperAdmin may also set `new` to restore a spam ' +
+            'lead. A note is required for `spam` and `rejected`. A change the transitions table ' +
+            'does not allow returns 409.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StaffLeadTransitionRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead moved.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': {
+              description: 'The transitions table does not allow this change (`conflict`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/notes': {
+        post: {
+          operationId: 'addStaffLeadNote',
+          summary: 'Add an internal note to a lead',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Notes are append-only and carry ' +
+            'the author and the time.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/StaffLeadNoteRequest' } },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The note was added.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/StaffLeadNote' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/assign': {
+        post: {
+          operationId: 'assignStaffLead',
+          summary: 'Assign a verified lead to an agent',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. The lead must be `verified`. The ' +
+            'agent must be active and licensed in the state of the listing. Only the licence ' +
+            'state and the listing state decide a match. The request has no reason field. The ' +
+            'lead moves to `assigned` and the assignment is recorded.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StaffLeadAssignRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead moved to `assigned`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffLeadAssignResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': {
+              description: 'No lead or no agent profile has this id (`not_found`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '409': staffConflictResponse(
+              'The lead is not `verified`, the agent is not active, or the agent is not ' +
+                'licensed in the state of the listing (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/leads/{id}/unassign': {
+        post: {
+          operationId: 'unassignStaffLead',
+          summary: 'Return an assigned lead to verified',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. A note is required. The open ' +
+            'assignment ends and the lead returns to `verified`. To reassign, unassign, then ' +
+            'assign.',
+          parameters: [staffLeadIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StaffLeadUnassignRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The lead returned to `verified`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffLeadTransitionResponse' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffNotFoundResponse,
+            '409': staffConflictResponse(
+              'The lead has no open assignment, or the transitions table does not allow the ' +
+                'change (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/agents': {
+        get: {
+          operationId: 'listStaffAgents',
+          summary: 'The agent directory',
+          description:
+            'Requires the Admin, SuperAdmin or Moderator role. Every profile, ordered by display ' +
+            'name. The response is `private, no-store`.',
+          parameters: searchParameters(staffAgentsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The agent profiles.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/StaffAgentsEnvelope' },
+                },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        post: {
+          operationId: 'createStaffAgent',
+          summary: 'Create an agent profile',
+          description:
+            'Requires the Admin or SuperAdmin role. The account must hold the `Agent` role. ' +
+            'account-service answers that check with the caller credentials. One profile per ' +
+            'account.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/CreateAgentProfileRequest' },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'The profile was created.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentProfile' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '409': staffConflictResponse(
+              'The account has no `Agent` role, or already has a profile (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/staff/agents/{id}': {
+        get: {
+          operationId: 'getStaffAgent',
+          summary: 'One agent profile',
+          description: 'Requires the Admin, SuperAdmin or Moderator role.',
+          parameters: [staffAgentIdParameter],
+          responses: {
+            '200': {
+              description: 'The profile.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentProfile' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffAgentNotFoundResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        patch: {
+          operationId: 'updateStaffAgent',
+          summary: 'Edit, deactivate or reactivate an agent profile',
+          description:
+            'Requires the Admin or SuperAdmin role. `active: false` deactivates the agent: no ' +
+            'new leads, open assignments stay. Reactivation checks the `Agent` role again. The ' +
+            'account never changes.',
+          parameters: [staffAgentIdParameter],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UpdateAgentProfileRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The updated profile.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/AgentProfile' } },
+              },
+            },
+            '400': staffBadRequestResponse,
+            '401': unauthenticatedResponse,
+            '403': forbiddenResponse,
+            '404': staffAgentNotFoundResponse,
+            '409': staffConflictResponse(
+              'Reactivation needs the `Agent` role, and the account has none (`conflict`).',
+            ),
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+    },
+    components: {
+      schemas: componentSchemas(),
+    },
+  };
+}
+
+export type OpenApiDocument = ReturnType<typeof toOpenApiDocument>;

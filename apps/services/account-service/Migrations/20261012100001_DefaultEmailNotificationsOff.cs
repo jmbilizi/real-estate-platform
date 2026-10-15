@@ -7,7 +7,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AccountService.Migrations
 {
     /// <summary>
-    /// Changes the column default only. Existing rows keep their stored value (#783).
+    /// Changes the column default to false (#783). Resets every stored true to false, because the
+    /// box was pre-ticked and a stored true is not proof of consent. Down() restores the default only.
+    /// Down() cannot restore the old per-row values.
     /// </summary>
     [DbContext(typeof(AccountDbContext))]
     [Migration("20261012100001_DefaultEmailNotificationsOff")]
@@ -25,6 +27,9 @@ namespace AccountService.Migrations
                 oldClrType: typeof(bool),
                 oldType: "boolean",
                 oldDefaultValue: true);
+
+            migrationBuilder.Sql(
+                "UPDATE \"AspNetUsers\" SET \"EmailNotificationsEnabled\" = FALSE WHERE \"EmailNotificationsEnabled\" = TRUE;");
         }
 
         /// <inheritdoc />

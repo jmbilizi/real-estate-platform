@@ -31,6 +31,8 @@ const path = require('path');
 // `@cribstop/property-contracts`), which would mangle into a bogus nested path. Reading the
 // manifests also keeps the project name out of any shell — see tools/lib/project-root.js.
 const { resolveProjectRoot } = require('../lib/project-root');
+const { ensureWorkspaceCerts } = require('../infra/workspace-certs');
+const { resolveContainerEngine } = require('./container-engine');
 
 // ANSI color codes
 const colors = {
@@ -267,6 +269,7 @@ function buildImage(projectName, options) {
   // Add cert handling
   if (options.copyCerts) {
     logInfo('Enterprise certificates will be included (local dev mode)');
+    ensureWorkspaceCerts(path.resolve(__dirname, '../..'));
     buildArgs.push('--build-arg', 'COPY_CERTS=true');
   } else {
     logInfo('Skipping enterprise certificates (CI/CD mode)');
@@ -295,8 +298,16 @@ function buildImage(projectName, options) {
   buildArgs.push(workspaceRoot);
 
   // Execute build
-  logInfo(`Executing: docker ${buildArgs.join(' ')}`);
-  const buildResult = run(`docker ${buildArgs.join(' ')}`);
+  let engine, source;
+  try {
+    ({ engine, source } = resolveContainerEngine());
+  } catch (error) {
+    logError(error.message);
+    process.exit(1);
+  }
+  logInfo(`Container engine: ${engine} (${source})`);
+  logInfo(`Executing: ${engine} ${buildArgs.join(' ')}`);
+  const buildResult = run(`${engine} ${buildArgs.join(' ')}`);
 
   if (!buildResult.success) {
     logError('Build failed');
@@ -306,7 +317,7 @@ function buildImage(projectName, options) {
   logSuccess(`Build completed: ${fullImageRef}`);
 
   // Get image size
-  const sizeResult = run(`docker images ${fullImageRef} --format "{{.Size}}"`, { silent: true });
+  const sizeResult = run(`${engine} images ${fullImageRef} --format "{{.Size}}"`, { silent: true });
   if (sizeResult.success) {
     logInfo(`Image size: ${sizeResult.output.trim()}`);
   }
@@ -314,7 +325,7 @@ function buildImage(projectName, options) {
   // Push if requested
   if (options.push) {
     logInfo('Pushing image to registry...');
-    const pushResult = run(`docker push ${fullImageRef}`);
+    const pushResult = run(`${engine} push ${fullImageRef}`);
 
     if (!pushResult.success) {
       logError('Push failed');

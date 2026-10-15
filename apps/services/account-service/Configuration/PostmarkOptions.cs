@@ -23,8 +23,18 @@ internal sealed class PostmarkOptions
     /// <summary>The committed secret placeholder. Never a usable token.</summary>
     internal const string PlaceholderServerToken = "StrongBase64Password";
 
-    /// <summary>Gets or sets the Postmark server token.</summary>
-    public string ServerToken { get; set; } = PlaceholderServerToken;
+    private string serverToken = PlaceholderServerToken;
+
+    /// <summary>Gets or sets the Postmark server token, trimmed.</summary>
+    /// <remarks>
+    /// A secret stored with a trailing newline makes <c>HttpRequestHeaders.Add</c> throw, and the
+    /// queue drops every message (#813).
+    /// </remarks>
+    public string ServerToken
+    {
+        get => this.serverToken;
+        set => this.serverToken = value?.Trim() ?? string.Empty;
+    }
 
     /// <summary>
     /// Gets or sets the Postmark Message Stream ID. Must be a transactional stream, never a

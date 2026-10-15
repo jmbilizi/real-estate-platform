@@ -31,18 +31,36 @@ directly.
 > The language-agnostic seam is the Redis Streams bus (PRD §2.3): the worker publishes normalised
 > listing events in whatever language suits, and this service stays the only writer.
 
+## The Lean-List / Rich-Detail Payload Split
+
+This service returns **two distinct payloads** for listings, and the split is non-negotiable. The
+**list/search endpoint** (`GET /listings`) returns `ListingCard` — flat fields a card renders
+(price, beds, baths, address, neighborhood) plus a single primary image. The **detail endpoint**
+(`GET /listings/{id}`) returns `PropertyPage` with the full graph (all photos, description, open
+houses, full NAR attribution, unit detail). Search results on the client side render ~20 cards, so
+every field on that card is paid twenty times per page, on the first screen a new visitor sees. The
+card row must stay small. See PRD §3.1's "List vs. Detail Payloads" for the compliance rules:
+attribution is required on both list and detail, while description and media galleries are
+detail-only. No field-selection parameter exists that could strip attribution.
+
 Consequence to budget in #22: **Express generates no OpenAPI**, while the gateway's
 `MMLib.SwaggerForOcelot` fetches a spec URL per service (account-service serves `/openapi/v1.json`,
-inference serves `/openapi.json`). Do not hand-write one — define the request/response schemas once
-in a shared `libs/` package and derive runtime validation, the client's types, and the OpenAPI
-document from it. A hand-written spec is a second source of truth that silently drifts from the
-routes.
+inference serves `/openapi.json`). Do not hand-write one. The schemas live once in
+`libs/property-contracts`. This service derives the OpenAPI document from them in
+`src/openapi/openapi.ts` (`toOpenApiDocument()`). A hand-written spec is a second source of truth
+that silently drifts from the routes.
 
 ## The wire contract lives in `libs/property-contracts`
 
 `libs/property-contracts` (`@cribstop/property-contracts`) is the **only** definition of the
 request/response shapes described above — never restate a field list here even for a single route;
 import the types and schemas instead. `#22` is where this service starts actually consuming them.
+
+**The OpenAPI document belongs to this service (#63).** `src/openapi/` holds the generator, its spec
+and the golden snapshot (`__snapshots__/openapi.spec.ts.snap`). A shape change fails the snapshot
+until a reviewer accepts it. Keep `unrepresentable: 'throw'`, so an unrepresentable schema fails the
+test run and never renders as `{}`. `zod` is a direct dependency here because the generator calls
+`z.toJSONSchema()`. Keep it on the same version as the library.
 
 The Dockerfile must keep its `libs/property-contracts` `COPY` lines (both the `package.json`-only
 copy in the `deps` stage and the full-source copy in `builder`) or the image goes stale silently the
@@ -776,6 +794,42 @@ the Property API document. Never publish a second document.
   including when account-service is down.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
+
+## Home feed (`src/home-feed/`)
+
+`POST /home-feed` (#835). The gateway exposes it as `POST /property/home-feed`. It ranks the home
+page rows for one visitor. `sort=recommended` stays free of per-user signals. Personal ranking lives
+only here.
+
+- The body carries the local feed profile (#833). The service stores nothing and logs no profile.
+  Pass any logged body through `redact.ts`. The response is `no-store`.
+- `ranker/v1-weights.ts` holds the weights and `FEATURE_KEYS`, the Fair Housing allowlist. Six
+  features only. A new feature needs a compliance review and a change to the allowlist test. A
+  weight change is a new `MODEL_VERSION`.
+- `candidates.ts` reads `listing_search_v`, so every suppression applies. The radius uses the
+  coordinate index through a bounding box, then `ST_DWithin`. The read has a `LIMIT`, a statement
+  timeout and no exact count. Keep it that way (#755).
+- Rows build in page order. A later row never repeats a listing. A row under 4 cards hides. MMR uses
+  lambda 0.7 and at most 2 cards per listing office per row. One slot in 8 is an exploration card
+  with `explore: true`.
+- Every row carries `modelVersion` and `variant` for the feed events (#824).
+
+## What I'm looking for (`src/looking-for/`)
+
+`GET /looking-for`, `PUT|DELETE /looking-for/{id}` (#768). The gateway exposes them as
+`/property/looking-for*`. account-service stays identity and authorization only (ruling 2026-10-10),
+so this data lives here, keyed by account id like `saved_homes`.
+
+- `store.ts` is the only module that touches `looking_for_preferences`. The key is
+  `(account_id, id)`. The client picks `id`. The account id comes from introspection, never from the
+  request.
+- The limit is 5 per account. `upsertLookingFor` takes `pg_advisory_xact_lock` per account before it
+  counts, so parallel creates cannot pass the limit. A known id replaces its row, even at the limit.
+- Places are `city` and `zip` only. Unknown keys, including free text, answer 400. A start date
+  before yesterday (UTC) answers 400. The 400 body names the fields in `error.fields`, never values.
+- A preference sends no email. Alerts need their own opt-in (#505, #769).
+- Nothing removes these rows when account-service deletes an account. `saved_homes` has the same
+  gap.
 
 ## Staff roles (#628)
 

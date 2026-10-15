@@ -44,8 +44,6 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<SecureAccountToken> SecureAccountTokens => Set<SecureAccountToken>();
 
-    public DbSet<LookingForPreference> LookingForPreferences => Set<LookingForPreference>();
-
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
 
     public DbSet<NotificationPreferenceAudit> NotificationPreferenceAudits => Set<NotificationPreferenceAudit>();
@@ -221,17 +219,6 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
             // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
             // with a DB CHECK constraint — same approach as the onboarding intents above.
-        });
-
-        // No FK to AspNetUsers, like SecureAccountTokens. The key leads with UserId, so it serves the
-        // only query shape: "this account's preferences". New table, so no CONCURRENTLY is needed.
-        builder.Entity<LookingForPreference>(entity =>
-        {
-            entity.ToTable("LookingForPreferences");
-            entity.HasKey(p => new { p.UserId, p.Id });
-            entity.Property(p => p.Intent).IsRequired();
-            entity.Property(p => p.PlacesJson).HasColumnType("jsonb").IsRequired();
-            entity.Property(p => p.HomeTypes).HasColumnType("text[]").IsRequired();
         });
 
         // No FK to AspNetUsers, so the consent record outlives the account. The key leads with AccountId.

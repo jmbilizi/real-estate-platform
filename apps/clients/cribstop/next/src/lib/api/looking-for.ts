@@ -48,13 +48,13 @@ export class LookingForError extends Error {
 }
 
 export async function getLookingFor(): Promise<LookingForList> {
-  const res = await fetch('/api/account/looking-for');
+  const res = await fetch('/api/looking-for');
   if (!res.ok) throw new LookingForError(res.status, 'failed');
   return res.json();
 }
 
 export async function saveLookingFor(id: string, input: LookingForInput): Promise<LookingFor> {
-  const res = await fetch(`/api/account/looking-for/${id}`, {
+  const res = await fetch(`/api/looking-for/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -63,12 +63,12 @@ export async function saveLookingFor(id: string, input: LookingForInput): Promis
   const body = await res.json().catch(() => null);
   if (res.status === 409) throw new LookingForError(409, 'limit_reached');
   if (res.status === 400) {
-    throw new LookingForError(400, 'invalid', Object.keys(body?.errors ?? {}));
+    throw new LookingForError(400, 'invalid', body?.fields ?? []);
   }
   throw new LookingForError(res.status, 'failed');
 }
 
 export async function deleteLookingFor(id: string): Promise<void> {
-  const res = await fetch(`/api/account/looking-for/${id}`, { method: 'DELETE' });
+  const res = await fetch(`/api/looking-for/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new LookingForError(res.status, 'failed');
 }

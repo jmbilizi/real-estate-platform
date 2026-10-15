@@ -21,10 +21,12 @@ namespace AccountService.Tests.Integration
     /// <param name="configure">Recovery policy overrides for this host, if any.</param>
     /// <param name="configureCodes">Email code policy overrides, applied after the host sets its key.</param>
     /// <param name="clock">A clock for the host, if the test moves time.</param>
+    /// <param name="canSend">What the fake transport answers for <c>CanSend</c>.</param>
     internal sealed class AccountRecoveryFactory(
         Action<AccountRecoveryOptions>? configure = null,
         Action<EmailCodeOptions>? configureCodes = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        bool canSend = true)
         : AccountServiceFactory
     {
         private readonly List<OutboundEmail> alreadyRegistered = new();
@@ -49,7 +51,7 @@ namespace AccountService.Tests.Integration
             builder.ConfigureServices(services =>
             {
                 // Fake only the transport boundary so the real composer runs.
-                services.AddSingleton<IOutboundEmailSender>(new RecordingOutboundEmailSender(this.RecordAlreadyRegistered));
+                services.AddSingleton<IOutboundEmailSender>(new RecordingOutboundEmailSender(this.RecordAlreadyRegistered, canSend));
 
                 if (configure is not null)
                 {
@@ -77,8 +79,10 @@ namespace AccountService.Tests.Integration
             }
         }
 
-        private sealed class RecordingOutboundEmailSender(Action<OutboundEmail> record) : IOutboundEmailSender
+        private sealed class RecordingOutboundEmailSender(Action<OutboundEmail> record, bool canSend) : IOutboundEmailSender
         {
+            public bool CanSend => canSend;
+
             public Task SendAsync(OutboundEmail message, CancellationToken cancellationToken = default)
             {
                 record(message);

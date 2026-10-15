@@ -38,6 +38,10 @@ interface PinDbRow {
  * The viewport reads the view's masked `latitude`/`longitude`. A row with a withheld address has
  * NULL there, fails the range test, and so is in no pin and not in `total`.
  *
+ * A wide viewport is fast only while the planner knows it is wide. The expression statistics in
+ * migration 065 (#548) give it that. Without them it expects 2 rows, drives the join from the
+ * coordinate index and sorts every row in the viewport.
+ *
  * The count query runs only when the pin query fills the cap. A smaller result is the whole set,
  * so `total` is the row count and a normal viewport costs one bounded read.
  */

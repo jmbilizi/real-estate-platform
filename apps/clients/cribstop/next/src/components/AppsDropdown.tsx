@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import SlidePanel from './SlidePanel';
+import ToolbarIconButton from './ToolbarIconButton';
 
 /** A single app tile displayed in the grid */
 interface AppTile {
@@ -199,18 +200,14 @@ export default function AppsDropdown() {
   return (
     <div className="relative">
       {/* Waffle / apps icon button */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Site apps"
-        aria-expanded={open}
+      <ToolbarIconButton
+        surface="nav"
+        label="Site apps"
+        icon={<WaffleIcon className="h-5 w-5" />}
         aria-haspopup="dialog"
-        className={[
-          'flex h-11 w-11 items-center justify-center hover:text-brand',
-          open ? 'text-brand' : 'text-ink',
-        ].join(' ')}
-      >
-        <WaffleIcon className="h-5 w-5" />
-      </button>
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      />
 
       <SlidePanel open={open} onClose={() => setOpen(false)} title="Apps" width={314}>
         {/* App grid — 3 columns, compact Google-style */}

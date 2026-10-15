@@ -1,0 +1,234 @@
+import {
+  ATTRIBUTION_KEYS,
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  PAGE_SIZE_DEFAULT,
+  PAGE_SIZE_MAX,
+  UNAUTHENTICATED_BODY,
+} from '@cribstop/property-contracts';
+import { toOpenApiDocument } from './openapi';
+
+describe('toOpenApiDocument', () => {
+  // `any` lets these assertions inspect the raw JSON Schema shape (the published contract)
+  // rather than a typed wrapper.
+  const doc: any = toOpenApiDocument();
+
+  // `<Domain> Service`, the shape every other aggregated document already uses (`Account
+  // Service`, `Inference Service`). Not named for a client — `cribstop-next` is one consumer of
+  // this document, not its owner — and not named for a resource: property-service owns the whole
+  // Communities → Properties → Units → Listings hierarchy, so `listings` is one resource within
+  // it (the same inversion #47 made when `libs/listing-contracts` became
+  // `libs/property-contracts`). The URL paths deliberately stay `/listings/*`: a service name is
+  // not a resource name, and the gateway's `/property/*` namespace lives in its upstream
+  // templates, not in this document.
+  it('publishes the service-level title, named for neither a client nor a resource', () => {
+    expect(doc.info.title).toBe('Property Service');
+    expect(doc.info.title).not.toMatch(/cribstop/i);
+    expect(Object.keys(doc.paths)).toContain('/listings');
+  });
+
+  it('declares the listings paths', () => {
+    expect(Object.keys(doc.paths).sort()).toEqual([
+      '/agent/leads',
+      '/agent/leads/{id}',
+      '/agent/leads/{id}/accept',
+      '/agent/leads/{id}/decline',
+      '/agent/leads/{id}/status',
+      '/analytics/events',
+      '/home-feed',
+      '/listings',
+      '/listings/brokers',
+      '/listings/map',
+      '/listings/meta',
+      '/listings/neighborhoods',
+      '/listings/suggest',
+      '/listings/zips',
+      '/listings/{id}',
+      '/listings/{id}/card',
+      '/listings/{id}/inquiries',
+      '/listings/{id}/page',
+      '/listings/{id}/saved',
+      '/looking-for',
+      '/looking-for/{id}',
+      '/properties/lookup',
+      '/properties/{id}/page',
+      '/saved-homes',
+      '/saved-homes/{id}',
+      '/staff/agents',
+      '/staff/agents/{id}',
+      '/staff/leads',
+      '/staff/leads/metrics',
+      '/staff/leads/{id}',
+      '/staff/leads/{id}/assign',
+      '/staff/leads/{id}/notes',
+      '/staff/leads/{id}/transition',
+      '/staff/leads/{id}/unassign',
+      '/staff/me',
+    ]);
+  });
+
+  it('publishes the place bound and format on the neighborhoods endpoint (#488)', () => {
+    const place = doc.paths['/listings/neighborhoods'].get.parameters.find(
+      (p: { name: string }) => p.name === 'place',
+    );
+    const json = JSON.stringify(place.schema);
+    expect(json).toContain('"maxItems":25');
+    expect(json).toContain('[A-Za-z]{2}');
+  });
+
+  it('emits an OpenAPI 3.0 document with no server base path to prefix the paths', () => {
+    expect(doc.openapi).toMatch(/^3\.0\./);
+    expect(doc.servers).toBeUndefined();
+  });
+
+  it('renders nullable fields as nullable rather than as an untyped object', () => {
+    const card = doc.components.schemas.ListingCardRow;
+    expect(card.properties.beds.nullable).toBe(true);
+    expect(card.properties.sqft).not.toEqual({});
+  });
+
+  it('publishes no field-selection parameter on the search endpoint', () => {
+    const names = doc.paths['/listings'].get.parameters.map((p: { name: string }) => p.name);
+    for (const forbidden of ['fields', 'select', 'include', 'omit', 'exclude']) {
+      expect(names).not.toContain(forbidden);
+    }
+  });
+
+  // A snapshot only detects change, not correctness — it would happily re-approve a document that
+  // silently dropped an attribution key. `ListingCardRow.properties` is JSON Schema, which cannot
+  // silently drop a declared key the way `z.object` strips an unknown one, so it is the
+  // non-vacuous surface to assert the NAR 7.58 obligations against directly (#47 review, I6).
+  it('publishes all eight NAR 7.58 attribution keys as required, non-optional fields', () => {
+    const card = doc.components.schemas.ListingCardRow;
+    const props = Object.keys(card.properties);
+    expect(props).toEqual(expect.arrayContaining([...ATTRIBUTION_KEYS]));
+    expect(card.required).toEqual(expect.arrayContaining([...ATTRIBUTION_KEYS]));
+  });
+
+  it('never republishes description, imageUrls or hasOpenHouse on the list row', () => {
+    const props = Object.keys(doc.components.schemas.ListingCardRow.properties);
+    for (const banned of ['description', 'imageUrls', 'hasOpenHouse']) {
+      expect(props).not.toContain(banned);
+    }
+  });
+
+  it('keeps the half-bath step pattern on the baths filter, not a whole-number-only one', () => {
+    const bathsParam = doc.paths['/listings'].get.parameters.find(
+      (p: { name: string }) => p.name === 'baths',
+    );
+    expect(bathsParam.schema.pattern).toBe('^\\d+(\\.5)?$');
+  });
+
+  // The pageSize pattern's upper bound (`^([1-9][0-9]?|100)$`) is a hand-written regex, not
+  // derived from PAGE_SIZE_MAX — so lowering that constant would go uncaught: the pattern would
+  // keep advertising 1-100 while the service enforces a smaller cap, over-promising to any client
+  // built against the published contract. Deriving expected pass/fail values from the constant
+  // itself, rather than hard-coding "100"/"101" here, makes this test fail the moment the pattern
+  // and the constant disagree in either direction (#47 review round 2, finding 2).
+  it('keeps the pageSize pattern bound in sync with PAGE_SIZE_MAX', () => {
+    const pageSizeParam = doc.paths['/listings'].get.parameters.find(
+      (p: { name: string }) => p.name === 'pageSize',
+    );
+    const pattern = new RegExp(pageSizeParam.schema.pattern);
+    expect(pattern.test(String(PAGE_SIZE_MAX))).toBe(true);
+    expect(pattern.test(String(PAGE_SIZE_MAX + 1))).toBe(false);
+  });
+
+  it('keeps every nullable ListingCardRow field in `required` (present, never omitted)', () => {
+    const card = doc.components.schemas.ListingCardRow;
+    const nullableFields = Object.entries(card.properties as Record<string, { nullable?: boolean }>)
+      .filter(([, propertySchema]) => propertySchema.nullable === true)
+      .map(([name]) => name);
+    // Sanity check that this assertion is actually exercising something.
+    expect(nullableFields.length).toBeGreaterThan(0);
+    expect(card.required).toEqual(expect.arrayContaining(nullableFields));
+  });
+
+  // The whole point of the AC's "says it in words" requirement is that an integrator reads the
+  // constraint in the document instead of discovering it at 400, so these assert the published
+  // TEXT rather than a schema keyword — there is no OpenAPI vocabulary for "the offset across two
+  // parameters is bounded", which is exactly why it has to be prose.
+  describe('the result window is documented, not just enforced (#65)', () => {
+    const searchDescription: string = doc.paths['/listings'].get.description;
+
+    it('says this is a search surface and not a bulk-export surface', () => {
+      expect(searchDescription).toMatch(/search surface/i);
+      expect(searchDescription).toMatch(/not a bulk-export surface/i);
+    });
+
+    it('states the window in the terms the service enforces it, and the resulting deepest page', () => {
+      expect(searchDescription).toContain('(page - 1) * pageSize');
+      expect(searchDescription).toContain(String(MAX_RESULT_OFFSET));
+      expect(searchDescription).toContain(String(maxReachablePage(PAGE_SIZE_DEFAULT)));
+    });
+
+    it('says a request past the window is a 400 — not a clamp and not an empty 200', () => {
+      expect(searchDescription).toMatch(/400/);
+      expect(searchDescription).toMatch(/result_window_exceeded/);
+      expect(searchDescription).toMatch(/never silently clamped/i);
+    });
+
+    it('says total is never clamped to the window, and that a past-the-end page inside it is a 200', () => {
+      expect(searchDescription).toMatch(/`total` is always the exact count/);
+      expect(searchDescription).toMatch(/INSIDE the window is a normal 200/);
+    });
+
+    it('documents the new code on the 400 response alongside invalid_request', () => {
+      const response400: string = doc.paths['/listings'].get.responses['400'].description;
+      expect(response400).toContain('result_window_exceeded');
+      expect(response400).toContain('invalid_request');
+    });
+
+    it('publishes result_window_exceeded in the ErrorBody code enum, so a generated client has a branch for it', () => {
+      expect(doc.components.schemas.ErrorBody.properties.error.properties.code.enum).toContain(
+        'result_window_exceeded',
+      );
+    });
+
+    it('carries the bound on the page parameter itself, where a codegen tool surfaces it', () => {
+      const pageParam = doc.paths['/listings'].get.parameters.find(
+        (p: { name: string }) => p.name === 'page',
+      );
+      expect(pageParam.schema.description).toContain(String(MAX_RESULT_OFFSET));
+    });
+
+    it('adds no parameter that could lift the bound', () => {
+      const names = doc.paths['/listings'].get.parameters.map((p: { name: string }) => p.name);
+      for (const forbidden of ['offset', 'limit', 'cursor', 'all', 'export', 'maxResults']) {
+        expect(names).not.toContain(forbidden);
+      }
+    });
+  });
+
+  it('matches the committed golden document', () => {
+    expect(doc).toMatchSnapshot();
+  });
+});
+
+describe('published sign-in requirements', () => {
+  const published: any = toOpenApiDocument();
+
+  it('publishes the looking-for routes with sign-in required', () => {
+    expect(published.paths['/looking-for'].get.responses['401']).toBeDefined();
+    expect(published.paths['/looking-for/{id}'].put.responses['409']).toBeDefined();
+    expect(published.paths['/looking-for/{id}'].delete.responses['401']).toBeDefined();
+  });
+
+  it('publishes the 401 code in ErrorBody', () => {
+    expect(published.components.schemas.ErrorBody.properties.error.properties.code.enum).toContain(
+      UNAUTHENTICATED_BODY.error.code,
+    );
+  });
+
+  it('requires sign-in on every saved-homes operation', () => {
+    const operations = [
+      published.paths['/listings/{id}/saved'].put,
+      published.paths['/listings/{id}/saved'].delete,
+      published.paths['/saved-homes'].get,
+      published.paths['/saved-homes/{id}'].delete,
+    ];
+    for (const operation of operations) {
+      expect(operation.responses['401']).toBeDefined();
+    }
+  });
+});

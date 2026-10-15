@@ -14,6 +14,7 @@ import type { ListingCardRow } from '@/lib/types';
 import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { hasMapCoordinates } from '@/lib/listing-format';
 import { formatBounds, roundBounds } from '@/lib/map-bounds';
+import { reportMapMove } from '@/lib/map-move-event';
 import { areaBounds, drawnPathToRing, ringToGeoJson } from '@/lib/draw-area';
 import {
   createUserMoveGate,
@@ -165,8 +166,10 @@ export function UserMoveReporter({
     let committedZoom = map.getZoom();
     let before: typeof points | null = null;
     let lastMarkAt = 0;
+    let reportedZoom = Math.round(committedZoom);
     const gate = createUserMoveGate<MapBounds & { zoom: number }>({
       onSettle: ({ zoom, ...view }) => {
+        reportedZoom = reportMapMove({ ...view, zoom }, reportedZoom);
         const results = before ?? pointsRef.current;
         before = null;
         if (!shouldSwitchToMapView({ committedZoom, zoom, bounds: view, points: results })) return;

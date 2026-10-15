@@ -3,17 +3,21 @@ import {
   INTERNAL_ERROR_BODY,
   MAP_PIN_CAP_DEFAULT,
   STAFF_LEAD_AGING_HOURS_DEFAULT,
-  toOpenApiDocument,
 } from '@cribstop/property-contracts';
-import { getPool } from './db/pool';
+import { toOpenApiDocument } from './openapi/openapi';
+import { createAnalyticsPool, getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
+import { createHomeFeedRouter } from './home-feed/routes';
 import { createAddressLoader } from './listings/address-loader';
 import type { AddressFetcher } from './listings/property-page';
 import type { ReadPool } from './listings/repository';
 import { createBrightSyncAdminRouter } from './admin/bright-sync-routes';
 import type { SyncQueryable } from './jobs/bright-sync/store';
+import { createAnalyticsRouter } from './analytics/routes';
+import type { AnalyticsSink } from './analytics/sink';
 import { createInquiriesRouter } from './inquiries/routes';
+import { createLookingForRouter } from './looking-for/routes';
 import { createSavedStateReader } from './saved/identity';
 import { createSavedHomesRouter } from './saved/routes';
 import { createStaffRouter } from './staff/routes';
@@ -31,7 +35,7 @@ import { type ContactsClient, createHttpContactsClient } from './inquiries/accou
 import { createRateLimiter, type RateLimiter } from './inquiries/rate-limit';
 
 /**
- * The published OpenAPI document, generated ONCE at module load from `@cribstop/property-contracts`.
+ * The published OpenAPI document, generated ONCE at module load from the `@cribstop/property-contracts` schemas (`./openapi/openapi.ts`).
  * It is a pure function of the schemas, so there is nothing to recompute per request.
  *
  * Generated, never hand-written. Express emits no OpenAPI of its own, and the tempting fix — an
@@ -167,6 +171,10 @@ export interface CreateAppOptions {
   addressFetcher?: AddressFetcher;
   /** Most pins one map response carries (#546). Env: MAP_PIN_CAP. */
   mapPinCap?: number;
+  /** Overrides `ANALYTICS_ENABLED` (#725). */
+  analyticsEnabled?: () => boolean;
+  /** Overrides the analytics sinks (#824). The first is the system of record. */
+  analyticsSinks?: AnalyticsSink[];
   /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
   adminToken?: () => string | undefined;
 }
@@ -238,7 +246,16 @@ export function createApp(options: CreateAppOptions = {}): Express {
       createSavedStateReader(pool, introspection),
     ),
   );
+  app.use(createHomeFeedRouter(pool));
   app.use(createSavedHomesRouter({ pool, introspection }));
+  app.use(createLookingForRouter({ pool, introspection }));
+  app.use(
+    createAnalyticsRouter({
+      pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,
+      enabled: options.analyticsEnabled,
+      sinks: options.analyticsSinks,
+    }),
+  );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));
   app.use(createStaffRouter({ introspection }));
   app.use(

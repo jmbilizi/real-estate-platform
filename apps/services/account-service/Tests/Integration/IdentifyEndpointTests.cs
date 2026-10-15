@@ -120,6 +120,148 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task FreshSend_IsSent_AndTheCooldownAnswersSentFalseWithReason()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+
+            var first = await (await Post(client, new { email = "pending@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+            var second = await (await Post(client, new { email = "pending@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+
+            first.GetProperty("sent").GetBoolean().Should().BeTrue();
+            first.GetProperty("reason").ValueKind.Should().Be(JsonValueKind.Null);
+            second.GetProperty("sent").GetBoolean().Should().BeFalse();
+            second.GetProperty("reason").GetString().Should().Be("cooldown");
+            second.GetProperty("next").GetString().Should().Be("code");
+            second.GetProperty("resendAfterSeconds").GetInt32().Should().BeInRange(1, 60);
+        }
+
+        [Fact]
+        public async Task UnconfirmedAccount_GetsANotice_AndSaysNoCodeWasSent()
+        {
+            using var factory = new AccountRecoveryFactory();
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "unconfirmed@example.com", confirmed: false);
+
+            var body = await (await Post(client, new { email = "unconfirmed@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+
+            body.GetProperty("next").GetString().Should().Be("code");
+            body.GetProperty("sent").GetBoolean().Should().BeFalse();
+            body.GetProperty("reason").GetString().Should().Be("notice");
+            factory.AlreadyRegisteredNotices.Should().ContainSingle(m => m.Kind == EmailKind.AlreadyRegistered);
+            factory.AlreadyRegisteredNotices.Should().NotContain(m => m.Kind == EmailKind.Code);
+        }
+
+        [Fact]
+        public async Task TheHourlyCap_AnswersHourlyCap()
+        {
+            using var factory = new AccountRecoveryFactory(configureCodes: c =>
+            {
+                c.ResendCooldown = TimeSpan.Zero;
+                c.MaxPerHour = 1;
+            });
+            using var client = factory.CreateClient();
+
+            await Post(client, new { email = "hourly@example.com" });
+            var body = await (await Post(client, new { email = "hourly@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+
+            body.GetProperty("sent").GetBoolean().Should().BeFalse();
+            body.GetProperty("reason").GetString().Should().Be("hourly_cap");
+            body.GetProperty("resendAfterSeconds").GetInt32().Should().BeInRange(3500, 3600);
+        }
+
+        [Fact]
+        public async Task ALockedAddress_AnswersLocked_AndSendsNothing()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+            await Post(client, new { email = "locked@example.com" });
+            for (var i = 0; i < 5; i++)
+            {
+                await client.PostAsJsonAsync("/account/signup/verify", new { email = "locked@example.com", code = "000000" });
+            }
+
+            var codesBefore = Codes(factory);
+            var body = await (await Post(client, new { email = "locked@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+
+            body.GetProperty("sent").GetBoolean().Should().BeFalse();
+            body.GetProperty("reason").GetString().Should().Be("locked");
+            Codes(factory).Should().Be(codesBefore);
+        }
+
+        [Fact]
+        public async Task ALiveSignUpProof_AnswersPending_AndSendsNothing()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+            await Post(client, new { email = "proof@example.com" });
+            var code = factory.AlreadyRegisteredNotices.Last(m => m.Kind == EmailKind.Code).CodeFromBody();
+            (await client.PostAsJsonAsync("/account/signup/verify", new { email = "proof@example.com", code })).StatusCode.Should().Be(HttpStatusCode.OK);
+            var codesBefore = Codes(factory);
+
+            var identify = await (await Post(client, new { email = "proof@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+            var resend = await (await client.PostAsJsonAsync("/account/signup/resend", new { email = "proof@example.com" })).Content.ReadFromJsonAsync<JsonElement>();
+
+            identify.GetProperty("sent").GetBoolean().Should().BeFalse();
+            identify.GetProperty("reason").GetString().Should().Be("pending");
+            resend.GetProperty("sent").GetBoolean().Should().BeFalse();
+            resend.GetProperty("reason").GetString().Should().Be("pending");
+            Codes(factory).Should().Be(codesBefore);
+        }
+
+        [Fact]
+        public async Task Resend_WithNoOpenSignUp_StartsOne_AndSendsACode()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+
+            var response = await client.PostAsJsonAsync("/account/signup/resend", new { email = "fresh.resend@example.com" });
+
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("sent").GetBoolean().Should().BeTrue();
+            Codes(factory).Should().Be(1);
+            (await Rows(factory)).Should().ContainSingle();
+        }
+
+        [Fact]
+        public async Task WhenPostmarkCannotSend_EveryAddressAnswersServiceUnavailable()
+        {
+            using var factory = new AccountRecoveryFactory(canSend: false);
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "known@example.com");
+
+            (await Post(client, new { email = "known@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            (await Post(client, new { email = "free@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            factory.AlreadyRegisteredNotices.Should().BeEmpty();
+            (await Rows(factory)).Should().BeEmpty();
+            factory.Logs.Entries.Where(e => e.EventId.Name == "IdentifyOutcome")
+                .Should().OnlyContain(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Warning && e.Message.Contains("unavailable", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public async Task ASpentAddressBudget_AnswersNetworkCap_AndLogsTheOutcomeWithoutTheEmail()
+        {
+            using var factory = new AccountRecoveryFactory(options => options.SignUpSendsPerAddress = 1);
+            using var client = factory.CreateClient();
+
+            await Post(client, new { email = "first@example.com" }, "203.0.113.50");
+            var refused = await Post(client, new { email = "second.person@example.com" }, "203.0.113.50");
+
+            refused.StatusCode.Should().Be(HttpStatusCode.OK);
+            var body = await refused.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("next").GetString().Should().Be("code");
+            body.GetProperty("sent").GetBoolean().Should().BeFalse();
+            body.GetProperty("reason").GetString().Should().Be("network_cap");
+            factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).Should().ContainSingle();
+
+            var outcomes = factory.Logs.Entries.Where(e => e.EventId.Name == "IdentifyOutcome").ToList();
+            outcomes.Should().HaveCount(2, "one line per identify");
+            outcomes.Should().OnlyContain(e => e.Level == Microsoft.Extensions.Logging.LogLevel.Information);
+            outcomes[0].Message.Should().Contain("outcome sent");
+            outcomes[1].Message.Should().Contain("outcome network_cap").And.NotContain("second.person").And.NotContain("@");
+        }
+
+        [Fact]
         public async Task UnconfirmedAccount_GetsOneNoticeInsideTheCooldown_NotOnePerCall()
         {
             using var factory = new AccountRecoveryFactory();
@@ -294,6 +436,17 @@ namespace AccountService.Tests.Integration
 
             return await client.SendAsync(request);
         }
+
+        private static AccountRecoveryFactory NoCooldown() =>
+            new(configureCodes: c =>
+            {
+                c.ResendCooldown = TimeSpan.Zero;
+                c.MaxPerHour = 100;
+                c.MaxPerDay = 100;
+            });
+
+        private static int Codes(AccountRecoveryFactory factory) =>
+            factory.AlreadyRegisteredNotices.Count(m => m.Kind == EmailKind.Code);
 
         private static async Task<List<PendingRegistration>> Rows(AccountRecoveryFactory factory)
         {

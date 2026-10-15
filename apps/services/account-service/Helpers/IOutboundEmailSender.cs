@@ -11,6 +11,12 @@ namespace AccountService.Helpers;
 /// </summary>
 internal interface IOutboundEmailSender
 {
+    /// <summary>
+    /// Gets a value indicating whether the transport can deliver. A code flow answers 503 when it
+    /// is false, so the user never waits for a code that is dropped (#813).
+    /// </summary>
+    bool CanSend => true;
+
     /// <summary>Hands a composed message to the transport. Returns once the message is queued.</summary>
     /// <param name="message">The message.</param>
     /// <param name="cancellationToken">A token to cancel the enqueue.</param>

@@ -53,10 +53,6 @@ function appValue(searchLocation: string) {
     setSearchLocation: jest.fn(),
     searchSuggestion: null,
     setSearchSuggestion: jest.fn(),
-    searchMoveInDate: '',
-    setSearchMoveInDate: jest.fn(),
-    searchDateRange: { start: null, end: null },
-    setSearchDateRange: jest.fn(),
     searchBedsIdx: 0,
     setSearchBedsIdx: jest.fn(),
     searchPropertyTypes: [],
@@ -118,11 +114,11 @@ describe('CompactSearchBar before hydration', () => {
   it('places a skeleton in every field label and value', () => {
     const html = serverHtml();
 
-    for (const copy of ['Where', 'When', 'What', 'Anywhere', 'Add dates', 'For Sale']) {
+    for (const copy of ['Where', 'What', 'Anywhere', 'For Sale']) {
       expect(html).not.toContain(copy);
     }
-    // Three labels, three values, and the search button.
-    expect(html.match(/skeleton-fill/g) ?? []).toHaveLength(7);
+    // Two labels, two values, and the search button.
+    expect(html.match(/skeleton-fill/g) ?? []).toHaveLength(5);
   });
 
   /**

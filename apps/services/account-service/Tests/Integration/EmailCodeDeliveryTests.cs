@@ -35,7 +35,7 @@ namespace AccountService.Tests.Integration
             var message = factory.AlreadyRegisteredNotices.Should().ContainSingle().Subject;
             message.Kind.Should().Be(EmailKind.Code);
             message.To.Should().Be(Email);
-            var code = message.Subject.Split(' ')[0];
+            var code = message.CodeFromBody();
             code.Should().MatchRegex("^[0-9]{6}$");
             message.TextBody.Should().Contain(code);
             message.TextBody.Should().Contain("Real Broker, LLC");

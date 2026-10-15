@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'nextjs-toploader/app';
 import { motion } from 'motion/react';
-import { Bell, Heart, LogOut, MessageCircle, UserPlus } from 'lucide-react';
+import { Heart, LogOut, UserPlus } from 'lucide-react';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
 import AppsDropdown from './AppsDropdown';
@@ -16,6 +16,12 @@ import { BRAND } from '@/lib/brand';
 import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 import { NAV_TABS } from './NavTabIcons';
 import { SkeletonBar, SkeletonBlock } from './Skeleton';
+import NavMenu from './NavMenu';
+import ToolbarIconButton, {
+  ACCOUNT_ICON,
+  HEART_ICON,
+  NAV_BUTTON_CLASSES,
+} from './ToolbarIconButton';
 
 /**
  * Placeholder widths for each tab label, so a skeletoned tab row is the same width as the loaded
@@ -127,9 +133,9 @@ export default function NavBar() {
     return () => window.removeEventListener('keydown', handler);
   }, [headerExpanded, setHeaderExpanded]);
 
-  const openModal = (mode: 'login' | 'signup') => {
+  const openModal = () => {
     const params = new URLSearchParams(window.location.search);
-    params.set('modal', mode);
+    params.set('modal', 'login');
     router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -257,7 +263,7 @@ export default function NavBar() {
 
           {/* Right nav */}
           <div
-            className={`relative z-20 flex items-center gap-4 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
+            className={`relative z-20 flex items-center gap-1.5 md:gap-2 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
           >
             {/*
              * Saved and Apps are identical whether or not anyone is signed in, so they render
@@ -265,16 +271,8 @@ export default function NavBar() {
              * controls because one of them was uncertain — and left the whole right-hand nav blank
              * from first paint until the bundle finished hydrating.
              */}
-            <Link
-              href="/favorites"
-              className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition hover:text-brand active:text-brand"
-              aria-label="Saved"
-            >
-              {hydrated ? (
-                <HeartIcon className="h-5 w-5 content-resolved" />
-              ) : (
-                <SkeletonBlock className="h-5 w-5 rounded-xs" />
-              )}
+            <Link href="/favorites" className={NAV_BUTTON_CLASSES} aria-label="Saved" title="Saved">
+              {HEART_ICON}
             </Link>
 
             {hydrated ? (
@@ -282,7 +280,7 @@ export default function NavBar() {
                 <AppsDropdown />
               </span>
             ) : (
-              <SkeletonBlock className="h-5 w-5 rounded-xs" />
+              <NavButtonSkeleton />
             )}
 
             {/*
@@ -298,24 +296,36 @@ export default function NavBar() {
              * server HTML paints, then the bundle has to arrive, parse and run. On a cold load
              * that is seconds, and it is exactly the window this placeholder occupies.
              *
-             * `min-w` holds the slot at the width of the wider outcome so the nav's total width
-             * never changes and Saved/Apps cannot slide sideways on hydration. Its value is the
-             * Sign-in button's; if that button's copy or padding changes, this changes with it.
+             * Every outcome is the same circle, so the nav's width never changes and the other
+             * controls cannot slide sideways on hydration.
              */}
-            <div className={`flex min-w-[72px] justify-end ${hydrated ? 'content-resolved' : ''}`}>
+            <div className={`flex justify-end ${hydrated ? 'content-resolved' : ''}`}>
               {!hydrated ? (
-                <NavAuthSkeleton />
+                <NavButtonSkeleton />
               ) : user ? (
                 <div className="relative">
-                  <button
-                    onClick={() => setProfileOpen((v) => !v)}
-                    aria-label="Profile menu"
+                  <ToolbarIconButton
+                    surface="nav"
+                    label="Profile menu"
+                    className="overflow-hidden"
+                    icon={
+                      user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt=""
+                          className="h-full w-full rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-ink">
+                          {getUserInitials(user)}
+                        </span>
+                      )
+                    }
                     aria-expanded={profileOpen}
                     aria-haspopup="dialog"
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-brand font-semibold text-white"
-                  >
-                    {getUserInitials(user)}
-                  </button>
+                    onClick={() => setProfileOpen((v) => !v)}
+                  />
 
                   <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={314}>
                     <div className="absolute right-2 top-2">
@@ -324,9 +334,18 @@ export default function NavBar() {
 
                     {/* Avatar + name + email */}
                     <div className="flex flex-col items-center px-5 pt-6 pb-4 gap-2">
-                      <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
-                        {getUserInitials(user)}
-                      </span>
+                      {user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt=""
+                          className="h-16 w-16 flex-shrink-0 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-brand font-bold text-white text-xl">
+                          {getUserInitials(user)}
+                        </span>
+                      )}
                       <div className="text-center min-w-0 w-full">
                         <p className="text-sm font-semibold text-ink truncate">
                           {getUserDisplayName(user)}
@@ -354,22 +373,6 @@ export default function NavBar() {
                       >
                         <Heart className="h-4 w-4 shrink-0 text-ink-muted" />
                         Saved homes
-                      </Link>
-                      <Link
-                        href="/alerts"
-                        className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
-                        onClick={() => setProfileOpen(false)}
-                      >
-                        <Bell className="h-4 w-4 shrink-0 text-ink-muted" />
-                        Alerts
-                      </Link>
-                      <Link
-                        href="/messages"
-                        className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
-                        onClick={() => setProfileOpen(false)}
-                      >
-                        <MessageCircle className="h-4 w-4 shrink-0 text-ink-muted" />
-                        Messages
                       </Link>
                     </div>
 
@@ -405,7 +408,7 @@ export default function NavBar() {
                       >
                         Privacy Policy
                       </Link>
-                      {' Â· '}
+                      {' · '}
                       <Link
                         href="/terms"
                         onClick={() => setProfileOpen(false)}
@@ -417,14 +420,22 @@ export default function NavBar() {
                   </SlidePanel>
                 </div>
               ) : (
-                <button
-                  onClick={() => openModal('login')}
-                  className="flex h-8 p-3 items-center bg-brand font-medium text-sm text-white transition hover:text-ink active:text-ink"
-                >
-                  Sign in
-                </button>
+                <ToolbarIconButton
+                  surface="nav"
+                  label="Sign in or sign up"
+                  icon={ACCOUNT_ICON}
+                  onClick={() => openModal()}
+                />
               )}
             </div>
+
+            {hydrated ? (
+              <span className="content-resolved flex items-center">
+                <NavMenu signedIn={!!user} onAuth={openModal} />
+              </span>
+            ) : (
+              <SkeletonBlock className="-mr-1 h-6 w-1 shrink-0 rounded" />
+            )}
           </div>
         </div>
       </header>
@@ -433,34 +444,11 @@ export default function NavBar() {
 }
 
 /**
- * The account control while we do not yet know whether anyone is signed in.
- *
- * Circular, because it stands in for the avatar — the richer of the two outcomes, and the one a
- * returning visitor (the only kind who can be signed in) is about to get. A signed-out visitor
- * lands a wider Sign-in button in the same slot; the slot's `min-w` already reserves that width,
- * so the swap changes what is in the box, never the size of it.
- *
- * Painted with the same `bg-surface-soft skeleton-fill` pairing as every listing placeholder, so
- * the header sweeps on the same clock and in the same colour as the cards below it rather than
- * inventing a second loading vocabulary for the chrome. `--skeleton-tint` on `:root` drives both.
- *
- * `aria-hidden` rather than a `role="status"`: the nav around it is fully interactive the whole
- * time, so this is not a page-level loading state to announce — it is one control not yet resolved,
- * and a screen reader reaching an unlabelled busy region in the header would be noise, not news.
+ * A navbar control that is not known until hydration: Apps, Account and More. Same 44px circle
+ * (40px on mobile) as the loaded button, so nothing shifts when the real control arrives.
+ * `aria-hidden`: the nav stays interactive, so this is one unresolved control, not a page-level
+ * loading state to announce.
  */
-function NavAuthSkeleton() {
-  return <SkeletonBlock className="h-10 w-10 rounded-full" />;
-}
-
-function HeartIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-      />
-    </svg>
-  );
+function NavButtonSkeleton() {
+  return <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full max-md:h-10 max-md:w-10" />;
 }

@@ -39,6 +39,7 @@ namespace AccountService.Helpers;
 /// <param name="limiter">The rate limiter.</param>
 /// <param name="users">The user manager.</param>
 /// <param name="notices">The security notice sender.</param>
+/// <param name="sender">The transport, asked only whether it can deliver.</param>
 /// <param name="timeProvider">The clock.</param>
 /// <param name="logger">The logger.</param>
 internal sealed partial class EmailChangeService(
@@ -48,6 +49,7 @@ internal sealed partial class EmailChangeService(
     AccountRecoveryRateLimiter limiter,
     AppUserManager users,
     SecurityNoticeService notices,
+    IOutboundEmailSender sender,
     TimeProvider timeProvider,
     ILogger<EmailChangeService> logger)
 {
@@ -80,7 +82,7 @@ internal sealed partial class EmailChangeService(
         }
 
         var settings = codeOptions.Value;
-        if (!settings.IsConfigured)
+        if (!settings.IsConfigured || !sender.CanSend)
         {
             return new EmailChangeResult(EmailChangeStatus.Unavailable);
         }

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AccountSecuritySection from './AccountSecuritySection';
 import {
   changePassword,
-  getPasswordMinLength,
+  getPasswordPolicy,
   startEmailChange,
   verifyEmailChange,
 } from '@/lib/api/account';
@@ -17,7 +17,11 @@ jest.mock('@/lib/api/account', () => ({
   startEmailChange: jest.fn(),
   verifyEmailChange: jest.fn(),
   changePassword: jest.fn(),
-  getPasswordMinLength: jest.fn().mockResolvedValue(15),
+  getPasswordPolicy: jest.fn().mockResolvedValue({
+    minLength: 8,
+    passphraseLength: 15,
+    requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+  }),
 }));
 
 const mockStart = startEmailChange as jest.MockedFunction<typeof startEmailChange>;
@@ -39,7 +43,11 @@ function press(name: string) {
 describe('AccountSecuritySection', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    (getPasswordMinLength as jest.Mock).mockResolvedValue(15);
+    (getPasswordPolicy as jest.Mock).mockResolvedValue({
+      minLength: 8,
+      passphraseLength: 15,
+      requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+    });
   });
 
   it('shows the email and a password row, each with a Change button', () => {

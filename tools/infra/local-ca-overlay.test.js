@@ -74,6 +74,12 @@ test('a present bundle writes one patch and chains to the committed overlay', ()
     const kustomization = fs.readFileSync(path.join(dir, 'kustomization.yaml'), 'utf-8');
     assert.match(kustomization, /resources:\n {2}- \.\.\/\.\.\/local/);
     assert.match(kustomization, /- path: workspace-ca-bundle\.configmap\.yaml/);
+    assert.match(kustomization, /name: workspace-ca-env/);
+    assert.match(
+      kustomization,
+      /SSL_CERT_FILE: \/etc\/workspace-ca\/workspace-enterprise-roots\.pem/,
+    );
+    assert.match(kustomization, /REQUESTS_CA_BUNDLE: \/etc\/workspace-ca\//);
     assert.match(describeCaBundleOverlay(result), /Enterprise CA bundle found/);
   } finally {
     fs.rmSync(parent, { recursive: true, force: true });

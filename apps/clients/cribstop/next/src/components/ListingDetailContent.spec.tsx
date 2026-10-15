@@ -11,6 +11,12 @@ jest.mock('@/lib/context', () => ({
 const mockToast = jest.fn();
 jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: mockToast }) }));
 
+const mockTrackEvent = jest.fn();
+jest.mock('@/lib/analytics', () => ({
+  ...jest.requireActual('@/lib/analytics'),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}));
+
 jest.mock('@/lib/api/listings', () => {
   const actual = jest.requireActual('@/lib/api/listings');
   return {
@@ -37,6 +43,7 @@ const mockedSearchListings = searchListings as jest.Mock;
 
 beforeEach(() => {
   mockToast.mockReset();
+  mockTrackEvent.mockReset();
   mockedSearchListings.mockReset();
   mockedSearchListings.mockResolvedValue({
     results: [],
@@ -357,6 +364,11 @@ describe('ListingDetailContent — Share (#135)', () => {
     expect(share).toHaveBeenCalledTimes(1);
     expect(share.mock.calls[0][0]).toMatchObject({ url: CANONICAL });
     expect(mockToast).not.toHaveBeenCalled();
+    expect(mockTrackEvent).toHaveBeenCalledWith('listing_share', {
+      surface: 'detail',
+      listingId: LISTING_ID,
+      props: { channel: 'native' },
+    });
   });
 
   it('copies the canonical URL and confirms it when the platform has no Web Share API', async () => {
@@ -368,6 +380,11 @@ describe('ListingDetailContent — Share (#135)', () => {
 
     expect(writeText).toHaveBeenCalledWith(CANONICAL);
     expect(mockToast).toHaveBeenCalledWith('Link copied');
+    expect(mockTrackEvent).toHaveBeenCalledWith('listing_share', {
+      surface: 'detail',
+      listingId: LISTING_ID,
+      props: { channel: 'copy' },
+    });
   });
 
   it('falls back to the clipboard when the share sheet fails for a reason other than dismissal', async () => {
@@ -641,35 +658,33 @@ describe('ListingDetailContent — one home, several MLS records (#716)', () => 
     expect(screen.queryByText(/Also listed as/i)).toBeNull();
   });
 
-  it('shows the MLS day count when the feed carries it', async () => {
+  it('shows the MLS day count near the price, not in the facts block', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: 12, listedSince: '2026-08-01T00:00:00.000Z' } }),
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.getByText('Days on Market')).toBeInTheDocument();
+    expect(screen.getByTestId('market-time')).toHaveTextContent('On market 12 days');
+    expect(screen.queryByText('Days on Market')).toBeNull();
     expect(screen.queryByText('Listed since')).toBeNull();
   });
 
-  it('shows "Listed since" with the oldest list date when the day count is null', async () => {
+  it('shows the oldest list date when the day count is null', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: null, listedSince: '2026-08-01T00:00:00.000Z' } }),
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.getByText('Listed since')).toBeInTheDocument();
-    expect(screen.getByText('Aug 1, 2026')).toBeInTheDocument();
-    expect(screen.queryByText('Days on Market')).toBeNull();
+    expect(screen.getByTestId('market-time')).toHaveTextContent('Listed Aug 1, 2026');
   });
 
-  it('shows neither tile when the feed gives no day count and no list date', async () => {
+  it('shows no line when the day count is hidden (#146) and there is no list date', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: null, listedSince: null } }),
     );
     await renderAndSettle(<ListingDetailContent listing={view} />);
 
-    expect(screen.queryByText('Days on Market')).toBeNull();
-    expect(screen.queryByText('Listed since')).toBeNull();
+    expect(screen.queryByTestId('market-time')).toBeNull();
   });
 });
 

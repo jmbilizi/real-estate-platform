@@ -290,7 +290,7 @@ namespace AccountService.Tests.Integration
             factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).ToList();
 
         private static string CodeFor(AccountRecoveryFactory factory, string to) =>
-            Codes(factory).Last(m => string.Equals(m.To, to, StringComparison.OrdinalIgnoreCase)).Subject.Split(' ')[0];
+            Codes(factory).Last(m => string.Equals(m.To, to, StringComparison.OrdinalIgnoreCase)).CodeFromBody();
 
         private static async Task ChangeEmailAsync(HttpClient client, AccountRecoveryFactory factory)
         {

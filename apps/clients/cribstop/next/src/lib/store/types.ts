@@ -37,25 +37,6 @@ export type ListingTab = 'for-sale' | 'for-rent';
 export type NavTab = 'homes' | 'services' | 'connect';
 export type ListingType = 'sale' | 'rent';
 
-export type SearchDateFlexibility =
-  | 'exact'
-  | '1'
-  | '3'
-  | '7'
-  | '14'
-  | '30'
-  | '60'
-  | '90'
-  | '180'
-  | '365'
-  | '730';
-
-export interface SearchDateRange {
-  start: string;
-  end: string;
-  flexibility: SearchDateFlexibility;
-}
-
 /**
  * The search bar's panel identities — the single source of truth for which segments exist, shared
  * by the `activePanel` state, the pill's open-a-panel handler, and the panel-cycling chain in the
@@ -68,7 +49,7 @@ export interface SearchDateRange {
  * union is the type of `activePanel`, adding the segment back cannot be done quietly: every render
  * path, keyboard path and panel transition that could target it fails to compile.
  */
-export const SEARCH_PANELS = ['where', 'when', 'what'] as const;
+export const SEARCH_PANELS = ['where', 'what'] as const;
 export type SearchPanel = (typeof SEARCH_PANELS)[number];
 
 /**

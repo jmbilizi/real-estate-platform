@@ -90,8 +90,8 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   message composes through `Helpers/IdentityEmailComposer.cs`. `Helpers/PostmarkEmailSender.cs` is
   the `IEmailSender<ApplicationUser>` that `MapIdentityApi` requires. Every member throws, because
   nothing may send an Identity link or code.
-- **Sender identity** (section `Email`): from `Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`,
-  reply-to `contact@cribstop.com`. Startup validation refuses a reply-to equal to the from address.
+- **Sender identity** (section `Email`): from `"Cribstop.com" <no-reply@cribstop.com>`, reply-to
+  `contact@cribstop.com`. Startup validation refuses a reply-to equal to the from address.
   `Email:BrokerageDisclosure` ends every body (PRD §6). It is configuration, so a jurisdiction
   change needs no code change.
 - **Non-enumeration is a product requirement**, not stock Identity. Do not "fix" it back: `/login`
@@ -209,10 +209,14 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   first, so the breach check is not an oracle for a caller without a proof.
 - The new account, its role and the pending-row delete share one transaction on a relational
   provider. The unique index on `NormalizedUserName` (the address) is the final guard.
-- Policy: `Configuration/PasswordPolicyOptions.cs`, section `PasswordPolicy`. `MinLength` 15,
-  `MaxLength` 128, no composition rules. `Helpers/PasswordPolicyValidator.cs` is the only
-  `IPasswordValidator`, so register, change and reset follow it. Codes: `too_short`, `too_long`,
-  `breached`. The password is never trimmed. Old shorter passwords still log in.
+- Policy: `Configuration/PasswordPolicyOptions.cs`, section `PasswordPolicy`. `MinLength` 8,
+  `PassphraseLength` 15, `MaxLength` 128. A password is valid with 8+ characters and an uppercase
+  letter, a lowercase letter, a number and a symbol, or with 15+ characters and no other rule
+  (#819). `Helpers/PasswordPolicyValidator.cs` is the only `IPasswordValidator`, so register, change
+  and reset follow it. Identity `Require*` flags stay false. Codes: `too_short`, `missing_upper`,
+  `missing_lower`, `missing_digit`, `missing_symbol`, `too_long`, `breached`. The web mirror is
+  `lib/password-rules.ts` and `/api/account/password-policy`. The password is never trimmed. Old
+  shorter passwords still log in.
 - Breach check: `Helpers/PwnedPasswordsClient.cs` (HIBP range API, SHA-1 prefix, `Add-Padding`, 2
   second timeout). A timeout or error lets the password pass and logs event `1390`. The HTTP client
   calls `RemoveAllLoggers()` because the framework logs the request URI, which holds the prefix.
@@ -305,23 +309,6 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
 - `DnsMailDomainResolver` (DnsClient) checks the domain. A timeout or DNS error fails open. It does
   not block disposable domains. Tests use `FakeMailDomainResolver` and never query DNS.
 - Nothing logs the address or the body.
-
-## What I'm looking for (#768)
-
-- `GET /account/looking-for`, `PUT` and `DELETE /account/looking-for/{id}` (`Routes/LookingFor.cs`,
-  `Helpers/LookingForValidator.cs`). Cookie or bearer session. The account id comes from the
-  principal.
-- An account holds at most 5 preferences. The 6th new id answers `409 limit_reached`. `PUT` creates
-  (`201`) or replaces (`200`). The client picks the id (a GUID). The key is (UserId, Id), so two
-  accounts can use the same id. `DELETE` of an absent id answers `204`.
-- Fields: `intent` (`buy`, `rent`), 1 to 5 `places`, `priceMin/Max`, `bedsMin`, `bathsMin`,
-  `homeTypes`, `whenStart`, `whenEnd`. A bad value answers `400`. A start date before yesterday
-  (UTC) is a past date. The body has no free-text field (PRD §6).
-- `GET` returns `{ items, max }`, newest change first. #364 reads this shape.
-- The preference sends no email. #505 and #769 add alerts with their own opt-in.
-- The `LookingForPreferences` migration creates a new empty table, so a plain `CREATE` is safe. An
-  index on a populated table needs `CONCURRENTLY` (property-service rule).
-- The limit of 5 is checked in code, not by the database. Two parallel creates can pass 5.
 
 ## Notification consent (#694, #783, #769)
 

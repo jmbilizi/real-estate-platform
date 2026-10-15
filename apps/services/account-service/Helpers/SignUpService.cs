@@ -84,7 +84,7 @@ internal sealed class SignUpService(
         if (await users.FindByEmailAsync(entered).ConfigureAwait(false) is not null)
         {
             await sender.SendAsync(composer.AlreadyRegistered(entered), cancellationToken).ConfigureAwait(false);
-            return this.Accepted();
+            return this.Accepted(CodeSendOutcome.Notice);
         }
 
         var now = this.Now();
@@ -127,8 +127,8 @@ internal sealed class SignUpService(
             && row.ProofExpiresAt > now)
         {
             // The owner holds a live proof. Anyone who knows the address could otherwise void it
-            // with a start, and stall the sign-up. The answer stays the same.
-            return this.Accepted();
+            // with a start, and stall the sign-up. Nothing is sent.
+            return this.Accepted(CodeSendOutcome.Pending);
         }
 
         return await this.IssueAsync(key, entered, cancellationToken).ConfigureAwait(false);
@@ -164,7 +164,8 @@ internal sealed class SignUpService(
             .ConfigureAwait(false);
         if (row is null)
         {
-            return this.Accepted();
+            // No open sign-up: run the start logic, so a resend never answers success with no send (#813).
+            return await this.StartAsync(email, cancellationToken).ConfigureAwait(false);
         }
 
         return await this.IssueAsync(key, row.EmailAsEntered.Length > 0 ? row.EmailAsEntered : entered, cancellationToken)
@@ -391,26 +392,28 @@ internal sealed class SignUpService(
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
 
-    private SignUpResult Accepted() => new(
+    private SignUpResult Accepted(CodeSendOutcome outcome = CodeSendOutcome.Sent) => new(
         SignUpStatus.Ok,
         ResendAfterSeconds: (int)Math.Ceiling(codeOptions.Value.ResendCooldown.TotalSeconds),
-        ExpiresInSeconds: EmailCodeService.CeilSeconds(codeOptions.Value.Lifetime));
+        ExpiresInSeconds: EmailCodeService.CeilSeconds(codeOptions.Value.Lifetime),
+        Outcome: outcome);
 
     /// <summary>
-    /// The checks every send shares: the engine has a key, and the address is not locked. A lock
-    /// for an address with no code lives in the limiter, so the check covers both cases.
+    /// The checks every send shares: the engine has a key, the transport can deliver, and the
+    /// address is not locked. A lock for an address with no code lives in the limiter, so the
+    /// check covers both cases.
     /// </summary>
     private SignUpResult? Gate(string key)
     {
         var settings = codeOptions.Value;
-        if (!settings.IsConfigured)
+        if (!settings.IsConfigured || !sender.CanSend)
         {
             return new SignUpResult(SignUpStatus.Unavailable);
         }
 
         if (limiter.IsDecoyLocked(key, out var retryAfter))
         {
-            return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter));
+            return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: EmailCodeService.CeilSeconds(retryAfter), Outcome: CodeSendOutcome.Locked);
         }
 
         return null;
@@ -440,7 +443,7 @@ internal sealed class SignUpService(
             case EmailCodeIssueStatus.Unavailable:
                 return new SignUpResult(SignUpStatus.Unavailable);
             default:
-                return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: issued.RetryAfterSeconds);
+                return new SignUpResult(SignUpStatus.Limited, RetryAfterSeconds: issued.RetryAfterSeconds, Outcome: issued.Outcome);
         }
     }
 

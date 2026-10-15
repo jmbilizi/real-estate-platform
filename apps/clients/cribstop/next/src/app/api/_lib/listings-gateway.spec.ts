@@ -6,7 +6,7 @@
  * under the `node` environment rather than adding a polyfill every other spec would also load.
  */
 import { clearListingsReadCache, clientIpOf, proxyListingsRead } from './listings-gateway';
-import { READ_CACHE_MAX_BODY_CHARS } from './read-cache';
+import { READ_CACHE_MAX_BODY_CHARS, READ_CACHE_MAX_ENTRIES } from './read-cache';
 
 /**
  * The #177 regression: Ocelot's rate limiter used to write a plain-text 429 body. This proxy
@@ -126,6 +126,39 @@ describe('proxyListingsRead server cache (#755)', () => {
 
     expect(fetchGateway).toHaveBeenCalledTimes(1);
     expect(await second.json()).toEqual({ total: 3 });
+  });
+
+  it('keeps suggest writes from evicting a home row (#781)', async () => {
+    fetchGateway.mockResolvedValue(okUpstream({ total: 3 }, 'public, max-age=60, s-maxage=300'));
+    await proxyListingsRead('', 'pageSize=8', { cache: true });
+
+    // More distinct suggest keys than the shared store holds.
+    for (let i = 0; i < READ_CACHE_MAX_ENTRIES + 50; i += 1) {
+      await proxyListingsRead('/suggest', `q=p${i}`, { cache: true, store: 'suggest' });
+    }
+    fetchGateway.mockClear();
+    await proxyListingsRead('', 'pageSize=8', { cache: true });
+
+    expect(fetchGateway).not.toHaveBeenCalled();
+  });
+
+  it('keeps two visitors in different cities apart, whatever IP asks (#822)', async () => {
+    fetchGateway
+      .mockResolvedValueOnce(okUpstream({ city: 'Rockville' }, 'public, max-age=60'))
+      .mockResolvedValueOnce(okUpstream({ city: 'Baltimore' }, 'public, max-age=60'));
+
+    const a = await proxyListingsRead('', 'city=Rockville&state=MD', {
+      cache: true,
+      clientIp: '203.0.113.5',
+    });
+    const b = await proxyListingsRead('', 'city=Baltimore&state=MD', {
+      cache: true,
+      clientIp: '198.51.100.7',
+    });
+
+    expect(await a.json()).toEqual({ city: 'Rockville' });
+    expect(await b.json()).toEqual({ city: 'Baltimore' });
+    expect(fetchGateway).toHaveBeenCalledTimes(2);
   });
 
   it('keeps reads with different queries apart', async () => {

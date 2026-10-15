@@ -28,6 +28,7 @@ internal enum EmailKind
 /// <param name="To">The recipient.</param>
 /// <param name="Subject">The subject line.</param>
 /// <param name="TextBody">The plain-text body.</param>
+/// <param name="HtmlBody">The HTML body.</param>
 internal sealed record OutboundEmail(
     EmailKind Kind,
     string FromName,
@@ -35,4 +36,5 @@ internal sealed record OutboundEmail(
     string ReplyToAddress,
     string To,
     string Subject,
-    string TextBody);
+    string TextBody,
+    string HtmlBody);

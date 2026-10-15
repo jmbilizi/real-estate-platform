@@ -1,8 +1,8 @@
 # property-contracts (`@cribstop/property-contracts`)
 
 The single definition of the listings wire contract (PRD §3.1). One set of Zod schemas, from which
-runtime request validation, the TypeScript types the web app renders against, and the OpenAPI
-document the gateway aggregates are all derived — so none of the three can drift from the others.
+runtime request validation and the TypeScript types the web app renders against are derived.
+`property-service` derives the OpenAPI document from the same schemas.
 
 Consumed via pnpm workspaces: declare `"@cribstop/property-contracts": "workspace:*"` in a
 consumer's `package.json`. Never add a `tsconfig` `paths` entry for it.

@@ -26,6 +26,7 @@ guide.
 - `apps/services/multi-model-inference/AGENTS.md` — Multi-Model Inference Service
   (multi-model-inference)
 - `apps/services/property-service/AGENTS.md` — Property Service (property-service)
+- `libs/event-contracts/AGENTS.md` — event-contracts (`@events/contracts`)
 - `libs/gateway-contracts/AGENTS.md` — gateway-contracts (`@cribstop/gateway-contracts`)
 - `libs/property-contracts/AGENTS.md` — property-contracts (`@cribstop/property-contracts`)
 
@@ -77,19 +78,26 @@ guide.
    (`tools/dev/stop-process.js`). It resolves one PID, from the value you pass or from whatever
    listens on the port, and kills only that process tree. It works the same way on Windows, macOS,
    and Linux. It calls `taskkill` directly from Node, so it needs none of the doubled-slash `//PID`
-   workaround that Git Bash's MSYS path conversion otherwise forces.
+   workaround that Git Bash's MSYS path conversion otherwise forces. `ps -W` prints the MSYS PID in
+   column 1 and the Windows PID in column 4 (`WINPID`). `dev:stop` maps an MSYS PID to its WINPID.
+   It prints "not found" for a PID it cannot find and exits 0. It exits 1 only when a kill fails.
+   Prefer `--port` when a port names the process.
 
 9. **A lane writes only inside its own worktree.** `.agents/hooks/lane-boundary.js` refuses an edit
    outside the lane root, an edit into another lane's worktree, and a `git -C` that points at
-   another tree. It also refuses a direct `git worktree remove|move|prune`. Remove a stale worktree
-   with `pnpm run dev:worktree:reclaim`. That script is a dry run by default. It never removes a
-   worktree that has uncommitted changes, holds unpushed commits, was touched in the last 24 hours,
-   or carries a git lock that names a live agent process. Use `--apply` to act and
-   `--older-than <hours>` to change the window. The hook fails open, so it is a guardrail and not a
-   security boundary. A worktree whose branch is merged into `origin/dev`, or whose PR is merged or
-   closed, has no age limit. Reclaim also deletes the local branch of a merged worktree.
-   `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background at every
-   session start (throttled to once per 10 minutes). Run it after a PR merges.
+   another tree. It also refuses a literal `cd` into another lane's worktree. It refuses a shell
+   redirect, `tee`, `cp`, `mv`, `rm`, `touch`, `mkdir` or `sed -i` that names a path in another
+   lane's worktree. A redirect, `tee`, `cp` or `mv` destination outside the lane root is refused
+   too. The hook does not see a path that the shell expands at run time (`$VAR`, `~`, globs) or a
+   write that a script computes itself. It also refuses a direct `git worktree remove|move|prune`.
+   Remove a stale worktree with `pnpm run dev:worktree:reclaim`. That script is a dry run by
+   default. It never removes a worktree that has uncommitted changes, holds unpushed commits, was
+   touched in the last 24 hours, or carries a git lock that names a live agent process. Use
+   `--apply` to act and `--older-than <hours>` to change the window. The hook fails open, so it is a
+   guardrail and not a security boundary. A worktree whose branch is merged into `origin/dev`, or
+   whose PR is merged or closed, has no age limit. Reclaim also deletes the local branch of a merged
+   worktree. `pnpm run dev:worktree:cleanup` removes only these worktrees. It runs in the background
+   at every session start (throttled to once per 10 minutes). Run it after a PR merges.
 
 10. **Write in ASD-STE100 Simplified Technical English, and write only what the reader needs.** This
     applies to everything an agent writes: ticket bodies, ticket comments, code comments, PR
@@ -101,6 +109,15 @@ guide.
     profiles. Before .NET work, run `dotnet --version`. Before Python work, run `uv --version`. If
     the tool works, do nothing. If it fails, stop and report a `human-action` item. The scripts are
     idempotent: they read the current state and write only what is missing.
+
+12. **Service-owned libraries carry domain-scoped package names; apps carry unscoped deployment
+    identities.** A contracts library belongs in `libs/` only if another deployable needs it to
+    construct requests or interpret responses. Exactly one service owns each library; if two
+    services share a shape, one owns it (do not create a shared `common` library). **Naming:**
+    service-owned libraries use domain scope (`@property/contracts`), not service name; apps use one
+    unscoped name (`property-service`) byte-identical across Nx project, `package.json`, image,
+    skaffold, and deploy-control. Everything is `"private": true`; internal dependencies are
+    `workspace:*`.
 
 ## Writing Standard (ASD-STE100)
 
@@ -219,6 +236,15 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
 
 - Test a changed project directly by name (`pnpm exec nx test <project>`); `nx affected` needs a
   committed base and misses uncommitted work.
+- A new worktree has no `node_modules` and no `.workspace-certs/` bundle. Run `pnpm install` and
+  `pnpm run infra:local:certs:ensure` before an image build. The second command copies the bundle
+  from the main checkout. A host with no bundle anywhere gets a warning and the build continues. If
+  the copy fails, the build stops and names this command.
+- `/code-review` can review the wrong tree when run from a worktree. It then reports a clean result
+  for a diff it never read. Run `pnpm run dev:review-range` and pass the printed range to
+  `/code-review` explicitly. Treat a clean result from an unpinned run as unverified. If
+  `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
+  `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
@@ -227,7 +253,9 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
   target — don't hardcode it. For `deploy-control.yaml` the omission is no longer silent:
   `pnpm run infra:validate` (run by CI's `validate-infra` job and both git hooks) fails when a
-  rendered Hetzner workload has no entry, or an entry has no workload.
+  rendered Hetzner workload has no entry, or an entry has no workload. The guard covers
+  `StatefulSet`, `Deployment`, `DaemonSet`, `CronJob` and `Job`. `CronJob` and `Job` need an owner
+  but never join the rollout-wait or rollback lists.
 - **A deploy-control key is a LABEL value, never a resource name.** `tools/infra/deploy-scope.js` is
   the single source of truth: a resource belongs to the key named by `app`, else
   `app.kubernetes.io/name`. There is no `metadata.name` fallback, because the deploy applies each
@@ -239,6 +267,13 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   two lanes. **`enabled`/`auto_deploy` are not part of identity** — a switched-off service is
   reported out of scope, never confused with an unregistered one. Conflating the two is what made a
   single `auto_deploy: false` abort an entire deploy (#45).
+- **NetworkPolicy enforcement differs per cluster (#269).** `infra/k8s/base/networkpolicies/` limits
+  ingress to `property-service` (api-gateway only) and `account-service` (api-gateway and
+  property-service). The Hetzner K3s clusters enforce it: K3s ships an embedded policy controller
+  and no cluster config disables it. The local Kind cluster does not: Kind v1.28 uses kindnet, which
+  ignores NetworkPolicy. A policy that blocks a caller fails on Hetzner only. When a new in-cluster
+  caller reaches either service, add its `app` label to the policy. The policies set no egress rule,
+  so DNS egress is unchanged. Kubelet probes come from the node and the policy allows them.
 - **Deploy lanes are phased, derived from the manifests, not hardcoded.** A service owning an
   admission webhook that intercepts writes to a resource another service owns runs in an earlier
   phase. Today that means the `ingress-nginx` lane completes before the jaeger / api-gateway /
@@ -260,6 +295,12 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   never by CI. Cost a dev outage on #22/#71. When adding a gateway route, check the service's
   `enabled`/`auto_deploy` in **every** environment block, not just the one you're testing.
   Guard-rail check tracked in #72.
+- **Service lists drift apart without an error.** `infra/deploy-control.yaml`,
+  `infra/smart-deployment-config.yaml`, `skaffold.yaml` artifacts, Nx `container-build` projects and
+  the gateway route files each name the same services. CI selects a targeted deploy from the
+  `smart-deployment-config.yaml` keys only. A service missing there never gets a targeted deploy.
+  `tools/infra/service-registries.js` compares them, and `pnpm run infra:validate` runs it. A new
+  service needs an entry in each list. Test: `tools/infra/service-registries.test.js`.
 - **An image is rebuilt only when its own Dockerfile inputs change.** Nx marks _every_ project
   affected when `pnpm-lock.yaml`, `nx.json` or the root `package.json` changes, which any
   service-adding branch does — so `tools/ci/affected-images.js` narrows the matrix using each
@@ -932,6 +973,19 @@ tools (IDEs, lint-staged, workspace format scripts, CI) use the same config auto
 
 **When to use which**: Use workspace format for repo-wide changes (pre-commit/pre-push). Use project
 format during development of specific projects.
+
+## Workspace Naming & Shared Libraries
+
+Beyond Rule 12 (see above):
+
+- **Nx project name == `package.json` name, always.** When these differ, `prune-lockfile` (Nx
+  22.0.1) drops a library's own dependencies from a consumer's pruned lockfile, breaking
+  `--frozen-lockfile` with `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY`.
+- **Everything is `"private": true` and every internal dependency is `workspace:*`.** The latter
+  makes pnpm resolve from the workspace and fail loudly if the package is missing.
+- **The brand never appears in a partner-visible artifact** — OpenAPI `info.title`, gateway Swagger
+  keys, and gateway URL namespaces are named for the service domain (`Property Service`, key
+  `Property`, `/property/*`), never `Cribstop…`. After #64, no `@cribstop/*` packages remain.
 
 ## Common Pitfalls & Solutions
 

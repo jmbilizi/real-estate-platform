@@ -56,6 +56,15 @@ describe('isLandOnly', () => {
 });
 
 describe('parseFiltersFromSearchParams', () => {
+  it('ignores the old date params that the search bar used to write (#770)', () => {
+    const withDates = parseFiltersFromSearchParams(
+      new URLSearchParams('q=Bethesda&type=rent&moveIn=2026-11-01&moveInEnd=2026-11-15'),
+    );
+    const without = parseFiltersFromSearchParams(new URLSearchParams('q=Bethesda&type=rent'));
+
+    expect(withDates).toEqual(without);
+  });
+
   it('parses the contract parameters, keeping the q and type spellings the search bar builds', () => {
     const filters = parseFiltersFromSearchParams(
       new URLSearchParams(

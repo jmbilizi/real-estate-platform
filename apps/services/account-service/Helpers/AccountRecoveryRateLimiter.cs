@@ -112,6 +112,35 @@ internal sealed class AccountRecoveryRateLimiter(
         this.TryConsumeAll(out retryAfter, this.SignUpSendCounters(email, clientAddress, cooldown, perHour, perDay, scope));
 
     /// <summary>
+    /// Counts one sign-up code send like the overload without <paramref name="refusedBy"/>, and
+    /// names the counter that refused. The name holds no email.
+    /// </summary>
+    /// <param name="email">The submitted address; compared case-insensitively.</param>
+    /// <param name="clientAddress">The client address, or null when unknown.</param>
+    /// <param name="cooldown">The minimum time between two sends to one email.</param>
+    /// <param name="perHour">The sends allowed per email per hour.</param>
+    /// <param name="perDay">The sends allowed per email per 24 hours.</param>
+    /// <param name="retryAfter">When refused, how long until the refusing window rolls over.</param>
+    /// <param name="refusedBy">When refused: <c>addr</c>, <c>interval</c>, <c>hour</c> or <c>day</c>.</param>
+    /// <param name="scope">The counter scope. Sign-up and password reset keep separate counters.</param>
+    /// <returns><see langword="true"/> when the send may proceed.</returns>
+    internal bool TrySignUpSend(
+        string email,
+        string? clientAddress,
+        TimeSpan cooldown,
+        int perHour,
+        int perDay,
+        out TimeSpan retryAfter,
+        out string? refusedBy,
+        string scope = SignUpScope)
+    {
+        var counters = this.SignUpSendCounters(email, clientAddress, cooldown, perHour, perDay, scope);
+        var allowed = this.TryConsumeAll(out retryAfter, out var refusedKey, counters);
+        refusedBy = refusedKey?.Split(':')[2];
+        return allowed;
+    }
+
+    /// <summary>
     /// Counts one sign-up code check against the client address. The engine locks one email after
     /// its own wrong tries, so this is the cap on how many emails one address can lock.
     /// </summary>
@@ -308,9 +337,13 @@ internal sealed class AccountRecoveryRateLimiter(
     /// longer-window budget. Charging every counter let 10 requests in one second lock an address out
     /// for a day.
     /// </remarks>
-    private bool TryConsumeAll(out TimeSpan retryAfter, params Counter[] counters)
+    private bool TryConsumeAll(out TimeSpan retryAfter, params Counter[] counters) =>
+        this.TryConsumeAll(out retryAfter, out _, counters);
+
+    private bool TryConsumeAll(out TimeSpan retryAfter, out string? refusedKey, Counter[] counters)
     {
         retryAfter = TimeSpan.Zero;
+        refusedKey = null;
 
         foreach (var counter in counters)
         {
@@ -321,6 +354,7 @@ internal sealed class AccountRecoveryRateLimiter(
 
             if (!this.TryConsume(counter.Key, counter.Limit, counter.Window, out retryAfter))
             {
+                refusedKey = counter.Key;
                 return false;
             }
         }

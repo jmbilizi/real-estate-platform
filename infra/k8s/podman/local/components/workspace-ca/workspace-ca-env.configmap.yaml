@@ -1,0 +1,10 @@
+# NODE_EXTRA_CA_CERTS adds roots and keeps the built-in store, so an empty bundle is a no-op.
+# SSL_CERT_FILE and REQUESTS_CA_BUNDLE replace the Python trust store. An empty bundle would
+# break TLS on a workstation with no proxy. `tools/infra/local-ca-overlay.js` adds them only when
+# a real bundle exists.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-ca-env
+data:
+  NODE_EXTRA_CA_CERTS: /etc/workspace-ca/workspace-enterprise-roots.pem

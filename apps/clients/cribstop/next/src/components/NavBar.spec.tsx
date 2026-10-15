@@ -1,10 +1,13 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { readdirSync } from 'fs';
+import { join } from 'path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import NavBar from './NavBar';
 import type { User } from '@/lib/store/types';
 
+const mockPush = jest.fn();
 jest.mock('nextjs-toploader/app', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 /* The global setup pins `usePathname` to '/'; the tab tests need to move it. */
@@ -37,9 +40,12 @@ jest.mock('motion/react', () => ({
 jest.mock('./AppsDropdown', () => () => <div data-testid="apps-dropdown" />);
 jest.mock('./MobileSearchSheet', () => () => <div data-testid="mobile-search-sheet" />);
 jest.mock('./MobileSearchPill', () => () => <div data-testid="mobile-search-pill" />);
-jest.mock('./SlidePanel', () => ({ children }: { children: React.ReactNode }) => (
-  <div>{children}</div>
-));
+jest.mock(
+  './SlidePanel',
+  () =>
+    ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+      open ? <div data-testid="slide-panel">{children}</div> : null,
+);
 jest.mock('./DismissButton', () => () => <button type="button">Dismiss</button>);
 
 const mockUseApp = jest.fn();
@@ -89,7 +95,7 @@ describe('NavBar before hydration', () => {
     const html = serverHtml();
 
     expect(html).toContain('aria-label="Saved"');
-    // Three tab icons, three tab labels, Saved, Apps, account.
+    // Three tab icons, three tab labels, Apps, account, More.
     expect(html.match(/skeleton-fill/g) ?? []).toHaveLength(9);
   });
 
@@ -199,7 +205,7 @@ describe('NavBar after hydration', () => {
     mockUseApp.mockReturnValue(appValue(null));
     const { container } = render(<NavBar />);
 
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in or sign up' })).toBeInTheDocument();
     expect(container.querySelector('.skeleton-fill')).toBeNull();
   });
 
@@ -208,7 +214,7 @@ describe('NavBar after hydration', () => {
     const { container } = render(<NavBar />);
 
     expect(screen.getByLabelText('Profile menu')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign in or sign up' })).not.toBeInTheDocument();
     expect(container.querySelector('.skeleton-fill')).toBeNull();
   });
 
@@ -222,5 +228,151 @@ describe('NavBar after hydration', () => {
 
     expect(screen.getByLabelText('Saved')).toBeInTheDocument();
     expect(screen.getByTestId('apps-dropdown')).toBeInTheDocument();
+  });
+});
+
+describe('NavBar right side', () => {
+  beforeEach(() => mockPush.mockClear());
+
+  it('gives every icon button a label and a tooltip', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+
+    for (const name of ['Saved', 'Sign in or sign up', 'More options']) {
+      expect(screen.getByLabelText(name)).toHaveAttribute('title', name);
+    }
+  });
+
+  it('opens the sign-in modal from the account button when signed out', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in or sign up' }));
+
+    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=login'), {
+      scroll: false,
+    });
+  });
+
+  it('opens the auth modal from the More menu', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'More options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in or sign up' }));
+
+    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=login'), {
+      scroll: false,
+    });
+  });
+
+  it('keeps the profile panel behind the account button when signed in', () => {
+    mockUseApp.mockReturnValue(appValue(A_USER));
+    render(<NavBar />);
+
+    expect(screen.getByRole('button', { name: 'Profile menu' })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog',
+    );
+  });
+
+  it('links every profile panel entry to a route that exists', () => {
+    mockUseApp.mockReturnValue(appValue(A_USER));
+    render(<NavBar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+
+    const hrefs = screen
+      .getAllByRole('link')
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => h.startsWith('/') && h !== '/');
+    expect(hrefs).toEqual(expect.arrayContaining(['/account', '/favorites']));
+
+    const routes = pageRoutes(join(__dirname, '..', 'app'));
+    for (const href of hrefs) {
+      expect({ href, found: routes.some((r) => routeMatches(r, href)) }).toEqual({
+        href,
+        found: true,
+      });
+    }
+  });
+});
+
+/** Route segments of every page.tsx under the app dir. Route groups and slots add no segment. */
+function pageRoutes(dir: string, parts: string[] = []): string[][] {
+  const out: string[][] = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) {
+      const hidden = /^\(.*\)$/.test(e.name) || e.name.startsWith('@');
+      out.push(...pageRoutes(join(dir, e.name), hidden ? parts : [...parts, e.name]));
+    } else if (e.name === 'page.tsx') {
+      out.push(parts);
+    }
+  }
+  return out;
+}
+
+function routeMatches(route: string[], href: string): boolean {
+  const segs = href.split(/[?#]/)[0].split('/').filter(Boolean);
+  for (let i = 0; i < route.length; i++) {
+    const r = route[i];
+    if (r.startsWith('[...')) return segs.length > i;
+    if (segs[i] === undefined) return false;
+    if (!r.startsWith('[') && r !== segs[i]) return false;
+  }
+  return route.length === segs.length;
+}
+
+describe('NavBar profile and right-side spacing', () => {
+  const MARGIN = /(^|\s)(md:)?-?m[trblxy]?-/;
+
+  it('opens the profile panel from the signed-in account button', () => {
+    mockUseApp.mockReturnValue(appValue(A_USER));
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
+
+    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Saved homes');
+  });
+
+  it('shows the profile photo instead of the initials when the user has one', () => {
+    mockUseApp.mockReturnValue(appValue({ ...A_USER, avatar: 'https://example.com/me.jpg' }));
+    const { container } = render(<NavBar />);
+
+    expect(container.querySelector('img[src="https://example.com/me.jpg"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Profile menu' })).not.toHaveTextContent('D');
+  });
+
+  it('puts every right-side item in one flex row with one gap value', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+    const row = screen.getByLabelText('Saved').parentElement as HTMLElement;
+
+    expect(row.className).toContain('gap-1.5');
+    expect(row.className).toContain('md:gap-2');
+    expect(row.children).toHaveLength(4);
+    for (const child of Array.from(row.children)) {
+      expect(child.className).not.toMatch(MARGIN);
+    }
+  });
+
+  it('gives the More trigger the mirror margin of the logo, a tight glyph box and no extra gap', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+    const more = screen.getByLabelText('More options');
+
+    // Only -mr-1, the mirror of the logo's -ml-1. No margin on the left, where the flex gap applies.
+    expect(more.className.match(new RegExp(MARGIN.source, 'g'))).toEqual([' -mr-']);
+    expect(more.className).toContain('-mr-1');
+    expect(more.className).toContain('h-6');
+    expect(more.className).toContain('w-1');
+    expect(more.querySelector('svg')?.getAttribute('viewBox')).toBe('10.2 3.2 3.6 17.6');
+  });
+
+  it('draws the More skeleton in the same box', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    const html = renderToStaticMarkup(<NavBar />);
+
+    expect(html).toContain('-mr-1 h-6 w-1 shrink-0');
+    expect(html).not.toContain('4.5px');
   });
 });

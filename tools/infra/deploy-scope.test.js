@@ -472,3 +472,38 @@ test('the committed fixture still matches the live hetzner/dev render', (t) => {
     'tools/infra/fixtures/hetzner-dev.manifests.yaml is stale — regenerate it from `kustomize build infra/k8s/hetzner/dev`',
   );
 });
+
+// ── Scheduled workloads (#141) ───────────────────────────────────────────────────────────
+
+const CRON = (labels) =>
+  IDENTITY_ONLY('CronJob', 'nightly-ingest', labels, { apiVersion: 'batch/v1' });
+
+test('#141: an unregistered CronJob or Job is a hard unmanaged error', () => {
+  const documents = [
+    ...devDocuments(),
+    CRON({ app: 'nightly-ingest' }),
+    IDENTITY_ONLY('Job', 'one-off', { app: 'one-off' }, { apiVersion: 'batch/v1' }),
+  ];
+  const result = resolveDeployScope({ documents, registeredKeys: registeredKeys('dev') });
+  const problems = describeProblems(result, { mode: 'deploy' });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].headline, /Unmanaged workloads/);
+  assert.deepEqual(problems[0].items, [
+    'CronJob default nightly-ingest (labels: app=nightly-ingest)',
+    'Job default one-off (labels: app=one-off)',
+  ]);
+});
+
+test('#141: a registered CronJob is in scope with a selector, not a rollout workload', () => {
+  const result = resolveDeployScope({
+    documents: [CRON({ app: 'nightly-ingest' })],
+    registeredKeys: ['nightly-ingest'],
+  });
+  assert.deepEqual(describeProblems(result, { mode: 'deploy' }), []);
+  assert.equal(result.errors.emptyKeys.length, 0);
+  assert.equal(result.inScopeServices.length, 1);
+  assert.equal(result.inScopeServices[0].selector, 'app=nightly-ingest');
+  assert.deepEqual(result.inScopeServices[0].workloads, []);
+  assert.deepEqual(result.inScope, []);
+  assert.deepEqual(result.restartDeployments, []);
+});

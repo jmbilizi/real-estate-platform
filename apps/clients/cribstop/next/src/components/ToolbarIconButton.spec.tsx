@@ -156,7 +156,7 @@ describe('ToolbarIconButton (#748)', () => {
     expect(read('SearchExperience.tsx')).toContain('<ToolbarIconButton');
     expect(read('ToolbarSelect.tsx')).toContain('<ToolbarIconButton');
     expect(read('CustomMapControls.tsx')).toContain('<ToolbarIconButton');
-    for (const f of ['DismissButton', 'CarouselShell', 'PropertyGallery', 'ListingDetailContent']) {
+    for (const f of ['CarouselShell', 'PropertyGallery', 'ListingDetailContent']) {
       expect(read(f + '.tsx')).toContain('<ToolbarIconButton');
     }
     expect(fs.existsSync(path.join(__dirname, 'FilterButton.tsx'))).toBe(false);

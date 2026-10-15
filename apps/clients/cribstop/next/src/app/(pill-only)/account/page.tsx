@@ -13,6 +13,7 @@ import AccountSecuritySection from '@/components/AccountSecuritySection';
 import EmailConsentNotice, { useConsentWording } from '@/components/EmailConsentNotice';
 import { optInToEmail } from '@/lib/api/notification-preferences';
 import LookingForSection from '@/components/LookingForSection';
+import PersonaliseSwitch from '@/components/PersonaliseSwitch';
 
 export default function AccountPage() {
   const { user, logout } = useApp();
@@ -79,6 +80,11 @@ export default function AccountPage() {
       <AccountSecuritySection />
 
       <LookingForSection />
+
+      <section className="mt-10">
+        <h2 className="mb-2 font-display text-lg font-bold">Home page</h2>
+        <PersonaliseSwitch />
+      </section>
 
       {/* Editable profile section */}
       <ProfileSection />
