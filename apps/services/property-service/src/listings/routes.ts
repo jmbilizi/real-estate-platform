@@ -16,6 +16,8 @@ import {
   RESULT_WINDOW_EXCEEDED_BODY,
   type SearchRequest,
   searchRequestSchema,
+  type SuggestRequest,
+  suggestRequestSchema,
 } from '@cribstop/property-contracts';
 import { PRIVATE_CACHE_CONTROL, type SavedStateReader, withSavedFlags } from '../saved/identity';
 import type { GalleryLoader } from './gallery-loader';
@@ -23,6 +25,7 @@ import { getBrokerGroups, getZipGroups } from './group-counts';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
 import { createSingleFlight } from './single-flight';
+import { getSuggestions } from './suggest';
 import {
   type AddressFetcher,
   findHomePage,
@@ -94,6 +97,10 @@ function safeParameterName(name: string): string {
 function parseQuery(schema: typeof searchRequestSchema, query: unknown): ParseResult<SearchRequest>;
 function parseQuery(schema: typeof mapRequestSchema, query: unknown): ParseResult<MapRequest>;
 function parseQuery(
+  schema: typeof suggestRequestSchema,
+  query: unknown,
+): ParseResult<SuggestRequest>;
+function parseQuery(
   schema: typeof neighborhoodsRequestSchema,
   query: unknown,
 ): ParseResult<NeighborhoodsRequest>;
@@ -106,9 +113,12 @@ function parseQuery(
     | typeof searchRequestSchema
     | typeof mapRequestSchema
     | typeof neighborhoodsRequestSchema
-    | typeof listingGroupsRequestSchema,
+    | typeof listingGroupsRequestSchema
+    | typeof suggestRequestSchema,
   query: unknown,
-): ParseResult<SearchRequest | MapRequest | NeighborhoodsRequest | ListingGroupsRequest> {
+): ParseResult<
+  SearchRequest | MapRequest | NeighborhoodsRequest | ListingGroupsRequest | SuggestRequest
+> {
   const parsed = schema.safeParse(query);
   if (parsed.success) {
     return { ok: true as const, value: parsed.data };
@@ -287,6 +297,23 @@ export function createListingsRouter(
       );
       // Same cache policy as /listings/meta: an aggregate read from an index or the search view, safe for the
       // shared cache to hold far longer than the browser does.
+      res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
+    }),
+  );
+
+  // #781. Registered before `/listings/:id` for the same reason as the routes above.
+  router.get(
+    '/listings/suggest',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(suggestRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const request = parsed.value;
+      const envelope = await shared(`suggest:${JSON.stringify(request)}`, () =>
+        getSuggestions(pool, request),
+      );
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
     }),
   );

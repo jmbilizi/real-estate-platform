@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { maxReachablePage, PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import { ListingsApiError, searchListings } from '@/lib/api/listings';
 import { PARCEL_INTERLOCK_HINT } from '@/lib/store/types';
@@ -80,6 +81,12 @@ jest.mock('@/lib/context', () => ({
   useApp: () => mockAppContext,
 }));
 
+const mockTrackEvent = jest.fn();
+jest.mock('@/lib/analytics', () => ({
+  ...jest.requireActual('@/lib/analytics'),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}));
+
 const mockedSearchListings = searchListings as jest.Mock;
 
 const envelope = () => ({
@@ -116,6 +123,36 @@ beforeEach(() => {
 afterEach(() => {
   mockedSearchListings.mockReset();
   (global.fetch as jest.Mock).mockReset();
+});
+
+describe('SearchExperience server HTML (#841)', () => {
+  it('holds a link for each server-fetched card and does not fetch again', async () => {
+    const rows = Array.from({ length: 20 }, (_, i) =>
+      aListingCardRow({
+        id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+        propertyPath: `/property/home-${i}/11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+      }),
+    );
+    const html = renderToString(
+      <SearchExperience
+        initialQuery=""
+        initialResults={{ ...envelope(), results: rows, total: 20 } as never}
+      />,
+    );
+    const links = new Set(html.match(/href="\/property\/[^"]+"/g));
+    expect(links.size).toBe(20);
+    expect(html).not.toContain('animate-pulse');
+    expect(html).toContain(rows[0].officeName);
+
+    render(
+      <SearchExperience
+        initialQuery=""
+        initialResults={{ ...envelope(), results: rows, total: 20 } as never}
+      />,
+    );
+    await waitFor(() => expect(screen.getAllByRole('link').length).toBeGreaterThan(0));
+    expect(mockedSearchListings).not.toHaveBeenCalled();
+  });
 });
 
 describe('SearchExperience follows the URL it is given', () => {
@@ -674,5 +711,53 @@ describe('an empty result set is not a failure and not a load', () => {
     const empty = await screen.findByTestId('search-empty-state');
     expect(empty).toHaveTextContent('No homes to show here');
     expect(screen.queryByRole('button', { name: 'Clear all filters' })).not.toBeInTheDocument();
+  });
+});
+
+describe('search analytics (#826)', () => {
+  beforeEach(() => mockTrackEvent.mockReset());
+
+  const searchCalls = () => mockTrackEvent.mock.calls.filter(([name]) => name === 'search');
+
+  it('sends one search event with the result count when results arrive', async () => {
+    mockedSearchListings.mockResolvedValue({
+      ...envelope(),
+      results: [aListingCardRow()],
+      total: 1,
+    });
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    expect(searchCalls()[0][1]).toEqual({
+      surface: 'search',
+      props: { result_count: 1, is_zero_result: false },
+    });
+  });
+
+  it('flags a zero-result search and carries no query text', async () => {
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+    render(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    expect(searchCalls()[0][1].props).toEqual({ result_count: 0, is_zero_result: true });
+    expect(JSON.stringify(mockTrackEvent.mock.calls)).not.toContain('Alexandria');
+  });
+
+  it('sends the new count after a filter change, not the old one', async () => {
+    mockedSearchListings.mockResolvedValue({
+      ...envelope(),
+      results: [aListingCardRow(), aListingCardRow({ id: 'second' })],
+      total: 2,
+    });
+    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(1));
+    mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
+    rerender(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    await waitFor(() => expect(searchCalls()).toHaveLength(2));
+    expect(searchCalls()[1][1].props).toEqual({ result_count: 0, is_zero_result: true });
+  });
+
+  it('sends nothing while the request is still loading', () => {
+    mockedSearchListings.mockReturnValue(new Promise(() => undefined));
+    render(<SearchExperience initialQuery="q=Alexandria" />);
+    expect(searchCalls()).toHaveLength(0);
   });
 });

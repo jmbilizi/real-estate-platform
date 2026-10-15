@@ -3,8 +3,17 @@ import { idSchema } from './common';
 import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
 import { listingDetailSchema } from './listing-detail';
 import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
+import { analyticsEventBatchSchema, analyticsEventRequestSchema } from './analytics-event';
+import { homeFeedRequestSchema, homeFeedResponseSchema } from './home-feed';
 import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
+import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
 import { listingsMetaSchema } from './listings-meta';
+import {
+  lookingForInvalidBodySchema,
+  lookingForListSchema,
+  lookingForRequestSchema,
+  lookingForSchema,
+} from './looking-for';
 import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
 import {
   brokersRequestSchema,
@@ -109,14 +118,23 @@ function componentSchemas() {
   registry.add(propertyPageSchema, { id: 'PropertyPage' });
   registry.add(propertyLookupResponseSchema, { id: 'PropertyLookupResponse' });
   registry.add(listingsMetaSchema, { id: 'ListingsMeta' });
+  registry.add(suggestResponseSchema, { id: 'SuggestResponse' });
   registry.add(neighborhoodsResponseSchema, { id: 'NeighborhoodsResponse' });
   registry.add(zipsResponseSchema, { id: 'ZipsResponse' });
   registry.add(brokersResponseSchema, { id: 'BrokersResponse' });
   registry.add(mapResponseSchema, { id: 'MapResponse' });
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
+  registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
+  registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
+  registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
+  registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
+  registry.add(lookingForRequestSchema, { id: 'LookingForRequest' });
+  registry.add(lookingForSchema, { id: 'LookingFor' });
+  registry.add(lookingForListSchema, { id: 'LookingForList' });
+  registry.add(lookingForInvalidBodySchema, { id: 'LookingForInvalidBody' });
   registry.add(staffMeSchema, { id: 'StaffMe' });
   registry.add(staffLeadsEnvelopeSchema, { id: 'StaffLeadsEnvelope' });
   registry.add(staffLeadDetailSchema, { id: 'StaffLeadDetail' });
@@ -335,6 +353,32 @@ export function toOpenApiDocument() {
               description: 'Dataset freshness and provenance.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ListingsMeta' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/suggest': {
+        get: {
+          operationId: 'getListingSuggestions',
+          summary: 'Place suggestions',
+          description:
+            'Prefix match on the city, ZIP and neighborhood of publishable listings, for the ' +
+            'Where field. A ZIP is suggested only for a digit prefix. Cities rank first by ' +
+            'listing count. At most `limit` rows come back.',
+          parameters: searchParameters(suggestRequestSchema),
+          responses: {
+            '200': {
+              description: 'Matching places.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/SuggestResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown or invalid query parameter (`invalid_request`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
             '500': serverErrorResponse,
@@ -681,6 +725,77 @@ export function toOpenApiDocument() {
           },
         },
       },
+      '/home-feed': {
+        post: {
+          operationId: 'getHomeFeed',
+          summary: 'Ranked home-page rows for one visitor',
+          description:
+            'The v1 rules ranker (#835). The body carries the local feed profile, the target ' +
+            'place, the radius and the side. The service ranks active and coming-soon listings ' +
+            'with six features and builds the rows in page order. A later row never repeats a ' +
+            'listing of an earlier row. The service stores and logs no profile. Every row ' +
+            'carries modelVersion and variant for the feed events. The search sort stays ' +
+            'free of per-user signals.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HomeFeedRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The rows. A row with fewer than 4 cards is left out.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/HomeFeedResponse' } },
+              },
+            },
+            '400': {
+              description: 'Unknown field or malformed value.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/analytics/events': {
+        post: {
+          operationId: 'recordAnalyticsEvent',
+          summary: 'Record one analytics event',
+          description:
+            'Analytics contract v2. The body is one event, or an array of up to 50 events. Each event has its own allow-listed properties. The ' +
+            'service stores the event, the common properties, a random anonymous id and session id, ' +
+            'and the server time. It stores no header, IP address, user agent, name, email or phone. ' +
+            'The one free-text property is the scrubbed zero-result search text. With ' +
+            'ANALYTICS_ENABLED=false it stores nothing and still answers 204.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  oneOf: [
+                    { $ref: '#/components/schemas/AnalyticsEventRequest' },
+                    { $ref: '#/components/schemas/AnalyticsEventBatch' },
+                  ],
+                },
+              },
+            },
+          },
+          responses: {
+            '204': { description: 'The event is counted, or analytics is off.' },
+            '400': {
+              description: 'Unknown event name, unknown field or malformed value.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
       '/listings/{id}/saved': {
         put: {
           operationId: 'saveListingHome',
@@ -733,6 +848,102 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/looking-for': {
+        get: {
+          operationId: 'listLookingFor',
+          summary: 'The "What I’m looking for" preferences of the signed-in account',
+          description:
+            'Requires sign-in. Returns only the calling account’s preferences, newest change ' +
+            'first, with the per-account limit in `max`. A preference sends no email. The ' +
+            'response is `private, no-store`.',
+          responses: {
+            '200': {
+              description: 'The preferences of the account.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingForList' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/looking-for/{id}': {
+        put: {
+          operationId: 'putLookingFor',
+          summary: 'Create or replace one preference',
+          description:
+            'Requires sign-in. The client picks the id. A new id creates the preference (201) ' +
+            'unless the account already holds the limit (409). A known id of the same account ' +
+            'replaces it (200). Places are city and zip only. A start date in the past is ' +
+            'refused. The account comes from the credential, never from the request.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/LookingForRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'The preference was replaced.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingFor' } },
+              },
+            },
+            '201': {
+              description: 'The preference was created.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/LookingFor' } },
+              },
+            },
+            '400': {
+              description: 'A refused field (`invalid_request`), named in `fields`.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/LookingForInvalidBody' },
+                },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '409': {
+              description: 'The account holds the limit (`conflict`).',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '503': unavailableResponse,
+            '500': serverErrorResponse,
+          },
+        },
+        delete: {
+          operationId: 'deleteLookingFor',
+          summary: 'Remove one preference',
+          description:
+            'Requires sign-in. Removing an id that is absent, or that belongs to another ' +
+            'account, succeeds and changes nothing.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: schema(idSchema, 'input') },
+          ],
+          responses: {
+            '204': { description: 'The preference is gone.' },
+            '400': {
+              description: 'The id is not a well-formed id.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },

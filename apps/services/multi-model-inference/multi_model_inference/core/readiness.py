@@ -11,16 +11,20 @@ from multi_model_inference.core.model_registry import registry
 
 READY = "ready"
 LOADING = "loading"
+FAILED = "failed"
 DEGRADED = "degraded"
 
 
 def readiness_state() -> str:
-    """Return `ready`, `loading`, or `degraded`.
+    """Return `ready`, `loading`, `failed`, or `degraded`.
 
-    `degraded` means a model failed to load and this image does not require it,
-    because the weights were never baked in. Nothing is still in progress in that
-    state and nothing retries the load, so reporting `loading` would be false.
+    `loading` means `registry.load_all()` is running now. `failed` and `degraded`
+    mean a model did not load and nothing retries it. `failed` is a defect: the
+    image baked its weights, so `/ready` fails closed. `degraded` is expected: the
+    weights were never baked in.
     """
     if registry.all_ready():
         return READY
-    return LOADING if settings.model_load_required else DEGRADED
+    if registry.is_loading:
+        return LOADING
+    return FAILED if settings.model_load_required else DEGRADED

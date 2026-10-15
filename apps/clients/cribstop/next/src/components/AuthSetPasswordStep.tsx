@@ -6,18 +6,22 @@ import { useApp } from '@/lib/context';
 import {
   CodesUnavailableError,
   completePasswordReset,
-  DEFAULT_PASSWORD_MIN_LENGTH,
-  getPasswordMinLength,
+  getPasswordPolicy,
   PasswordRejectionCode,
   RateLimitError,
 } from '@/lib/api/account';
+import { checkPassword, DEFAULT_PASSWORD_POLICY, type PasswordPolicy } from '@/lib/password-rules';
+import PasswordRequirements from '@/components/PasswordRequirements';
 
 export type SetPasswordFailure = 'invalid_proof' | 'email_unavailable';
 
-export function rejectionCopy(codes: PasswordRejectionCode[], minLength: number): string {
+export function rejectionCopy(codes: PasswordRejectionCode[], policy: PasswordPolicy): string {
   if (codes.includes('breached')) return 'That password has leaked before. Pick another.';
   if (codes.includes('too_short')) {
-    return `That password is too short. Use ${minLength} or more characters.`;
+    return `That password is too short. Use ${policy.minLength}+ characters with every rule, or ${policy.passphraseLength}+ characters.`;
+  }
+  if (codes.some((c) => c.startsWith('missing_'))) {
+    return `That password needs every rule. Add what is missing, or use ${policy.passphraseLength}+ characters.`;
   }
   if (codes.includes('too_long')) return 'That password is too long. Shorten it.';
   return 'That password did not work. Pick another.';
@@ -51,19 +55,19 @@ export default function AuthSetPasswordStep({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
-  const [minLength, setMinLength] = useState(DEFAULT_PASSWORD_MIN_LENGTH);
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_PASSWORD_POLICY);
 
   useEffect(() => {
     let active = true;
-    getPasswordMinLength().then((n) => {
-      if (active) setMinLength(n);
+    getPasswordPolicy().then((p) => {
+      if (active) setPolicy(p);
     });
     return () => {
       active = false;
     };
   }, []);
 
-  const longEnough = password.length >= minLength;
+  const longEnough = checkPassword(password, policy).valid;
   const matches = password.length > 0 && password === confirm;
   const mismatch = confirm.length > 0 && !matches;
 
@@ -81,7 +85,7 @@ export default function AuthSetPasswordStep({
         return;
       }
       if (outcome.reason === 'password_rejected') {
-        setError(rejectionCopy(outcome.errors, minLength));
+        setError(rejectionCopy(outcome.errors, policy));
         setPassword('');
         setConfirm('');
         passwordRef.current?.focus();
@@ -126,7 +130,7 @@ export default function AuthSetPasswordStep({
             className="input-field min-h-11 pr-12"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            aria-describedby="auth-password-rule"
+            aria-describedby="auth-password-rules"
           />
           <button
             type="button"
@@ -138,12 +142,7 @@ export default function AuthSetPasswordStep({
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-        <p
-          id="auth-password-rule"
-          className={`mt-1 text-xs ${longEnough ? 'text-green-600' : 'text-ink-muted'}`}
-        >
-          {minLength} or more characters. A phrase works.
-        </p>
+        <PasswordRequirements id="auth-password-rules" password={password} policy={policy} />
       </div>
 
       <div>

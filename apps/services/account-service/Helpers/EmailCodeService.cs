@@ -90,6 +90,13 @@ internal sealed partial class EmailCodeService(
             return new EmailCodeIssueResult(EmailCodeIssueStatus.Unavailable);
         }
 
+        // A code that the transport would drop must not count toward the caps (#813).
+        if (!sender.CanSend)
+        {
+            LogTransportUnavailable(logger);
+            return new EmailCodeIssueResult(EmailCodeIssueStatus.Unavailable);
+        }
+
         var key = Normalize(email);
         var gate = Stripes[StripeFor(key, purpose)];
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -97,7 +104,7 @@ internal sealed partial class EmailCodeService(
         {
             return await this.RetryAsync(
                 () => this.IssueOnceAsync(settings, email, key, purpose, userId, cancellationToken),
-                new EmailCodeIssueResult(EmailCodeIssueStatus.Throttled, 1)).ConfigureAwait(false);
+                new EmailCodeIssueResult(EmailCodeIssueStatus.Throttled, 1, CodeSendOutcome.Cooldown)).ConfigureAwait(false);
         }
         finally
         {
@@ -200,6 +207,9 @@ internal sealed partial class EmailCodeService(
     [LoggerMessage(1380, LogLevel.Warning, "Email codes are unavailable: no usable ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY is configured. The call was refused.", EventName = "EmailCodesUnavailable")]
     private static partial void LogUnavailable(ILogger logger);
 
+    [LoggerMessage(1382, LogLevel.Warning, "Email codes are unavailable: Postmark is not configured. The call was refused.", EventName = "EmailCodesTransportUnavailable")]
+    private static partial void LogTransportUnavailable(ILogger logger);
+
     [LoggerMessage(1381, LogLevel.Information, "Email code lock engaged for purpose {Purpose}.", EventName = "EmailCodeLocked")]
     private static partial void LogLocked(ILogger logger, EmailCodePurpose purpose);
 
@@ -256,7 +266,7 @@ internal sealed partial class EmailCodeService(
             .ConfigureAwait(false);
         if (throttle?.LockedUntil > now)
         {
-            return new EmailCodeIssueResult(EmailCodeIssueStatus.Locked, CeilSeconds(throttle.LockedUntil.Value - now));
+            return new EmailCodeIssueResult(EmailCodeIssueStatus.Locked, CeilSeconds(throttle.LockedUntil.Value - now), CodeSendOutcome.Locked);
         }
 
         var dayStart = now - TimeSpan.FromDays(1);
@@ -268,26 +278,37 @@ internal sealed partial class EmailCodeService(
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        // The longest wait names the limit, so the user sees the one that actually ends last.
         var wait = TimeSpan.Zero;
+        var reason = CodeSendOutcome.Sent;
+        void Apply(TimeSpan candidate, CodeSendOutcome limit)
+        {
+            if (candidate > wait)
+            {
+                wait = candidate;
+                reason = limit;
+            }
+        }
+
         if (recent.Count > 0)
         {
-            wait = Max(wait, recent[^1] + settings.ResendCooldown - now);
+            Apply(recent[^1] + settings.ResendCooldown - now, CodeSendOutcome.Cooldown);
         }
 
         var inHour = recent.Where(t => t > hourStart).ToList();
         if (inHour.Count >= settings.MaxPerHour)
         {
-            wait = Max(wait, inHour[inHour.Count - settings.MaxPerHour] + TimeSpan.FromHours(1) - now);
+            Apply(inHour[inHour.Count - settings.MaxPerHour] + TimeSpan.FromHours(1) - now, CodeSendOutcome.HourlyCap);
         }
 
         if (recent.Count >= settings.MaxPerDay)
         {
-            wait = Max(wait, recent[recent.Count - settings.MaxPerDay] + TimeSpan.FromDays(1) - now);
+            Apply(recent[recent.Count - settings.MaxPerDay] + TimeSpan.FromDays(1) - now, CodeSendOutcome.DailyCap);
         }
 
         if (wait > TimeSpan.Zero)
         {
-            return new EmailCodeIssueResult(EmailCodeIssueStatus.Throttled, CeilSeconds(wait));
+            return new EmailCodeIssueResult(EmailCodeIssueStatus.Throttled, CeilSeconds(wait), reason);
         }
 
         await this.VoidOpenAsync(key, purpose, now, cancellationToken).ConfigureAwait(false);
@@ -305,7 +326,7 @@ internal sealed partial class EmailCodeService(
         });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await sender.SendAsync(composer.Code(email.Trim(), code, settings.Lifetime), cancellationToken).ConfigureAwait(false);
+        await sender.SendAsync(composer.Code(email.Trim(), code, settings.Lifetime, purpose), cancellationToken).ConfigureAwait(false);
         return new EmailCodeIssueResult(EmailCodeIssueStatus.Issued);
     }
 

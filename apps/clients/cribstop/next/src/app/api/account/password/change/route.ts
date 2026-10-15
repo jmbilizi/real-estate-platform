@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { badRequest, relay, unavailable } from '@/app/api/_lib/account-relay';
 import { postAuthed, reissueSession } from '@/app/api/_lib/authed-relay';
 
-const POLICY_CODES = ['too_short', 'too_long', 'breached'];
+const POLICY_CODES = [
+  'too_short',
+  'missing_upper',
+  'missing_lower',
+  'missing_digit',
+  'missing_symbol',
+  'too_long',
+  'breached',
+];
 const WRONG_CURRENT = ['PasswordMismatch', 'OldPasswordRequired'];
 
 /** Maps the framework's validation problem to the stable codes the browser reads. */

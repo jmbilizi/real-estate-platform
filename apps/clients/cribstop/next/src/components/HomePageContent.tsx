@@ -1,14 +1,33 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
-import type { NeighborhoodRow as NeighborhoodApiRow } from '@cribstop/property-contracts';
+import type {
+  HomeFeedResponse,
+  NeighborhoodRow as NeighborhoodApiRow,
+  PropertyType,
+} from '@cribstop/property-contracts';
+import { useApp } from '@/lib/context';
+import { listRecentSavedHomes } from '@/lib/api/saved-homes';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow, ListingsMeta } from '@/lib/types';
-import { addressCity, addressState, searchTargetUrl } from '@/lib/search-place';
+import { searchTargetUrl } from '@/lib/search-place';
 import { formatRelativeTime } from '@/lib/format';
+import { homeTargetDebugEnabled, type InferredTarget, prefersRentFirst } from '@/lib/home-target';
+import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
+import { useHomeTarget } from '@/lib/useHomeTarget';
+import { feedRowTitle, type HomeFeedFlags } from '@/lib/home-feed';
+import { useHomeFeed } from '@/lib/useHomeFeed';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import {
@@ -23,6 +42,88 @@ type ListingSide = 'sale' | 'rent';
 
 /** Small — a carousel shows a handful of cards, never a full results page. */
 const CAROUSEL_PAGE_SIZE = 8;
+
+/** Rows that share a side and a target fetch this many extra cards, so a card an earlier row
+ *  already shows can drop out and the row still fills (#873). */
+const DEDUPE_PAGE_SIZE = CAROUSEL_PAGE_SIZE + 7;
+/** A row left with fewer cards than this after the drop keeps its original cards. */
+const MIN_DEDUPED_CARDS = 4;
+/** Cards a row shows before "See all". */
+const ROW_MAX = 7;
+
+type ShownEntry = { side: ListingSide; order: number; ids: string[] };
+type ShownRegistry = {
+  shown: Record<string, ShownEntry>;
+  report: (rowKey: string, entry: ShownEntry | null) => void;
+};
+const ShownContext = createContext<ShownRegistry | null>(null);
+
+/** Records which cards each resolved row shows. A row reads only rows that come earlier on the
+ *  page, so no row waits for another row's request. */
+function ShownProvider({ children }: { children: React.ReactNode }) {
+  const [shown, setShown] = useState<Record<string, ShownEntry>>({});
+  const report = useCallback((rowKey: string, entry: ShownEntry | null) => {
+    setShown((current) => {
+      const before = current[rowKey];
+      if (!entry) {
+        if (!before) return current;
+        const { [rowKey]: _removed, ...rest } = current;
+        return rest;
+      }
+      if (before && before.order === entry.order && before.ids.join() === entry.ids.join()) {
+        return current;
+      }
+      return { ...current, [rowKey]: entry };
+    });
+  }, []);
+  const value = useMemo(() => ({ shown, report }), [shown, report]);
+  return <ShownContext.Provider value={value}>{children}</ShownContext.Provider>;
+}
+
+/** Page order of the rows that dedupe. The earlier row keeps a card, the later row skips it. */
+const DEDUPE_ORDER = { nearYou: 0, justListed: 1, priceDrops: 2 } as const;
+
+/**
+ * Drops cards an earlier row on the page already shows. Until that row resolves nothing drops, so
+ * a later row may show a repeat for a moment, then filters once. If the drop leaves fewer than
+ * `MIN_DEDUPED_CARDS`, the row keeps its original cards.
+ */
+function useDedupedListings(
+  rowKey: string,
+  side: ListingSide,
+  order: number,
+  listings: ListingCardRow[],
+  loading: boolean,
+): ListingCardRow[] {
+  const registry = useContext(ShownContext);
+  const shown = registry?.shown;
+  const report = registry?.report;
+
+  const deduped = useMemo(() => {
+    if (!shown) return listings;
+    const earlier = new Set<string>();
+    for (const [key, entry] of Object.entries(shown)) {
+      if (key !== rowKey && entry.side === side && entry.order < order) {
+        entry.ids.forEach((id) => earlier.add(id));
+      }
+    }
+    if (earlier.size === 0) return listings;
+    const kept = listings.filter((l) => !earlier.has(l.propertyId));
+    return kept.length >= MIN_DEDUPED_CARDS ? kept : listings;
+  }, [shown, rowKey, side, order, listings]);
+
+  const idsKey = deduped
+    .slice(0, ROW_MAX)
+    .map((l) => l.propertyId)
+    .join('|');
+  useEffect(() => {
+    if (!report) return;
+    report(rowKey, loading ? null : { side, order, ids: idsKey ? idsKey.split('|') : [] });
+  }, [report, rowKey, side, order, loading, idsKey]);
+  useEffect(() => () => report?.(rowKey, null), [report, rowKey]);
+
+  return deduped;
+}
 
 /**
  * The recent-search storage `CompactSearchBar` already writes (`recentSearches`). #398 reuses this
@@ -49,59 +150,32 @@ function lastSearchedSide(): ListingSide | null {
   return latestRecentSearch()?.listingType === 'rent' ? 'rent' : null;
 }
 
-/** True once the client has read a rent last search. `false` until then (and forever if there is
- *  none) — server render always sees no history. */
+/** True once the client has read a rent last search, or mostly rent views in 7 days. `false` until
+ *  then (and forever if there is none) — server render always sees no history. */
 function useRentFirst(): boolean {
   const [rentFirst, setRentFirst] = useState(false);
   useEffect(() => {
-    setRentFirst(lastSearchedSide() === 'rent');
+    const views = isPersonalisationEnabled()
+      ? readItems()
+          .filter((i) => i.kind === 'view')
+          .map((i) => ({ side: i.side, at: i.at }))
+      : [];
+    setRentFirst(prefersRentFirst({ lastSearchSide: lastSearchedSide(), views }));
   }, []);
   return rentFirst;
 }
 
-/** A place to scope a row's query by (#416): a place-named row must be that place's own count,
- *  never a platform-wide one. `null` when the visitor has never searched — never a guessed or
- *  IP-derived location. */
-function lastSearchedPlace(): { city: string; state: string } | null {
-  const address = latestRecentSearch()?.address ?? {};
-  const city = addressCity(address);
-  const state = addressState(address);
-  return city && state ? { city, state } : null;
-}
-
-/** Client-only, like `useRentFirst`: server render always sees no place. */
-function useLastSearchedPlace(): { city: string; state: string } | null {
-  const [place, setPlace] = useState<{ city: string; state: string } | null>(null);
-  useEffect(() => {
-    setPlace(lastSearchedPlace());
-  }, []);
-  return place;
-}
-
-/** A resolved visitor region (#363): city/state granularity only, never coordinates. */
+/** A place a row scopes to. `InferredTarget` adds the source, confidence and radius (`lib/home-target.ts`). */
 type Region = { city: string; state: string };
 
-type RegionState = { region: Region | null; loading: boolean };
-
-/**
- * Fetches the visitor's IP region once per page load, through the Next.js proxy route
- * (`/api/geo/region`), which already reduces the gateway's response to `{ city, state } | null` —
- * a non-US region, a 204, or a failed lookup all arrive here as `null`. One fetch, shared by every
- * row below that scopes itself to the region, rather than each row fetching its own.
- */
-function useRegion(): RegionState {
-  const [state, setState] = useState<RegionState>({ region: null, loading: true });
-
+/** Logs which source a row used. Off unless the debug flag is set. */
+function useTargetDebug(row: string, target: InferredTarget | null) {
   useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/geo/region', { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((region: Region | null) => setState({ region, loading: false }))
-      .catch(() => setState({ region: null, loading: false }));
-    return () => controller.abort();
-  }, []);
-
-  return state;
+    if (!target || !homeTargetDebugEnabled()) return;
+    console.info(
+      `[home-target] ${row}: ${target.source} ${target.city}, ${target.state} C=${target.confidence.toFixed(2)} r=${target.radiusKm ?? 'state'}`,
+    );
+  }, [row, target]);
 }
 
 type CarouselState = {
@@ -110,6 +184,9 @@ type CarouselState = {
   loading: boolean;
   /** true once the fetch has settled with an error — shows retry UI instead of blank. */
   failed: boolean;
+  /** The serialized query that produced a settled result. A caller compares it to its current
+   *  query, so a result left over from an earlier query never reads as the answer to a new one. */
+  settledKey?: string;
 };
 
 /**
@@ -150,6 +227,8 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
     }
 
     const controller = new AbortController();
+    // A moved target shows the skeleton, which has the card row's height, so the layout holds.
+    // Old cards never stay under a new place title.
     setState({ listings: [], total: 0, loading: true, failed: false });
 
     // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
@@ -164,6 +243,7 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
           total: envelope.total,
           loading: false,
           failed: false,
+          settledKey: queryKey,
         });
       })
       .catch((err) => {
@@ -176,6 +256,63 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
   }, [queryKey, retryKey, skip, skipLoading]);
 
   return { ...state, refetch };
+}
+
+/** The place a target row queries: the city, then the whole state, then nowhere (platform-wide). */
+type CarouselScope = { city?: string; state?: string };
+
+/** The search params that carry a row's place into its "View all" link. */
+function scopeParams(scope: CarouselScope): Record<string, string> {
+  return {
+    ...(scope.city ? { city: scope.city } : {}),
+    ...(scope.state ? { state: scope.state } : {}),
+  };
+}
+
+/**
+ * A row scoped to the home target (#873). While the target resolves, the row waits and sends no
+ * query. With a target it queries the city, then the state, then platform-wide, each only when the
+ * one before returned nothing, so a row never hides while wider results exist. With no target at
+ * all it queries platform-wide. `scope` names the place that filled the row, for "View all".
+ */
+function useTargetCarousel(
+  base: ListingSearchQuery,
+  place: InferredTarget | null,
+  placeLoading: boolean,
+) {
+  const placeKey = place ? `${place.city}|${place.state}` : '';
+  const [fallback, setFallback] = useState({ placeKey, step: 0 });
+  const step = fallback.placeKey === placeKey ? fallback.step : 0;
+  const scope: CarouselScope = !place
+    ? {}
+    : step === 0
+      ? { city: place.city, state: place.state }
+      : step === 1
+        ? { state: place.state }
+        : {};
+  const query = { ...base, ...scope };
+  const result = useCarouselListings(query, placeLoading, placeLoading);
+  // A failed query does not widen. The row shows its retry for that step.
+  const empty =
+    !placeLoading &&
+    !result.loading &&
+    !result.failed &&
+    result.total === 0 &&
+    result.settledKey === JSON.stringify(query);
+  const widening = empty && place !== null && step < 2;
+
+  useEffect(() => {
+    if (widening) setFallback({ placeKey, step: step + 1 });
+  }, [widening, placeKey, step]);
+
+  // A moved target starts over. Without this, a return to an earlier place would resume its old step.
+  useEffect(() => {
+    setFallback((f) => (f.placeKey === placeKey ? f : { placeKey, step: 0 }));
+  }, [placeKey]);
+
+  // A result for an earlier step is not the answer to this step's query yet: keep the skeleton.
+  const stale = !placeLoading && !result.failed && result.settledKey !== JSON.stringify(query);
+  return { ...result, loading: result.loading || widening || stale, scope };
 }
 
 /** Tiles shown before the horizontal scroll takes over (#393). */
@@ -359,12 +496,29 @@ const JUST_LISTED_TITLE: Record<ListingSide, string> = {
   rent: 'Newest rentals',
 };
 
-function JustListedRow({ side }: { side: ListingSide }) {
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    sort: 'newly-listed',
-    listingType: side,
-    pageSize: CAROUSEL_PAGE_SIZE,
-  });
+function JustListedRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug(`just-listed-${side}`, place);
+  const carousel = useTargetCarousel(
+    { sort: 'newly-listed', listingType: side, pageSize: DEDUPE_PAGE_SIZE },
+    place,
+    placeLoading,
+  );
+  const { total, loading, failed, refetch, scope } = carousel;
+  const listings = useDedupedListings(
+    `just-listed-${side}`,
+    side,
+    DEDUPE_ORDER.justListed,
+    carousel.listings,
+    loading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -372,7 +526,8 @@ function JustListedRow({ side }: { side: ListingSide }) {
   return (
     <ListingRow
       title={JUST_LISTED_TITLE[side]}
-      href={searchHref(side, { sort: 'newly-listed' })}
+      targetSource={place?.source}
+      href={searchHref(side, { sort: 'newly-listed', ...scopeParams(scope) })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -391,6 +546,12 @@ const NEAR_YOU_TITLE: Record<ListingSide, string> = {
   rent: 'Rentals near you',
 };
 
+/** The cold-start market (#834) is not the visitor's place, so its row does not say "near you". */
+const MARKET_TITLE: Record<ListingSide, string> = {
+  sale: 'Homes for sale',
+  rent: 'Rentals',
+};
+
 /** "Near you" (#363): the home page's first row. One stable component throughout — its query
  *  goes from skipped to region-scoped in place, rather than swapping in a freshly-mounted child
  *  once the region resolves. Hidden while the region is unknown or absent, and while it resolves
@@ -402,19 +563,28 @@ function NearYouRow({
   regionLoading,
 }: {
   side: ListingSide;
-  region: Region | null;
+  region: InferredTarget | null;
   regionLoading: boolean;
 }) {
-  const { listings, total, loading } = useCarouselListings(
+  useTargetDebug(`near-you-${side}`, region);
+  const near = useCarouselListings(
     {
       listingType: side,
       city: region?.city,
       state: region?.state,
       sort: 'newest',
-      pageSize: CAROUSEL_PAGE_SIZE,
+      pageSize: DEDUPE_PAGE_SIZE,
     },
     regionLoading || !region,
     regionLoading,
+  );
+  const { total, loading } = near;
+  const listings = useDedupedListings(
+    `near-you-${side}`,
+    side,
+    DEDUPE_ORDER.nearYou,
+    near.listings,
+    loading,
   );
 
   // No error UI (#363): a failed fetch hides the row exactly like a real zero total, rather than
@@ -423,7 +593,8 @@ function NearYouRow({
 
   return (
     <ListingRow
-      title={NEAR_YOU_TITLE[side]}
+      title={region?.source === 'rotation' ? MARKET_TITLE[side] : NEAR_YOU_TITLE[side]}
+      targetSource={region?.source}
       href={
         region
           ? searchTargetUrl(
@@ -433,6 +604,118 @@ function NearYouRow({
           : undefined
       }
       listings={listings}
+      loading={loading}
+      max={7}
+      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+    />
+  );
+}
+
+/** The newest saves to read for the latest one that still has a listing. An off-market home has
+ *  no listing type to query by, so one read of a few covers it without a second call. */
+const SAVED_LOOKBACK = 5;
+
+type LatestSave = {
+  city: string;
+  state: string;
+  propertyType: PropertyType;
+  listingType: ListingSide;
+};
+
+/**
+ * The most recent saved home that has a listing, read once while signed in (#364). Signed out
+ * never calls the API. A failed read leaves `null`, so the row hides and never blanks the page.
+ */
+function useLatestSave(accountKey: string | null): { save: LatestSave | null; loading: boolean } {
+  const [state, setState] = useState<{ save: LatestSave | null; loading: boolean }>({
+    save: null,
+    loading: accountKey !== null,
+  });
+
+  useEffect(() => {
+    if (!accountKey) {
+      setState({ save: null, loading: false });
+      return undefined;
+    }
+    setState({ save: null, loading: true });
+    const controller = new AbortController();
+    listRecentSavedHomes(SAVED_LOOKBACK, controller.signal)
+      .then((homes) => {
+        // A sold home has no side to browse by, so the latest rent or sale save wins.
+        const card = homes.find(
+          (h) => h.listing?.city && h.listing.state && h.listing.listingType !== 'sold',
+        )?.listing;
+        setState({
+          loading: false,
+          save: card
+            ? {
+                city: card.city,
+                state: card.state,
+                propertyType: card.propertyType,
+                listingType: card.listingType === 'rent' ? 'rent' : 'sale',
+              }
+            : null,
+        });
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // The row stays hidden. Log a real failure so a broken endpoint is visible.
+        console.warn('Saved homes row: read failed', err);
+        setState({ save: null, loading: false });
+      });
+    return () => controller.abort();
+  }, [accountKey]);
+
+  return state;
+}
+
+/** "More homes in {city}" (#364): follows the latest save, not the intent control.
+ *  Hidden with no save, no matching listings, or a failed fetch. The copy states the reason only. */
+function SavedLikeRow({
+  save,
+  saveLoading,
+  savedPropertyIds,
+}: {
+  save: LatestSave | null;
+  saveLoading: boolean;
+  savedPropertyIds: Set<string>;
+}) {
+  const {
+    listings,
+    total,
+    loading: searching,
+  } = useCarouselListings(
+    {
+      city: save?.city,
+      state: save?.state,
+      propertyType: save ? [save.propertyType] : undefined,
+      listingType: save?.listingType,
+      pageSize: CAROUSEL_PAGE_SIZE,
+    },
+    !save,
+    saveLoading,
+  );
+  const loading = saveLoading || searching;
+
+  // The search contract has no exclude filter, so already-saved homes drop out here.
+  const visible = listings.filter((l) => !savedPropertyIds.has(l.propertyId));
+  if (!loading && (!save || total === 0 || visible.length === 0)) return null;
+
+  return (
+    <ListingRow
+      // The saved read has not settled yet, so no city exists. The skeleton shows the generic title.
+      title={save ? `More homes in ${save.city}` : 'More homes like the ones you saved'}
+      targetSource={save ? 'saved-home' : undefined}
+      href={
+        save
+          ? searchTargetUrl(
+              { kind: 'place', place: { kind: 'city', city: save.city, state: save.state } },
+              save.listingType,
+              new URLSearchParams({ propertyType: save.propertyType }),
+            )
+          : undefined
+      }
+      listings={visible}
       loading={loading}
       max={7}
       sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
@@ -452,18 +735,30 @@ const COMING_SOON_TITLE: Record<ListingSide, string> = {
 };
 
 /** "Coming soon" (#392): listed early, showings not started. Hidden while empty and settled. */
-function ComingSoonRow({ side }: { side: ListingSide }) {
-  const place = useLastSearchedPlace();
-  // Scoped to the visitor's own last-searched place (#416) even with no subtitle to name it —
-  // relevance the copy doesn't have to spell out.
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    status: ['Coming Soon'],
-    sort: 'newest',
-    listingType: side,
-    pageSize: CAROUSEL_PAGE_SIZE,
-    city: place?.city,
-    state: place?.state,
-  });
+function ComingSoonRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug(`coming-soon-${side}`, place);
+  // Scoped to the home target even with no subtitle to name it. While the target resolves, the
+  // row waits. With no target at all, it shows the platform-wide row.
+  const { listings, total, loading, failed, refetch } = useCarouselListings(
+    {
+      status: ['Coming Soon'],
+      sort: 'newest',
+      listingType: side,
+      pageSize: CAROUSEL_PAGE_SIZE,
+      city: place?.city,
+      state: place?.state,
+    },
+    placeLoading,
+    placeLoading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -471,6 +766,7 @@ function ComingSoonRow({ side }: { side: ListingSide }) {
   return (
     <ListingRow
       title={COMING_SOON_TITLE[side]}
+      targetSource={place?.source}
       href={searchHref(side, {
         status: 'Coming Soon',
         ...(place ? { city: place.city, state: place.state } : {}),
@@ -487,13 +783,32 @@ function ComingSoonRow({ side }: { side: ListingSide }) {
 
 /** "Price drops on homes for sale" (#394): a real price-cut flag — the title never claims a
  *  savings amount or percentage (no deal claim). Sale only, matching the ticket's scope. */
-function PriceDropsRow() {
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    priceReduced: true,
-    sort: 'newly-listed',
-    listingType: 'sale',
-    pageSize: CAROUSEL_PAGE_SIZE,
-  });
+function PriceDropsRow({
+  place,
+  placeLoading,
+}: {
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
+  useTargetDebug('price-drops', place);
+  const carousel = useTargetCarousel(
+    {
+      priceReduced: true,
+      sort: 'newly-listed',
+      listingType: 'sale',
+      pageSize: DEDUPE_PAGE_SIZE,
+    },
+    place,
+    placeLoading,
+  );
+  const { total, loading, failed, refetch, scope } = carousel;
+  const listings = useDedupedListings(
+    'price-drops',
+    'sale',
+    DEDUPE_ORDER.priceDrops,
+    carousel.listings,
+    loading,
+  );
 
   const show = loading || total > 0 || failed;
   if (!show) return null;
@@ -501,7 +816,8 @@ function PriceDropsRow() {
   return (
     <ListingRow
       title="Price drops on homes for sale"
-      href={searchHref('sale', { priceReduced: 'true' })}
+      targetSource={place?.source}
+      href={searchHref('sale', { priceReduced: 'true', ...scopeParams(scope) })}
       listings={listings}
       loading={loading}
       failed={failed}
@@ -573,27 +889,40 @@ function PriceSortToggle({
  * "Cheapest homes for sale" / "Priciest rentals" (#478): a pure price sort with no price cap, so
  * the row never empties because of one. The toggle re-queries this one carousel. A seller-withheld
  * price sorts last in both directions and the floor drops it, so it never shows. Scoped to the
- * visitor's last searched place, else the IP region, like the other rows.
+ * home target, like the other rows.
  */
-function PriceSortRow({ side, region }: { side: ListingSide; region: Region | null }) {
+function PriceSortRow({
+  side,
+  place,
+  placeLoading,
+}: {
+  side: ListingSide;
+  place: InferredTarget | null;
+  placeLoading: boolean;
+}) {
   const [sort, setSort] = useState<PriceSort>('price-asc');
-  const place = useLastSearchedPlace() ?? region;
+  useTargetDebug(`price-sort-${side}`, place);
 
-  const { listings, total, loading, failed, refetch } = useCarouselListings({
-    listingType: side,
-    sort,
-    minPrice: PRICE_FLOOR[side],
-    ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES } : {}),
-    pageSize: CAROUSEL_PAGE_SIZE,
-    city: place?.city,
-    state: place?.state,
-  });
+  const { listings, total, loading, failed, refetch } = useCarouselListings(
+    {
+      listingType: side,
+      sort,
+      minPrice: PRICE_FLOOR[side],
+      ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES } : {}),
+      pageSize: CAROUSEL_PAGE_SIZE,
+      city: place?.city,
+      state: place?.state,
+    },
+    placeLoading,
+    placeLoading,
+  );
 
   if (!loading && !failed && total === 0) return null;
 
   return (
     <ListingRow
       title={PRICE_SORT_TITLE[side][sort]}
+      targetSource={place?.source}
       // "See all" carries the same floor and types, so the search page matches the row.
       href={searchHref(side, {
         sort,
@@ -689,6 +1018,53 @@ function TrustBlock() {
   );
 }
 
+/** Rows in the feed skeleton. A typical warm feed has this many rows above the price-sort rows. */
+const FEED_SKELETON_ROWS = 3;
+
+/** Card-row placeholders. Same row component and padding as real rows, with an empty title line. */
+function FeedSkeleton() {
+  return (
+    <div aria-hidden="true" data-testid="home-feed-skeleton">
+      {Array.from({ length: FEED_SKELETON_ROWS }, (_, i) => (
+        <ListingRow
+          key={i}
+          title={' '}
+          listings={[]}
+          loading
+          max={7}
+          sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The ranked rows (#836). A row sets `feed`, so each card sends `feed_impression` and
+ * `feed_click` with the row, position, variant and model version. The title is the server's. It
+ * names only a place the visitor chose or acted on (`titleSafeTarget`).
+ */
+function FeedRows({ feed }: { feed: HomeFeedResponse }) {
+  return (
+    <>
+      {feed.rows
+        .filter((row) => row.listings.length > 0)
+        .map((row) => (
+          <ListingRow
+            key={row.rowId}
+            title={feedRowTitle(row.rowId, row.title)}
+            rowId={row.rowId}
+            listings={row.listings.map((item) => item.listing)}
+            exploreIds={new Set(row.listings.filter((i) => i.explore).map((i) => i.listing.id))}
+            feed={{ variant: row.variant, modelVersion: row.modelVersion }}
+            max={8}
+            sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+          />
+        ))}
+    </>
+  );
+}
+
 /**
  * Row order (#394 stakeholder ruling, #363): "Near you" leads the body, sale then rent — the
  * first row a visitor sees is scoped to their own region, not a platform-wide feed. Just listed
@@ -697,9 +1073,24 @@ function TrustBlock() {
  * search was rent, both the "Near you" pair and the rentals cluster move up — `useRentFirst` is
  * the only thing that changes; nothing about the rows themselves does.
  */
-export default function HomePageContent() {
+export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags }) {
   const rentFirst = useRentFirst();
-  const { region, loading: regionLoading } = useRegion();
+  const { user, savedPropertyIds } = useApp();
+  const { save: latestSave, loading: saveLoading } = useLatestSave(user?.email ?? null);
+  const { target: region, loading: regionLoading } = useHomeTarget({
+    signedIn: !!user,
+    savedHome: latestSave ? { city: latestSave.city, state: latestSave.state } : null,
+    savedPending: saveLoading,
+  });
+  const feedState = useHomeFeed(homeFeed, region, regionLoading, rentFirst ? 'rent' : 'sale');
+  const savedLike = user ? (
+    <SavedLikeRow
+      key="saved-like"
+      save={latestSave}
+      saveLoading={saveLoading}
+      savedPropertyIds={savedPropertyIds}
+    />
+  ) : null;
 
   const nearYouSale = (
     <NearYouRow key="near-you-sale" side="sale" region={region} regionLoading={regionLoading} />
@@ -707,20 +1098,31 @@ export default function HomePageContent() {
   const nearYouRent = (
     <NearYouRow key="near-you-rent" side="rent" region={region} regionLoading={regionLoading} />
   );
-  const justListedSale = <JustListedRow key="just-listed-sale" side="sale" />;
-  const comingSoonSale = <ComingSoonRow key="coming-soon-sale" side="sale" />;
-  const priceDrops = <PriceDropsRow key="price-drops" />;
-  const justListedRent = <JustListedRow key="just-listed-rent" side="rent" />;
-  const comingSoonRent = <ComingSoonRow key="coming-soon-rent" side="rent" />;
+  const justListedSale = (
+    <JustListedRow key="just-listed-sale" side="sale" place={region} placeLoading={regionLoading} />
+  );
+  const comingSoonSale = (
+    <ComingSoonRow key="coming-soon-sale" side="sale" place={region} placeLoading={regionLoading} />
+  );
+  const priceDrops = (
+    <PriceDropsRow key="price-drops" place={region} placeLoading={regionLoading} />
+  );
+  const justListedRent = (
+    <JustListedRow key="just-listed-rent" side="rent" place={region} placeLoading={regionLoading} />
+  );
+  const comingSoonRent = (
+    <ComingSoonRow key="coming-soon-rent" side="rent" place={region} placeLoading={regionLoading} />
+  );
 
   const priceSortRows = (rentFirst ? (['rent', 'sale'] as const) : (['sale', 'rent'] as const)).map(
-    (side) => <PriceSortRow key={side} side={side} region={region} />,
+    (side) => <PriceSortRow key={side} side={side} place={region} placeLoading={regionLoading} />,
   );
 
   const rows = rentFirst
     ? [
         nearYouRent,
         nearYouSale,
+        savedLike,
         justListedSale,
         justListedRent,
         comingSoonRent,
@@ -730,6 +1132,7 @@ export default function HomePageContent() {
     : [
         nearYouSale,
         nearYouRent,
+        savedLike,
         justListedSale,
         comingSoonSale,
         priceDrops,
@@ -737,15 +1140,29 @@ export default function HomePageContent() {
         comingSoonRent,
       ];
 
+  // Today's rows are the default for every path that is not a ready feed: flag off, control arm,
+  // opt-out, a cold visit, an error and a fallback answer. A visitor never sees an empty page.
+  const body =
+    feedState.status === 'ready' ? (
+      <>
+        <FeedRows feed={feedState.feed} />
+        {savedLike}
+      </>
+    ) : feedState.status === 'pending' ? (
+      <FeedSkeleton />
+    ) : (
+      rows
+    );
+
   return (
-    <>
-      {rows}
+    <ShownProvider>
+      {body}
 
       {priceSortRows}
 
       <ExploreNeighborhoodsRow region={region} regionLoading={regionLoading} />
 
       <TrustBlock />
-    </>
+    </ShownProvider>
   );
 }

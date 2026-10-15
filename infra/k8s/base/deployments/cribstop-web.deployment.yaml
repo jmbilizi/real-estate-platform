@@ -60,6 +60,11 @@ spec:
             # resolves to the ClusterIP under both, so it survives a future base-image change.
             - name: API_GATEWAY_URL
               value: "http://api-gateway-svc.default.svc.cluster.local.:8080"
+            # Personalised home feed (#836). Off by default. A patch sets the percent per environment.
+            - name: HOME_FEED_ENABLED
+              value: "false"
+            - name: HOME_FEED_ROLLOUT_PCT
+              value: "0"
             # Kubernetes metadata (Downward API)
             - name: K8S_POD_NAME
               valueFrom:

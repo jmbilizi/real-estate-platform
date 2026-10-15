@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { fetchGateway } from '@/app/api/_lib/gateway';
+import { clientIpOf } from '@/app/api/_lib/listings-gateway';
 
 /** Only these upstream fields reach the browser. */
 const FORWARDED_FIELDS = [
   'next',
+  'sent',
+  'reason',
   'stepUp',
   'resendAfterSeconds',
   'expiresInSeconds',
@@ -28,16 +31,30 @@ export function unavailable() {
   return NextResponse.json({ error: 'unavailable' }, { status: 503 });
 }
 
+/**
+ * The visitor IP as `X-Forwarded-For`, so the gateway sets `X-Real-IP` and account-service counts
+ * the visitor, not this pod (#811). Empty when the ingress recorded no valid IP.
+ */
+export function visitorIpHeaders(req: { headers: Headers }): Record<string, string> {
+  const ip = clientIpOf(req.headers);
+  return ip ? { 'X-Forwarded-For': ip } : {};
+}
+
 export async function callGateway(
   path: string,
   payload: unknown,
   label: string,
+  req: { headers: Headers },
 ): Promise<Response | null> {
   return fetchGateway(
     path,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...visitorIpHeaders(req),
+      },
       body: JSON.stringify(payload),
     },
     60_000, // .NET cold-start + EF Core pool init can be slow on first request
@@ -66,7 +83,8 @@ export async function relayPost(
   path: string,
   payload: unknown,
   label: string,
+  req: { headers: Headers },
 ): Promise<NextResponse> {
-  const upstream = await callGateway(path, payload, label);
+  const upstream = await callGateway(path, payload, label, req);
   return upstream ? relay(upstream) : unavailable();
 }

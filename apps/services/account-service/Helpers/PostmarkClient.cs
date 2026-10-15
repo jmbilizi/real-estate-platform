@@ -25,6 +25,19 @@ internal sealed class PostmarkClient(HttpClient httpClient, IOptions<PostmarkOpt
     // never silently read back as all-default because of a casing mismatch.
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>
+    /// Builds an RFC 5322 mailbox. The display name is always a quoted string: an unquoted comma or
+    /// parenthesis, such as "Name (Org, LLC)", makes Postmark reject the From address (#815).
+    /// </summary>
+    /// <param name="name">The display name.</param>
+    /// <param name="address">The email address.</param>
+    /// <returns>The mailbox, for example <c>"Name" &lt;a@b.com&gt;</c>.</returns>
+    internal static string FormatMailbox(string name, string address)
+    {
+        var escaped = name.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+        return $"\"{escaped}\" <{address}>";
+    }
+
     /// <summary>Sends one message through Postmark's transactional API.</summary>
     /// <param name="message">The message to send.</param>
     /// <param name="cancellationToken">A token to cancel the request.</param>
@@ -39,10 +52,11 @@ internal sealed class PostmarkClient(HttpClient httpClient, IOptions<PostmarkOpt
         request.Headers.Add("Accept", "application/json");
         request.Content = JsonContent.Create(
             new PostmarkSendRequest(
-                $"{message.FromName} <{message.FromAddress}>",
+                FormatMailbox(message.FromName, message.FromAddress),
                 message.To,
                 message.ReplyToAddress,
                 message.Subject,
+                message.HtmlBody,
                 message.TextBody,
                 settings.MessageStream),
             options: JsonOptions);
@@ -83,6 +97,7 @@ internal sealed class PostmarkClient(HttpClient httpClient, IOptions<PostmarkOpt
         string To,
         string ReplyTo,
         string Subject,
+        string HtmlBody,
         string TextBody,
         string MessageStream);
 

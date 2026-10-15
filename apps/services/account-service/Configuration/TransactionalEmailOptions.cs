@@ -9,7 +9,7 @@ namespace AccountService.Configuration;
 /// </summary>
 /// <remarks>
 /// The values are a stakeholder ruling (2026-09-16), recorded on #147 and #133:
-/// from <c>Cribstop (Real Broker, LLC) &lt;no-reply@cribstop.com&gt;</c>, reply-to
+/// from <c>"Cribstop.com" &lt;no-reply@cribstop.com&gt;</c>, reply-to
 /// <c>contact@cribstop.com</c>. The reply-to is a monitored human address and is never the
 /// no-reply address.
 /// </remarks>

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AuthForm from './AuthForm';
 import {
   changeSignupEmail,
+  type CodeNotSentReason,
   CodesUnavailableError,
   completePasswordReset,
   identifyEmail,
@@ -9,6 +10,7 @@ import {
   resendSignupCode,
   SignInFailedError,
   startPasswordReset,
+  UndeliverableEmailError,
   verifyResetCode,
   verifySignupCode,
 } from '@/lib/api/account';
@@ -31,7 +33,11 @@ jest.mock('@/lib/api/account', () => ({
   startPasswordReset: jest.fn(),
   verifyResetCode: jest.fn(),
   completePasswordReset: jest.fn(),
-  getPasswordMinLength: jest.fn().mockResolvedValue(15),
+  getPasswordPolicy: jest.fn().mockResolvedValue({
+    minLength: 8,
+    passphraseLength: 15,
+    requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+  }),
 }));
 
 const mockIdentify = identifyEmail as jest.MockedFunction<typeof identifyEmail>;
@@ -70,18 +76,93 @@ async function reachSetPassword() {
 describe('AuthForm', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    (jest.requireMock('@/lib/api/account').getPasswordMinLength as jest.Mock).mockResolvedValue(15);
+    (jest.requireMock('@/lib/api/account').getPasswordPolicy as jest.Mock).mockResolvedValue({
+      minLength: 8,
+      passphraseLength: 15,
+      requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+    });
   });
 
   describe('email step', () => {
     it('shows one email field and Continue, with no sign-in or sign-up tabs', () => {
       render(<AuthForm />);
 
-      expect(screen.getByRole('heading', { name: "What's your email?" })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Sign in or sign up' })).toBeInTheDocument();
       expect(screen.getAllByRole('textbox')).toHaveLength(1);
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
       expect(screen.queryByRole('tab')).not.toBeInTheDocument();
       expect(screen.queryByPlaceholderText('••••••••')).not.toBeInTheDocument();
+    });
+
+    it('puts the email field first, then "or", then Google and Apple on one row', () => {
+      render(<AuthForm />);
+
+      const email = screen.getByPlaceholderText('you@example.com');
+      const or = screen.getByText('or');
+      const google = screen.getByRole('button', { name: 'Continue with Google' });
+      const apple = screen.getByRole('button', { name: 'Continue with Apple' });
+      const follows = (x: Node, y: Node) =>
+        Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(email, or)).toBe(true);
+      expect(follows(or, google)).toBe(true);
+      expect(google.parentElement).toBe(apple.parentElement);
+      expect(google.parentElement).toHaveClass('grid-cols-2', 'gap-1.5');
+      // One pill split in two: full outer corners, small inner corners.
+      expect(google).toHaveClass('rounded-l-full', 'rounded-r-[6px]');
+      expect(apple).toHaveClass('rounded-l-[6px]', 'rounded-r-full');
+      expect(google.className).toContain('min-h-11');
+      expect(apple.className).toContain('min-h-11');
+      expect(google).toHaveAttribute('title', 'Continue with Google');
+      expect(apple).toHaveAttribute('title', 'Continue with Apple');
+      expect(screen.queryByText('Welcome back')).not.toBeInTheDocument();
+    });
+
+    it('labels the field inside it and shows the helper line only on focus or a value', () => {
+      render(<AuthForm />);
+
+      const field = screen.getByLabelText('Email');
+      const help = () => screen.getByText('We may send you a code to confirm your email.');
+      expect(field).toBe(screen.getByPlaceholderText('you@example.com'));
+      // The step focuses the field on mount, so blur it to read the idle state.
+      fireEvent.blur(field);
+      expect(help()).toHaveClass('opacity-0');
+
+      fireEvent.focus(field);
+      expect(help()).toHaveClass('opacity-100');
+      // The footer links the Privacy Policy once. The helper line has no link.
+      expect(screen.getAllByRole('link', { name: 'Privacy Policy' })).toHaveLength(1);
+      expect(field.getAttribute('aria-describedby')).toContain('auth-email-help');
+
+      fireEvent.blur(field);
+      expect(help()).toHaveClass('opacity-0');
+      fireEvent.change(field, { target: { value: 'a@b.co' } });
+      expect(help()).toHaveClass('opacity-100');
+    });
+
+    it('keeps the step layout identical before focus, on focus and after blur', () => {
+      render(<AuthForm />);
+      const field = screen.getByLabelText('Email');
+      const form = field.closest('form') as HTMLElement;
+      // Everything that can change a box size: tag, classes with the opacity and label-float
+      // classes removed, and the node count. Opacity and the absolute label never move layout.
+      const NON_LAYOUT = /\bopacity-\d+\b/g;
+      const signature = () =>
+        Array.from(form.querySelectorAll('*'))
+          .filter((el) => el.tagName !== 'LABEL')
+          .map((el) => `${el.tagName}.${(el.getAttribute('class') ?? '').replace(NON_LAYOUT, '')}`)
+          .join('|');
+
+      fireEvent.blur(field);
+      const before = signature();
+      const nodesBefore = form.querySelectorAll('*').length;
+      fireEvent.focus(field);
+      expect(signature()).toBe(before);
+      expect(form.querySelectorAll('*').length).toBe(nodesBefore);
+      fireEvent.blur(field);
+      expect(signature()).toBe(before);
+      expect(form.querySelectorAll('*').length).toBe(nodesBefore);
+      // A constant 1px border plus a ring: focus never thickens the border.
+      expect(field.className).not.toMatch(/focus:border-(2|4|\[)/);
     });
 
     it('sets the email field attributes for mobile keyboards and password managers', () => {
@@ -102,10 +183,9 @@ describe('AuthForm', () => {
         'href',
         '/terms',
       );
-      expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
-        'href',
-        '/privacy',
-      );
+      for (const link of screen.getAllByRole('link', { name: 'Privacy Policy' })) {
+        expect(link).toHaveAttribute('href', '/privacy');
+      }
       expect(screen.getByText(/By continuing, you agree to our/i)).toBeInTheDocument();
       expect(screen.queryByText(/draft|pending/i)).not.toBeInTheDocument();
     });
@@ -136,6 +216,20 @@ describe('AuthForm', () => {
       expect(await screen.findByText(/Sign-up is unavailable right now/)).toBeInTheDocument();
     });
 
+    it('says the address cannot get mail for a 422 undeliverable (#813)', async () => {
+      mockIdentify.mockRejectedValue(new UndeliverableEmailError());
+      render(<AuthForm />);
+      typeEmail(EMAIL);
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+      expect(
+        await screen.findByText(
+          'We cannot deliver email to this address. Check it, or use a different email.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('you@example.com')).toBeInTheDocument();
+    });
+
     it('shows a generic message for any other failure', async () => {
       mockIdentify.mockRejectedValue(new Error('boom'));
       render(<AuthForm />);
@@ -148,7 +242,7 @@ describe('AuthForm', () => {
   });
 
   describe('password step (returning user)', () => {
-    it('shows the email, a Change email link and current-password autocomplete', async () => {
+    it('shows the email and current-password autocomplete, with no Change email link', async () => {
       render(<AuthForm />);
       await continueWith('password');
 
@@ -158,6 +252,7 @@ describe('AuthForm', () => {
       expect(screen.getByLabelText('Password')).toHaveFocus();
       expect(screen.getByRole('button', { name: 'Forgot password?' })).toBeInTheDocument();
       expect(screen.getByLabelText('Remember me')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change email' })).not.toBeInTheDocument();
     });
 
     it('signs in and calls onSuccess', async () => {
@@ -198,18 +293,6 @@ describe('AuthForm', () => {
       await waitFor(() =>
         expect(toast).toHaveBeenCalledWith('Sign-in service unavailable', 'error'),
       );
-    });
-
-    it('returns to the email step with the field filled and drops the typed password', async () => {
-      render(<AuthForm />);
-      await continueWith('password');
-      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret' } });
-
-      fireEvent.click(screen.getByRole('button', { name: 'Change email' }));
-
-      expect(screen.getByPlaceholderText('you@example.com')).toHaveValue(EMAIL);
-      await continueWith('password');
-      expect(screen.getByLabelText('Password')).toHaveValue('');
     });
 
     it('opens the reset screen from Forgot password with the email filled in', async () => {
@@ -342,7 +425,7 @@ describe('AuthForm', () => {
         'autocomplete',
         'new-password',
       );
-      expect(screen.getByText(/15 or more characters/)).toBeInTheDocument();
+      expect(screen.getByText('Or use 15+ characters, no other rules.')).toBeInTheDocument();
     });
 
     it('keeps Update password disabled until both fields match and are long enough', async () => {
@@ -401,7 +484,10 @@ describe('AuthForm', () => {
 
     it.each([
       ['breached', 'That password has leaked before. Pick another.'],
-      ['too_short', 'That password is too short. Use 15 or more characters.'],
+      [
+        'too_short',
+        'That password is too short. Use 8+ characters with every rule, or 15+ characters.',
+      ],
       ['too_long', 'That password is too long. Shorten it.'],
     ] as const)('shows friendly copy for the %s policy error', async (code, copy) => {
       mockCompleteReset.mockResolvedValue({
@@ -458,7 +544,7 @@ describe('AuthForm', () => {
       render(<AuthForm />);
       await continueWith('code');
 
-      expect(screen.getByText(/We sent a 6-digit code to/)).toBeInTheDocument();
+      expect(screen.getByText(/Enter the 6-digit code for/)).toBeInTheDocument();
       expect(screen.getByText(EMAIL)).toBeInTheDocument();
       const field = screen.getByLabelText('6-digit code');
       expect(field).toHaveAttribute('autocomplete', 'one-time-code');
@@ -558,6 +644,129 @@ describe('AuthForm', () => {
         expect(screen.getByRole('button', { name: /Send a new code in 30s/ })).toBeDisabled();
       });
 
+      const continueNotSent = async (reason: CodeNotSentReason, resendAfterSeconds: number) => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          notSentReason: reason,
+          resendAfterSeconds,
+          expiresInSeconds: 600,
+        });
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+      };
+
+      it('shows the cooldown with a countdown, and no "we sent" claim (#813)', async () => {
+        await continueNotSent('cooldown', 42);
+
+        expect(
+          screen.getByText(
+            'We sent a code less than a minute ago. Check your inbox, or ask for a new one in 0:42.',
+          ),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/We sent a 6-digit code/)).not.toBeInTheDocument();
+        expect(screen.getByText(/Enter the 6-digit code for/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Send a new code in 42s/ })).toBeDisabled();
+
+        await act(async () => {
+          jest.advanceTimersByTime(42_000);
+        });
+        expect(screen.getByRole('button', { name: 'Send a new code' })).toBeEnabled();
+        expect(
+          screen.getByText(
+            'Check your inbox for the code we sent earlier, or ask for a new one now.',
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it.each([
+        [
+          'hourly_cap',
+          1500,
+          'You reached the hourly limit for codes. Check your inbox for the code we sent earlier, or try again in 25:00.',
+        ],
+        [
+          'daily_cap',
+          30_000,
+          'You reached the daily limit for codes. Check your inbox for the code we sent earlier, or try again later.',
+        ],
+        ['network_cap', 240, 'We got too many code requests from your network. Try again in 4:00.'],
+        ['locked', 900, 'Too many wrong codes for this email. Try again in 15:00.'],
+        ['pending', 60, 'Check your inbox for the code we sent earlier.'],
+        ['notice', 60, 'We sent you an email with the next step. Check your inbox.'],
+      ] as const)('shows the %s message (#813)', async (reason, wait, copy) => {
+        await continueNotSent(reason, wait);
+
+        expect(screen.getByText(copy)).toBeInTheDocument();
+        expect(screen.queryByText(/We sent a 6-digit code/)).not.toBeInTheDocument();
+      });
+
+      it('labels the resend "Try again later" when the wait is over one hour (#813)', async () => {
+        await continueNotSent('daily_cap', 30_000);
+
+        expect(screen.getByRole('button', { name: 'Try again later' })).toBeDisabled();
+      });
+
+      it('shows no not-sent line when the code was sent now (#813)', async () => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          resendAfterSeconds: 30,
+          expiresInSeconds: 600,
+        });
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+
+        expect(screen.getByText(/Enter the 6-digit code for/)).toBeInTheDocument();
+        expect(screen.queryByText(/Check your inbox/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Try again/)).not.toBeInTheDocument();
+      });
+
+      it('does not say "New code sent" when the resend queued nothing (#813)', async () => {
+        await continueNotSent('cooldown', 1);
+        mockResend.mockResolvedValue({
+          resendAfterSeconds: 60,
+          expiresInSeconds: 600,
+          notSentReason: 'pending',
+        });
+        await act(async () => {
+          jest.advanceTimersByTime(1000);
+        });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Send a new code' }));
+        });
+
+        expect(screen.queryByText(/New code sent/)).not.toBeInTheDocument();
+        expect(
+          screen.getByText('Check your inbox for the code we sent earlier.'),
+        ).toBeInTheDocument();
+      });
+
+      it('says the resend limit is reached for a long 429 (#813)', async () => {
+        mockIdentify.mockResolvedValue({
+          next: 'code',
+          resendAfterSeconds: 0,
+          expiresInSeconds: 600,
+        });
+        mockResend.mockRejectedValue(new RateLimitError(20_000));
+        render(<AuthForm />);
+        typeEmail(EMAIL);
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        });
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Send a new code' }));
+        });
+
+        expect(
+          screen.getByText('You reached the limit for new codes. Try again later.'),
+        ).toBeInTheDocument();
+      });
+
       it('says the code expired at the expiry time', async () => {
         mockIdentify.mockResolvedValue({
           next: 'code',
@@ -632,7 +841,8 @@ describe('AuthForm', () => {
         'autocomplete',
         'new-password',
       );
-      expect(screen.getByText('15 or more characters. A phrase works.')).toBeInTheDocument();
+      expect(screen.getByText('Or use 15+ characters, no other rules.')).toBeInTheDocument();
+      expect(screen.getByText('8+ characters')).toBeInTheDocument();
       const create = screen.getByRole('button', { name: 'Create account' });
       expect(create).toBeDisabled();
 
@@ -712,7 +922,9 @@ describe('AuthForm', () => {
       fillAndSubmit();
 
       expect(
-        await screen.findByText('That password is too short. Use 15 or more characters.'),
+        await screen.findByText(
+          'That password is too short. Use 8+ characters with every rule, or 15+ characters.',
+        ),
       ).toBeInTheDocument();
     });
 

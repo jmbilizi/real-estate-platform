@@ -41,6 +41,8 @@ const GENERATED_CA_DIR = path.join(
 );
 const CONFIG_MAP_NAME = 'workspace-ca-bundle';
 const BUNDLE_KEY = 'workspace-enterprise-roots.pem';
+const PYTHON_ENV_CONFIG_MAP_NAME = 'workspace-ca-env';
+const BUNDLE_MOUNT_PATH = `/etc/workspace-ca/${BUNDLE_KEY}`;
 
 const BANNER =
   '# AUTO-GENERATED — do not edit. Source: .workspace-certs/workspace-enterprise-roots.pem.';
@@ -114,6 +116,16 @@ function ensureLocalCaBundleOverlay(options = {}) {
     '',
     'patches:',
     `  - path: ${CONFIG_MAP_NAME}.configmap.yaml`,
+    // Python replaces its trust store with SSL_CERT_FILE, so these two are set only when a real
+    // bundle exists. See components/workspace-ca/workspace-ca-env.configmap.yaml (#275).
+    '  - patch: |-',
+    '      apiVersion: v1',
+    '      kind: ConfigMap',
+    '      metadata:',
+    `        name: ${PYTHON_ENV_CONFIG_MAP_NAME}`,
+    '      data:',
+    `        SSL_CERT_FILE: ${BUNDLE_MOUNT_PATH}`,
+    `        REQUESTS_CA_BUNDLE: ${BUNDLE_MOUNT_PATH}`,
     '',
   ].join('\n');
   fs.writeFileSync(path.join(dir, 'kustomization.yaml'), kustomization);

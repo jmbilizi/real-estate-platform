@@ -179,3 +179,18 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
     touch scroll (`scroll-snap-type: x mandatory`, no visible scrollbar), and no arrow buttons — the
     card row bleeds to the screen edge on the right while the first card still lines up under the
     title.
+
+## Home feed rollout (#836)
+
+- `HOME_FEED_ENABLED` (default `false`) and `HOME_FEED_ROLLOUT_PCT` (0 to 100) are server env vars.
+  `GET /api/feed-config` serves them (`s-maxage=60`). The home page stays static, and the client
+  reads the config, then buckets. Until it arrives, today's rows show. A visitor who scrolled past
+  80 px or touched the page keeps today's rows.
+- The bucket is `fnv1a("home-feed-v1" + anon id) mod 100`. A bucket below the percent gets the feed.
+  No anon id (opt-out, GPC) gets today's rows.
+- The feed shows only for a warm visit with a place from `explicit`, `last-search`, `looking-for`,
+  `saved-home`, `viewed-homes` or `visit-views`. An IP or geolocation place never reaches a title.
+- Flag off, control bucket, cold visit, an error, `variant: fallback` and an empty answer all render
+  today's rows. Never show an error for the feed.
+- Compare the arms on eligible visitors only. A treatment visitor with no feed also sees today's
+  rows.

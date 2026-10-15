@@ -11,5 +11,6 @@ export async function POST(req: Request) {
     '/account/password/reset/complete',
     { email, resetProof, newPassword },
     'password reset complete',
+    req,
   );
 }

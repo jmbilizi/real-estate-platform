@@ -19,17 +19,25 @@ namespace AccountService.Tests.Helpers
             var options = new PasswordPolicyOptions();
 
             options.Validate().Should().BeNull();
-            options.MinLength.Should().Be(15);
+            options.MinLength.Should().Be(8);
+            options.PassphraseLength.Should().Be(15);
             options.MaxLength.Should().Be(128);
         }
 
         [Theory]
         [InlineData(0, 128)]
         [InlineData(15, 14)]
+        [InlineData(8, 14)]
         [InlineData(15, 129)]
         public void BadLengths_AreRefused(int min, int max)
         {
             new PasswordPolicyOptions { MinLength = min, MaxLength = max }.Validate().Should().NotBeNull();
+        }
+
+        [Fact]
+        public void APassphraseLengthUnderTheMinimum_IsRefused()
+        {
+            new PasswordPolicyOptions { MinLength = 8, PassphraseLength = 7 }.Validate().Should().NotBeNull();
         }
 
         [Theory]

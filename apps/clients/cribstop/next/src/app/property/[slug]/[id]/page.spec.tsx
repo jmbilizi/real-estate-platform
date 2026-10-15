@@ -37,7 +37,9 @@ async function render(page: ReturnType<typeof aPropertyPage>) {
 
 describe('PropertyRoute hard load', () => {
   it('renders the modal over the listing city search when the property has a listing', async () => {
-    const element = await render(aPropertyPage());
+    const wrapper = await render(aPropertyPage());
+    // The page is a fragment: the JSON-LD block (null here, no SITE_ORIGIN) and the modal.
+    const element = wrapper.props.children[1];
 
     expect(element.type.name).toBe('default');
     expect(element.props.id).toBe(ID);

@@ -89,7 +89,7 @@ namespace AccountService.Tests.Integration
 
             var sender = factory.Services.GetRequiredService<IOptions<TransactionalEmailOptions>>().Value;
 
-            sender.FromName.Should().Be("Cribstop (Real Broker, LLC)");
+            sender.FromName.Should().Be("Cribstop.com");
             sender.FromAddress.Should().Be("no-reply@cribstop.com");
             sender.ReplyToAddress.Should().Be("contact@cribstop.com");
             sender.BrokerageDisclosure.Should().Be("Cribstop is brokered by Real Broker, LLC.");

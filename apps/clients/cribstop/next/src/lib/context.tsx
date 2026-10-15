@@ -20,10 +20,8 @@ import {
   selectListingType,
   selectMobileSearchOpen,
   selectSavedHomes,
-  selectSearchDateRange,
   selectSearchListingType,
   selectSearchLocation,
-  selectSearchMoveInDate,
   selectSearchPriceIdx,
   selectSearchSuggestion,
   selectSessionChecked,
@@ -39,16 +37,16 @@ import {
 } from '@/lib/store/slices/authSlice';
 import { clearSaved, type SavedEntry, saveEntry } from '@/lib/store/slices/favoritesSlice';
 import { removeHome, syncSavedHomes, toggleHome } from '@/lib/saved-sync';
+import { trackEvent } from '@/lib/analytics';
+import { recordFeedItem } from '@/lib/feed-profile';
 import { addToast } from '@/lib/store/slices/toastSlice';
 
 // useLayoutEffect on the client (fires before first paint), useEffect on the server (no-op)
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
   type SearchListingType,
-  setSearchDateRange,
   setSearchListingType,
   setSearchLocation,
-  setSearchMoveInDate,
   setSearchPriceIdx,
   setSearchSuggestion,
 } from '@/lib/store/slices/searchSlice';
@@ -60,14 +58,7 @@ import {
   setMobileSearchOpen,
   setShowHeaderPill,
 } from '@/lib/store/slices/uiSlice';
-import {
-  ListingTab,
-  ListingType,
-  NavTab,
-  SearchDateRange,
-  SearchSuggestion,
-  User,
-} from '@/lib/store/types';
+import { ListingTab, ListingType, NavTab, SearchSuggestion, User } from '@/lib/store/types';
 
 interface AppContextValue {
   user: User | null;
@@ -83,7 +74,7 @@ interface AppContextValue {
   ) => Promise<CompleteSignupOutcome>;
   logout: () => void;
   /** Flips the home of a listing, so every listing of that home flips together. */
-  toggleSave: (listing: { id: string; propertyId: string }) => void;
+  toggleSave: (listing: { id: string; propertyId: string; city?: string; state?: string }) => void;
   /** Removes a saved home by property id, for a home with no listing to flip. */
   removeSaved: (propertyId: string) => void;
   /** Adds homes the server reports as saved. Never removes one. */
@@ -105,10 +96,6 @@ interface AppContextValue {
   setSearchLocation: (v: string) => void;
   searchSuggestion: SearchSuggestion;
   setSearchSuggestion: (v: SearchSuggestion) => void;
-  searchMoveInDate: string;
-  setSearchMoveInDate: (v: string) => void;
-  searchDateRange: SearchDateRange;
-  setSearchDateRange: (v: SearchDateRange) => void;
   searchPriceIdx: number;
   setSearchPriceIdx: (v: number) => void;
   searchListingType: SearchListingType;
@@ -222,8 +209,6 @@ export function useApp(): AppContextValue {
   const mobileSearchOpen = useAppSelector(selectMobileSearchOpen);
   const searchLocation = useAppSelector(selectSearchLocation);
   const searchSuggestion = useAppSelector(selectSearchSuggestion);
-  const searchMoveInDate = useAppSelector(selectSearchMoveInDate);
-  const searchDateRange = useAppSelector(selectSearchDateRange);
   const searchPriceIdx = useAppSelector(selectSearchPriceIdx);
   const searchListingType = useAppSelector(selectSearchListingType);
 
@@ -299,8 +284,29 @@ export function useApp(): AppContextValue {
   }, [dispatch]);
 
   const toggleSavedListing = useCallback(
-    (listing: { id: string; propertyId: string }) => {
+    (listing: {
+      id: string;
+      propertyId: string;
+      listingType?: string;
+      city?: string;
+      state?: string;
+    }) => {
       const signedIn = store.getState().auth.user !== null;
+      const alreadySaved = store
+        .getState()
+        .favorites.homes.some((h) => h.propertyId === listing.propertyId);
+      if (!alreadySaved) {
+        trackEvent('listing_save', { listingId: listing.id });
+        recordFeedItem(
+          listing.id,
+          'save',
+          listing.listingType === 'rent' ? 'rent' : 'sale',
+          Date.now(),
+          listing,
+        );
+      } else {
+        trackEvent('listing_unsave', { listingId: listing.id });
+      }
       void toggleHome(store, listing, signedIn, notifyError(dispatch));
     },
     [dispatch],
@@ -382,20 +388,6 @@ export function useApp(): AppContextValue {
     [dispatch],
   );
 
-  const setMoveInDate = useCallback(
-    (v: string) => {
-      dispatch(setSearchMoveInDate(v));
-    },
-    [dispatch],
-  );
-
-  const setDateRange = useCallback(
-    (v: SearchDateRange) => {
-      dispatch(setSearchDateRange(v));
-    },
-    [dispatch],
-  );
-
   const setPriceIdx = useCallback(
     (v: number) => {
       dispatch(setSearchPriceIdx(v));
@@ -438,10 +430,6 @@ export function useApp(): AppContextValue {
     setSearchLocation: setLocation,
     searchSuggestion,
     setSearchSuggestion: setSuggestion,
-    searchMoveInDate,
-    setSearchMoveInDate: setMoveInDate,
-    searchDateRange,
-    setSearchDateRange: setDateRange,
     searchPriceIdx,
     setSearchPriceIdx: setPriceIdx,
     searchListingType,

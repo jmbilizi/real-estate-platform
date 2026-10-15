@@ -302,11 +302,36 @@ namespace AccountService.Tests.Helpers
 
             result.Status.Should().Be(EmailCodeIssueStatus.Throttled);
             result.RetryAfterSeconds.Should().Be(40);
+            result.Outcome.Should().Be(CodeSendOutcome.Cooldown);
             this.sender.Messages.Should().ContainSingle();
 
             this.clock.Advance(TimeSpan.FromSeconds(40));
             (await this.service.IssueAsync(Email, EmailCodePurpose.SignUp)).Status
                 .Should().Be(EmailCodeIssueStatus.Issued);
+        }
+
+        [Fact]
+        public async Task Issue_WhenTheTransportCannotSend_IsUnavailable_AndStoresNoCode()
+        {
+            this.sender.CanSend = false;
+
+            var result = await this.service.IssueAsync(Email, EmailCodePurpose.SignUp);
+
+            result.Status.Should().Be(EmailCodeIssueStatus.Unavailable);
+            this.sender.Messages.Should().BeEmpty();
+            (await this.db.EmailCodes.CountAsync()).Should().Be(0, "a dropped code must not spend the caps");
+        }
+
+        [Fact]
+        public async Task Issue_ForALockedAddress_NamesTheLock()
+        {
+            await this.service.IssueAsync(Email, EmailCodePurpose.SignUp);
+            await this.LockAsync(EmailCodePurpose.SignUp);
+
+            var result = await this.service.IssueAsync(Email, EmailCodePurpose.SignUp);
+
+            result.Status.Should().Be(EmailCodeIssueStatus.Locked);
+            result.Outcome.Should().Be(CodeSendOutcome.Locked);
         }
 
         [Fact]
@@ -323,6 +348,7 @@ namespace AccountService.Tests.Helpers
 
             sixth.Status.Should().Be(EmailCodeIssueStatus.Throttled);
             sixth.RetryAfterSeconds.Should().Be(50 * 60);
+            sixth.Outcome.Should().Be(CodeSendOutcome.HourlyCap);
 
             this.clock.Advance(TimeSpan.FromSeconds(sixth.RetryAfterSeconds));
             (await this.service.IssueAsync(Email, EmailCodePurpose.SignUp)).Status
@@ -345,6 +371,7 @@ namespace AccountService.Tests.Helpers
 
             eleventh.Status.Should().Be(EmailCodeIssueStatus.Throttled);
             eleventh.RetryAfterSeconds.Should().BeGreaterThan(0);
+            eleventh.Outcome.Should().Be(CodeSendOutcome.DailyCap);
             this.sender.Messages.Should().HaveCount(10);
 
             // Another email and another purpose keep their own budgets.
@@ -483,6 +510,19 @@ namespace AccountService.Tests.Helpers
         }
 
         [Fact]
+        public void Options_TrimTheKey_AndThePostmarkToken()
+        {
+            new EmailCodeOptions { HmacKey = EmailCodeOptions.DevelopmentKey + "\n" }.HmacKey.Should().Be(EmailCodeOptions.DevelopmentKey);
+            new EmailCodeOptions { HmacKey = " \r\n" }.IsConfigured.Should().BeFalse();
+
+            var token = new PostmarkOptions { ServerToken = " server-token\r\n" };
+            token.ServerToken.Should().Be("server-token");
+            token.IsConfigured.Should().BeTrue();
+            new PostmarkOptions { ServerToken = PostmarkOptions.PlaceholderServerToken + "\n" }.IsConfigured.Should().BeFalse();
+            new PostmarkOptions { ServerToken = "\n" }.IsConfigured.Should().BeFalse();
+        }
+
+        [Fact]
         public void Options_DefaultsMatchTheEpic_AndValidate()
         {
             var defaults = new EmailCodeOptions();
@@ -526,7 +566,8 @@ namespace AccountService.Tests.Helpers
                         FromAddress = "no-reply@cribstop.com",
                         ReplyToAddress = "contact@cribstop.com",
                         BrokerageDisclosure = "Cribstop is brokered by Real Broker, LLC.",
-                    })),
+                    }),
+                    Options.Create(new AccountRecoveryOptions { WebBaseUrl = new Uri("https://cribstop.com") })),
                 this.sender,
                 this.clock,
                 NullLogger<EmailCodeService>.Instance);
@@ -543,9 +584,11 @@ namespace AccountService.Tests.Helpers
 
         private sealed class Sender : IOutboundEmailSender
         {
+            public bool CanSend { get; set; } = true;
+
             internal List<OutboundEmail> Messages { get; } = new();
 
-            internal string LastCode => this.Messages[^1].Subject.Split(' ')[0];
+            internal string LastCode => this.Messages[^1].CodeFromBody();
 
             public Task SendAsync(OutboundEmail message, CancellationToken cancellationToken = default)
             {

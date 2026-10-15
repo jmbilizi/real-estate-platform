@@ -161,6 +161,11 @@ the timing floor.
 before `complete`. A pending sign-up is a `PendingRegistrations` row that expires 30 minutes after
 the last code.
 
+**Password policy.** A password is valid with 8+ characters and an uppercase letter, a lowercase
+letter, a number and a symbol, or with 15+ characters and no other rule. The maximum is 128. A
+password found in a known breach is refused. Config: `PasswordPolicy:MinLength` (8),
+`PasswordPolicy:PassphraseLength` (15).
+
 **Reset.** `start` sends a code to a confirmed, live account. `verify` returns a `resetProof`.
 `complete` takes `{ email, resetProof, newPassword }`, sets the password, ends every session and
 answers `204`. It signs nobody in.
@@ -248,9 +253,8 @@ code, the link and the message body are never logged. `PostmarkEmailSender` is t
 `IEmailSender<ApplicationUser>` that `MapIdentityApi` requires. Every member throws, because nothing
 sends an Identity link or code.
 
-**Sender identity** (configuration, section `Email`): from
-`Cribstop (Real Broker, LLC) <no-reply@cribstop.com>`, reply-to `contact@cribstop.com`. Every body
-ends with `Email:BrokerageDisclosure` (PRD §6).
+**Sender identity** (configuration, section `Email`): from `"Cribstop.com" <no-reply@cribstop.com>`,
+reply-to `contact@cribstop.com`. Every body ends with `Email:BrokerageDisclosure` (PRD §6).
 
 ---
 

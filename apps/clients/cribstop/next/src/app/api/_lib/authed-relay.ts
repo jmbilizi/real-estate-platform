@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchGateway } from '@/app/api/_lib/gateway';
 import { AUTH_COOKIES, authCookies } from '@/app/api/_lib/cookies';
 import { tryRefreshToken } from '@/app/api/_lib/refresh';
+import { visitorIpHeaders } from '@/app/api/_lib/account-relay';
 
-function post(path: string, token: string, payload: unknown) {
+function post(path: string, token: string, payload: unknown, req: NextRequest) {
   return fetchGateway(
     path,
     {
       method: 'POST',
       headers: {
+        ...visitorIpHeaders(req),
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
@@ -32,7 +34,7 @@ export async function postAuthed(
   const token = req.cookies.get(AUTH_COOKIES.accessToken)?.value;
   if (!token) return new Response(null, { status: 401 });
   const attempt = (t: string) =>
-    post(path, t, payload).catch((err: unknown) => {
+    post(path, t, payload, req).catch((err: unknown) => {
       // Log the failure only. The payload holds a password or a code.
       console.error(`Gateway ${label} failed`, err instanceof Error ? err.message : 'unknown');
       return null;

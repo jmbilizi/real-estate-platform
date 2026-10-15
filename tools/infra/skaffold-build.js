@@ -22,6 +22,8 @@ const path = require('path');
 const fs = require('fs');
 
 const { applyLocalRetention } = require('./registry-retention');
+const { resolveContainerEngine } = require('../docker/container-engine');
+const { ensureWorkspaceCerts } = require('./workspace-certs');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
 
@@ -126,12 +128,16 @@ function detectDockerfile(projectName) {
 function ensureWorkspaceCertsDir() {
   // The Dockerfile uses a BuildKit bind mount for .workspace-certs/ (enterprise CA setup).
   // That mount fails the build if the directory does not exist in the build context.
-  // .workspace-certs/ is gitignored, so we ensure it exists here (an empty directory is fine).
+  // A worktree copies the bundle from the main checkout, or fails with the copy command (#107).
+  // A host with no bundle anywhere only warns. CI needs no bundle, only the directory.
+  ensureWorkspaceCerts(workspaceRoot);
   const certsDir = path.join(workspaceRoot, '.workspace-certs');
   if (!fs.existsSync(certsDir)) {
     fs.mkdirSync(certsDir, { recursive: true });
   }
 }
+
+let engine;
 
 function buildImage(image) {
   // Ensure the .workspace-certs/ directory exists before the build so that the
@@ -160,8 +166,8 @@ function buildImage(image) {
     image,
     '.',
   ];
-  const status = run('podman', args);
-  must(status, 'podman build failed');
+  const status = run(engine, args);
+  must(status, `${engine} build failed`);
 }
 
 function pushImage(image) {
@@ -173,19 +179,19 @@ function pushImage(image) {
     image.startsWith('localhost/');
 
   const args = ['push'];
-  if (isLocalHttpRegistry) {
+  if (isLocalHttpRegistry && engine === 'podman') {
     args.push('--tls-verify=false');
   }
   args.push(image);
 
-  const status = run('podman', args);
-  must(status, 'podman push failed');
+  const status = run(engine, args);
+  must(status, `${engine} push failed`);
 }
 
 function cleanupOnFailure(image) {
   // Best-effort cleanup to avoid leaking disk space during failing build loops.
-  run('podman', ['rmi', '-f', image], { stdio: ['ignore', 'ignore', 'ignore'] });
-  run('podman', ['image', 'prune', '-f'], { stdio: ['ignore', 'ignore', 'ignore'] });
+  run(engine, ['rmi', '-f', image], { stdio: ['ignore', 'ignore', 'ignore'] });
+  run(engine, ['image', 'prune', '-f'], { stdio: ['ignore', 'ignore', 'ignore'] });
 }
 
 async function main() {
@@ -193,6 +199,10 @@ async function main() {
   if (!image) {
     throw new Error('Skaffold did not provide IMAGE env var');
   }
+
+  const resolved = resolveContainerEngine();
+  engine = resolved.engine;
+  console.log(`Container engine: ${engine} (${resolved.source})`);
 
   const pushImageRequested = String(process.env.PUSH_IMAGE || '').toLowerCase() === 'true';
 

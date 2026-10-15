@@ -51,7 +51,19 @@ namespace AccountService.Tests.Integration
             body.GetProperty("expiresInSeconds").GetInt32().Should().Be(600);
             var message = Codes(factory).Should().ContainSingle().Subject;
             message.To.Should().Be("Owner@Example.com");
-            message.Subject.Should().MatchRegex(@"^\d{6} is your Cribstop code$");
+            message.Subject.Should().Be("Your Cribstop verification code");
+        }
+
+        [Fact]
+        public async Task Start_WhenPostmarkCannotSend_Answers503_ForKnownAndUnknownAlike()
+        {
+            using var factory = new AccountRecoveryFactory(canSend: false);
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "owner@example.com");
+
+            (await Post(client, StartPath, new { email = "owner@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            (await Post(client, StartPath, new { email = "nobody@example.com" })).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            Codes(factory).Should().BeEmpty();
         }
 
         [Fact]
@@ -521,7 +533,7 @@ namespace AccountService.Tests.Integration
 
         [Theory]
         [InlineData("short", "too_short")]
-        [InlineData("fourteen chars", "too_short")]
+        [InlineData("Abcdefg1", "missing_symbol")]
         public async Task Complete_AShortPassword_Returns400WithTheCode_AndKeepsTheProof(string password, string code)
         {
             using var factory = NoCooldown();
@@ -539,6 +551,17 @@ namespace AccountService.Tests.Integration
             (await Events(factory)).Should().BeEmpty();
 
             (await Post(client, CompletePath, new { email = "owner@example.com", resetProof = proof, newPassword = NewPassword })).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        [Fact]
+        public async Task Complete_AnEightCharacterPasswordWithEveryClass_Passes()
+        {
+            using var factory = NoCooldown();
+            using var client = factory.CreateClient();
+            await CreateAccountAsync(factory, "owner@example.com");
+            var proof = await ProofAsync(factory, client, "owner@example.com");
+
+            (await Post(client, CompletePath, new { email = "owner@example.com", resetProof = proof, newPassword = "Abcde1!x" })).StatusCode.Should().Be(HttpStatusCode.NoContent);
         }
 
         [Fact]
@@ -700,7 +723,7 @@ namespace AccountService.Tests.Integration
         private static List<OutboundEmail> Codes(AccountRecoveryFactory factory) =>
             factory.AlreadyRegisteredNotices.Where(m => m.Kind == EmailKind.Code).ToList();
 
-        private static string CodeOf(AccountRecoveryFactory factory) => Codes(factory).Last().Subject.Split(' ')[0];
+        private static string CodeOf(AccountRecoveryFactory factory) => Codes(factory).Last().CodeFromBody();
 
         private static async Task<string> ProofAsync(AccountRecoveryFactory factory, HttpClient client, string email)
         {

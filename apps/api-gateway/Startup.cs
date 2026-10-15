@@ -289,7 +289,9 @@ namespace ApiGateway
         /// caller already inside the cluster network — any pod, or a port-forward, can still set
         /// X-Real-IP itself. That is a wrong personalization region, not a wider compromise, and
         /// is unchanged by this endpoint: nothing in the gateway trusts X-Real-IP more than that
-        /// today. Closing it needs a NetworkPolicy, out of scope here.
+        /// today. Closing it needs a NetworkPolicy, out of scope here. The web app's /api/geo/region
+        /// proxy sends the visitor IP in X-Forwarded-For. The gateway reads it only because the web
+        /// pod is inside TRUSTED_PROXY_NETWORKS (#757).
         /// </remarks>
         internal static string? ResolveTrustedClientIp(HttpRequest request) =>
             request.Headers["X-Real-IP"].FirstOrDefault();
