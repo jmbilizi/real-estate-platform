@@ -21,7 +21,7 @@ guide.
 <!-- project-guides:start -->
 
 - `apps/api-gateway/AGENTS.md` — API Gateway (api-gateway)
-- `apps/clients/cribstop/AGENTS.md` — Cribstop Web App (cribstop-next)
+- `apps/clients/cribstop/AGENTS.md` — Cribstop Web App (cribstop-web)
 - `apps/services/account-service/AGENTS.md` — Account Service (account-service)
 - `apps/services/multi-model-inference/AGENTS.md` — Multi-Model Inference Service
   (multi-model-inference)
@@ -414,8 +414,8 @@ pnpm run nx:node-lint            # Lint all Node.js projects
 pnpm run nx:node-type-check     # Type-check all Node.js projects
 pnpm run nx:dotnet-build        # Build all .NET projects
 pnpm run nx:python-test         # Test all Python projects
-pnpm exec nx lint cribstop-next        # Lint a specific project
-pnpm exec nx type-check cribstop-next  # Type-check a specific project
+pnpm exec nx lint cribstop-web        # Lint a specific project
+pnpm exec nx type-check cribstop-web  # Type-check a specific project
 pnpm exec nx build api-gateway         # Build a specific project
 
 # ❌ WRONG — never run these directly
@@ -1702,24 +1702,23 @@ project — Projects v2 permissions for a user-owned board are granted per-user,
   "In Progress" in docs/commands), so board-UI casing edits can't break automation.
 - **Labels** carry scope (`scope:<canonical platform name>`, one per component touched, plus
   `scope:shared` for cross-cutting work) and type (`type:bug`/`type:feature`/`type:chore`). There is
-  no hand-maintained list of scope labels. The canonical name is the Nx project name, with one
-  exception: the web app is `scope:cribstop-web` although its Nx project is `cribstop-next`. Image
-  names in `tools/docker/image-name-map.json` are not scope names. The label must exist on the repo
-  before a ticket can carry it. The product owner creates it while grooming the ticket that
-  introduces the component. These labels are unrelated to the Nx _tag_ dimensions despite the shared
-  prefixes: an Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a project-kind
-  classifier — different vocabulary, different system. Prefix convention: prefixed labels (`type:`,
-  `scope:`) are dimensions picked from the taxonomy; unprefixed labels (`blocked`, `human-action`)
-  are orthogonal overlays that combine with any Status or dimension. Labels are multi-valued (a
-  ticket touching web + gateway gets both scope labels), which Projects v2 fields cannot do —
-  there's no multi-select field type. `blocked` marks anything stuck regardless of its current
-  Status (Status's linear progression has no room for a branch state). `human-action` marks tickets
-  only a human can complete (provision a secret/API key per environment, PAT scopes, DNS, paid
-  accounts, legal/broker sign-off) — authored as a runbook (what / where / how / by when) with
-  `Blocks #<n>` referencing the work waiting on it; the engineer agent files these whenever it hits
-  such a dependency, adds `blocked` to the dependent ticket, and moves on to unblocked work. All
-  taxonomy labels are provisioned on the repo (labels must pre-exist — `gh:ticket:create` passes
-  them through to `gh issue create`, which rejects unknown labels).
+  no hand-maintained list of scope labels. The canonical name is the Nx project name. Image names in
+  `tools/docker/image-name-map.json` are not scope names. The label must exist on the repo before a
+  ticket can carry it. The product owner creates it while grooming the ticket that introduces the
+  component. These labels are unrelated to the Nx _tag_ dimensions despite the shared prefixes: an
+  Nx `scope:` tag is a business-domain classifier and an Nx `type:` tag a project-kind classifier —
+  different vocabulary, different system. Prefix convention: prefixed labels (`type:`, `scope:`) are
+  dimensions picked from the taxonomy; unprefixed labels (`blocked`, `human-action`) are orthogonal
+  overlays that combine with any Status or dimension. Labels are multi-valued (a ticket touching
+  web + gateway gets both scope labels), which Projects v2 fields cannot do — there's no
+  multi-select field type. `blocked` marks anything stuck regardless of its current Status (Status's
+  linear progression has no room for a branch state). `human-action` marks tickets only a human can
+  complete (provision a secret/API key per environment, PAT scopes, DNS, paid accounts, legal/broker
+  sign-off) — authored as a runbook (what / where / how / by when) with `Blocks #<n>` referencing
+  the work waiting on it; the engineer agent files these whenever it hits such a dependency, adds
+  `blocked` to the dependent ticket, and moves on to unblocked work. All taxonomy labels are
+  provisioned on the repo (labels must pre-exist — `gh:ticket:create` passes them through to
+  `gh issue create`, which rejects unknown labels).
 - **Milestones are epics** — an outcome-scoped body of work, not a point in time. The work hierarchy
   has three levels, each with one owner: **milestone = epic** (product owner creates via
   `gh:milestone`, decomposes into tickets, and owns membership) → **issue = story/deliverable** (the

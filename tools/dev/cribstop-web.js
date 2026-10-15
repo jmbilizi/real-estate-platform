@@ -151,7 +151,7 @@ function main() {
 
   loadPrimaryEnvLocal(canonicalWorkspaceRoot);
 
-  const result = spawnSync('pnpm', ['exec', 'nx', 'serve', 'cribstop-next'], {
+  const result = spawnSync('pnpm', ['exec', 'nx', 'serve', 'cribstop-web'], {
     cwd: canonicalWorkspaceRoot,
     stdio: 'inherit',
     shell: true,

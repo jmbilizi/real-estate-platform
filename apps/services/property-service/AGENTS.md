@@ -536,7 +536,7 @@ Communities → Properties → Units → Listings hierarchy, so `listings` is on
 API rather than the name of it. **"Property API" is informal prose only — never a metadata value.**
 The published `info.title` is **`Property Service`**, matching the two entries the gateway already
 aggregates (`Account Service`, `Inference Service`), and it is deliberately named for neither a
-client (`cribstop-next` is one consumer of the document, not its owner) nor a resource. The
+client (`cribstop-web` is one consumer of the document, not its owner) nor a resource. The
 resource-level names (`listing_search_v`, the `listings` table, `ListingCardRow`,
 `ListingsEnvelope`, the `searchListings`/`getListing` operation ids) are correct as they are. Do not
 let the API-identity naming spread onto them.

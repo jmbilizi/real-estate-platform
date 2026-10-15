@@ -228,7 +228,7 @@ src/
 
 ```bash
 pnpm install
-pnpm exec nx serve cribstop-next
+pnpm exec nx serve cribstop-web
 # or
 cd apps/clients/cribstop/next
 pnpm dev

@@ -1,14 +1,14 @@
-# Cribstop Web App (cribstop-next)
+# Cribstop Web App (cribstop-web)
 
 Next.js (App Router) consumer app at `next/` — the three-tab experience: Homes, Services, Connect.
-Nx project name: **`cribstop-next`**.
+Nx project name: **`cribstop-web`**.
 
 ## Commands
 
 ```bash
 pnpm run cribstop:web                  # Dev server with HMR
 pnpm run skaffold:services             # Run backend in K8s alongside (2nd terminal)
-pnpm exec nx lint cribstop-next        # Also: test, type-check
+pnpm exec nx lint cribstop-web        # Also: test, type-check
 ```
 
 ## Key Docs
@@ -41,7 +41,7 @@ pnpm exec nx lint cribstop-next        # Also: test, type-check
 - `next/src/lib/contracts.check.ts` — a **type-only** conformance file against
   `@cribstop/property-contracts` (`libs/property-contracts`), the single definition of the listings
   wire contract. It emits no runtime code and touches no component. If a contract change breaks
-  `pnpm exec nx type-check cribstop-next` here, reconcile the rendering code to the new contract
+  `pnpm exec nx type-check cribstop-web` here, reconcile the rendering code to the new contract
   rather than editing these assertions to match — the assertions are what caught the drift.
 - `next/src/lib/listing-format.ts` — the **only** place a nullable listing field is turned into
   display text. Every compliance rule with a copy consequence lives here exactly once (withheld

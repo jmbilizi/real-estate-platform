@@ -1,5 +1,5 @@
 {
-  "name": "cribstop-next",
+  "name": "cribstop-web",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/clients/cribstop/next",
   "projectType": "application",

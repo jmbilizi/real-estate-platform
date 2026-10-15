@@ -1,5 +1,5 @@
 export default {
-  displayName: 'cribstop-next',
+  displayName: 'cribstop-web',
   preset: '../../../../jest.preset.js',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
