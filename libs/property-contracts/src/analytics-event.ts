@@ -111,17 +111,42 @@ const feedFields = {
   model_version: key,
   explore: flag,
 };
+/** Fixed `error_code` values (#827). A code names a failure class and never carries text. */
+export const LEAD_ERROR_CODES = [
+  'validation',
+  'unauthorized',
+  'unconfirmed',
+  'unavailable',
+  'invalid',
+  'rate_limited',
+  'network',
+] as const;
+export const AUTH_ERROR_CODES = [
+  'invalid_credentials',
+  'code_invalid',
+  'code_unavailable',
+  'rate_limited',
+  'undeliverable',
+  'password_rejected',
+  'proof_expired',
+  'unavailable',
+  'network',
+] as const;
+
+export type LeadErrorCode = (typeof LEAD_ERROR_CODES)[number];
+export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
+
 const lead = {
   ...listing,
   form_type: z.enum(['tour', 'info']).optional(),
   step: key.optional(),
-  error_code: key.optional(),
+  error_code: z.enum(LEAD_ERROR_CODES).optional(),
 };
 const auth = {
   method: key.optional(),
   entry_point: key.optional(),
   is_new_account: flag.optional(),
-  error_code: key.optional(),
+  error_code: z.enum(AUTH_ERROR_CODES).optional(),
 };
 const errorFields = {
   code: key.optional(),
@@ -245,6 +270,16 @@ export const analyticsEventBatchSchema = z
   .array(analyticsEventRequestSchema)
   .min(1)
   .max(ANALYTICS_BATCH_MAX);
+
+/**
+ * `POST /analytics/account-link` body (#827). The caller proves the account with its session. The
+ * body carries the anonymous id and nothing else. Property service writes the link only for a
+ * verified sign-in.
+ */
+export const analyticsAccountLinkRequestSchema = z.strictObject({
+  anon_id: COMMON.anon_id.unwrap(),
+});
+export type AnalyticsAccountLinkRequest = z.infer<typeof analyticsAccountLinkRequestSchema>;
 
 /** The shape every sink receives. Column properties are top-level. The rest are in `props`. */
 export interface NormalizedAnalyticsEvent {

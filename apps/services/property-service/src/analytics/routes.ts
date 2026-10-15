@@ -5,7 +5,9 @@ import {
   type ErrorBody,
   normalizeAnalyticsEvent,
 } from '@cribstop/property-contracts';
+import type { IntrospectionClient } from '../inquiries/account-introspection';
 import type { ReadClient } from '../listings/repository';
+import { createAccountLinkRouter } from './account-link';
 import { type AnalyticsSink, createSinks, fanOut } from './sink';
 import { startPopularityRefreshTimer } from './popularity';
 
@@ -94,6 +96,8 @@ export interface AnalyticsRouterDeps {
   enabled?: () => boolean;
   /** The first sink is the system of record. Defaults to the database sink. */
   sinks?: AnalyticsSink[];
+  /** Resolves the session for `POST /analytics/account-link` (#827). Without it the route is off. */
+  introspection?: IntrospectionClient;
 }
 
 export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
@@ -104,6 +108,11 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   // A timer, not a per-write check, so an idle pod still deletes rows older than the retention window.
   startPurgeTimer(deps.pool);
   startPopularityRefreshTimer();
+  if (deps.introspection) {
+    router.use(
+      createAccountLinkRouter({ pool: deps.pool, introspection: deps.introspection, enabled }),
+    );
+  }
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');

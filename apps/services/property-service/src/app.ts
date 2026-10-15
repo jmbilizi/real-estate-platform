@@ -254,6 +254,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,
       enabled: options.analyticsEnabled,
       sinks: options.analyticsSinks,
+      introspection,
     }),
   );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));

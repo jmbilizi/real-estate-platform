@@ -29,6 +29,11 @@ export class InquiryError extends Error {
   }
 }
 
+/** The `form_type` of the lead events (#827). */
+export function leadFormType(kind: InquiryKind): 'tour' | 'info' {
+  return kind === 'tour_request' ? 'tour' : 'info';
+}
+
 export async function submitInquiry(listingId: string, input: InquiryInput): Promise<void> {
   let res: Response;
   try {
@@ -41,7 +46,11 @@ export async function submitInquiry(listingId: string, input: InquiryInput): Pro
     throw new InquiryError('retryable');
   }
   if (res.ok) {
-    trackEvent('lead_submit', { surface: 'detail', listingId });
+    trackEvent('lead_submit', {
+      surface: 'detail',
+      listingId,
+      props: { form_type: leadFormType(input.kind) },
+    });
     return;
   }
   if (res.status === 401) throw new InquiryError('unauthorized');

@@ -452,6 +452,19 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "AnalyticsAccountLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "anon_id": {
+            "pattern": "^[A-Za-z0-9_-]{16,64}$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "anon_id",
+        ],
+        "type": "object",
+      },
       "AnalyticsEventBatch": {
         "items": {
           "$ref": "#/components/schemas/AnalyticsEventRequest",
@@ -1697,7 +1710,15 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "validation",
+                  "unauthorized",
+                  "unconfirmed",
+                  "unavailable",
+                  "invalid",
+                  "rate_limited",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -1793,7 +1814,15 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "validation",
+                  "unauthorized",
+                  "unconfirmed",
+                  "unavailable",
+                  "invalid",
+                  "rate_limited",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -1889,7 +1918,15 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "validation",
+                  "unauthorized",
+                  "unconfirmed",
+                  "unavailable",
+                  "invalid",
+                  "rate_limited",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -1989,7 +2026,15 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "validation",
+                  "unauthorized",
+                  "unconfirmed",
+                  "unavailable",
+                  "invalid",
+                  "rate_limited",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -2089,7 +2134,17 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "invalid_credentials",
+                  "code_invalid",
+                  "code_unavailable",
+                  "rate_limited",
+                  "undeliverable",
+                  "password_rejected",
+                  "proof_expired",
+                  "unavailable",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -2180,7 +2235,17 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "invalid_credentials",
+                  "code_invalid",
+                  "code_unavailable",
+                  "rate_limited",
+                  "undeliverable",
+                  "password_rejected",
+                  "proof_expired",
+                  "unavailable",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -2271,7 +2336,17 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "invalid_credentials",
+                  "code_invalid",
+                  "code_unavailable",
+                  "rate_limited",
+                  "undeliverable",
+                  "password_rejected",
+                  "proof_expired",
+                  "unavailable",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -2362,7 +2437,17 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "invalid_credentials",
+                  "code_invalid",
+                  "code_unavailable",
+                  "rate_limited",
+                  "undeliverable",
+                  "password_rejected",
+                  "proof_expired",
+                  "unavailable",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -2453,7 +2538,17 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "type": "string",
               },
               "error_code": {
-                "pattern": "^[A-Za-z0-9_.:-]{1,60}$",
+                "enum": [
+                  "invalid_credentials",
+                  "code_invalid",
+                  "code_unavailable",
+                  "rate_limited",
+                  "undeliverable",
+                  "password_rejected",
+                  "proof_expired",
+                  "unavailable",
+                  "network",
+                ],
                 "type": "string",
               },
               "event": {
@@ -6876,6 +6971,68 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
           },
         },
         "summary": "Move an accepted lead forward",
+      },
+    },
+    "/analytics/account-link": {
+      "post": {
+        "description": "Requires a verified sign-in. The body holds the anonymous id and nothing else. The service stores the account id and the anonymous id in its own table. With Sec-GPC: 1 or ANALYTICS_ENABLED=false it stores nothing and still answers 204.",
+        "operationId": "linkAnalyticsAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsAccountLinkRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "204": {
+            "description": "The link is stored, or analytics is off.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown field or malformed anonymous id.",
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "No valid credential. The body gives no reason.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "account-service did not answer, so the session is unknown. Retry. This is not a sign-out.",
+          },
+        },
+        "summary": "Link the anonymous id to the signed-in account",
       },
     },
     "/analytics/events": {
