@@ -14,7 +14,7 @@ exports.shorthands = undefined;
  * `analytics_retention_weekly_v` groups visitors (`anon_id`) by the week of their first event
  * (UTC, Monday start). A visitor is retained at day N when the visitor has an event exactly N days
  * after the first-seen day. A rate is NULL until the whole cohort week is N days old. First-seen is
- * computed from the raw rows, so it moves forward when the 13-month purge deletes old rows.
+ * computed from the raw rows of the last 13 months (the raw retention), so the scan has a time bound and first-seen moves forward as old rows leave the window.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
@@ -87,6 +87,7 @@ exports.up = (pgm) => {
       SELECT DISTINCT anon_id, (occurred_at AT TIME ZONE 'UTC')::date AS day
       FROM analytics_events
       WHERE anon_id IS NOT NULL
+        AND occurred_at >= date_trunc('week', now() - interval '13 months')
     ),
     first_seen AS (
       SELECT anon_id, min(day) AS first_day FROM activity GROUP BY anon_id

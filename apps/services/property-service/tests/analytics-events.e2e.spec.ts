@@ -321,7 +321,7 @@ describe('reach aggregate, funnel and retention views (#828)', () => {
   it('leaves a rate NULL while the cohort week is too young', async () => {
     const a = session();
     await pool().query(
-      `INSERT INTO analytics_events (event, surface, session_id, anon_id) VALUES ('page_view', 'home', $1, $1)`,
+      "INSERT INTO analytics_events (event, surface, session_id, anon_id) VALUES ('page_view', 'home', $1, $1)",
       [a],
     );
     const rows = await pool().query(
