@@ -80,7 +80,6 @@ export const ANALYTICS_COLUMN_PROPS = [
   'utm_medium',
   'utm_campaign',
   'referrer_host',
-  'channel',
   'app_version',
   'listing_id',
   'row_id',
