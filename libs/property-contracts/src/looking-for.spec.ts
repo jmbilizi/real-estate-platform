@@ -1,4 +1,4 @@
-import { lookingForRequestSchema, toOpenApiDocument } from './index';
+import { lookingForRequestSchema } from './index';
 
 const place = { kind: 'city', state: 'VA', city: 'Alexandria' } as const;
 const valid = { intent: 'buy', places: [place] };
@@ -51,12 +51,5 @@ describe('lookingForRequestSchema (#768)', () => {
     ['an unknown key', { ...valid, accountId: 'x' }, ''],
   ])('refuses %s', (_name, input, path) => {
     expect(refusedPaths(input)).toContain(path);
-  });
-
-  it('publishes the routes with sign-in required', () => {
-    const doc: any = toOpenApiDocument();
-    expect(doc.paths['/looking-for'].get.responses['401']).toBeDefined();
-    expect(doc.paths['/looking-for/{id}'].put.responses['409']).toBeDefined();
-    expect(doc.paths['/looking-for/{id}'].delete.responses['401']).toBeDefined();
   });
 });

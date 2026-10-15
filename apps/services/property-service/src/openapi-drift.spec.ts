@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { toOpenApiDocument } from '@cribstop/property-contracts';
+import { toOpenApiDocument } from './openapi/openapi';
 import { createApp } from './app';
 import type { ReadPool } from './listings/repository';
 

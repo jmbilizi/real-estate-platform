@@ -1,29 +1,4 @@
 import { z } from 'zod';
-import { idSchema } from './common';
-import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
-import { listingDetailSchema } from './listing-detail';
-import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
-import { analyticsEventBatchSchema, analyticsEventRequestSchema } from './analytics-event';
-import { homeFeedRequestSchema, homeFeedResponseSchema } from './home-feed';
-import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
-import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
-import { listingsMetaSchema } from './listings-meta';
-import {
-  lookingForInvalidBodySchema,
-  lookingForListSchema,
-  lookingForRequestSchema,
-  lookingForSchema,
-} from './looking-for';
-import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
-import {
-  brokersRequestSchema,
-  brokersResponseSchema,
-  zipsRequestSchema,
-  zipsResponseSchema,
-} from './listing-groups';
-import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
-import { mapRequestSchema, mapResponseSchema } from './listing-map';
-import { errorBodySchema } from './errors';
 import {
   agentLeadDeclineRequestSchema,
   agentLeadDetailSchema,
@@ -31,15 +6,46 @@ import {
   agentLeadsRequestSchema,
   agentLeadStatusRequestSchema,
   agentLeadTransitionResponseSchema,
-} from './agent-leads';
-import {
   agentProfileSchema,
+  analyticsEventBatchSchema,
+  analyticsEventRequestSchema,
+  brokersRequestSchema,
+  brokersResponseSchema,
   createAgentProfileRequestSchema,
+  errorBodySchema,
+  homeFeedRequestSchema,
+  homeFeedResponseSchema,
+  idSchema,
+  listingCardSchema,
+  listingDetailSchema,
+  listingInquiryRequestSchema,
+  listingInquiryResponseSchema,
+  listingsEnvelopeSchema,
+  listingsMetaSchema,
+  lookingForInvalidBodySchema,
+  lookingForListSchema,
+  lookingForRequestSchema,
+  lookingForSchema,
+  mapRequestSchema,
+  mapResponseSchema,
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  neighborhoodsRequestSchema,
+  neighborhoodsResponseSchema,
+  PAGE_SIZE_DEFAULT,
+  propertyLookupResponseSchema,
+  propertyPageSchema,
+  savedHomesEnvelopeSchema,
+  savedHomesRequestSchema,
+  savedStateSchema,
+  searchRequestSchema,
   staffAgentsEnvelopeSchema,
   staffAgentsRequestSchema,
   staffLeadAssignRequestSchema,
   staffLeadAssignResponseSchema,
   staffLeadDetailSchema,
+  staffLeadMetricsRequestSchema,
+  staffLeadMetricsSchema,
   staffLeadNoteRequestSchema,
   staffLeadNoteSchema,
   staffLeadsEnvelopeSchema,
@@ -48,15 +54,12 @@ import {
   staffLeadTransitionResponseSchema,
   staffLeadUnassignRequestSchema,
   staffMeSchema,
+  suggestRequestSchema,
+  suggestResponseSchema,
   updateAgentProfileRequestSchema,
-} from './staff';
-import { staffLeadMetricsRequestSchema, staffLeadMetricsSchema } from './staff-metrics';
-import {
-  MAX_RESULT_OFFSET,
-  maxReachablePage,
-  PAGE_SIZE_DEFAULT,
-  searchRequestSchema,
-} from './search-request';
+  zipsRequestSchema,
+  zipsResponseSchema,
+} from '@cribstop/property-contracts';
 
 /**
  * `unrepresentable` is deliberately left at its default (`'throw'`), not `'any'`. `'any'` would
