@@ -69,12 +69,10 @@ const compute = cache(async (baseQuery: string): Promise<CityStats | null> => {
         ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length)
         : null;
     }
-    return {
-      activeCount: all.total,
-      medianPrice,
-      asOf: meta?.lastSyncedAt ?? meta?.dataUpdatedAt ?? new Date().toISOString(),
-      sources: meta?.sources ?? [],
-    };
+    // No feed date or source means no honest date or attribution. The page omits the figures.
+    const asOf = meta?.lastSyncedAt ?? meta?.dataUpdatedAt ?? null;
+    if (asOf === null || !meta || meta.sources.length === 0) return null;
+    return { activeCount: all.total, medianPrice, asOf, sources: meta.sources };
   } catch {
     return null;
   }

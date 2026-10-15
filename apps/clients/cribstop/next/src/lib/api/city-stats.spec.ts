@@ -62,6 +62,24 @@ describe('loadCityStats (#842)', () => {
     expect(new URLSearchParams(query).get('status')).toBe('Active');
   });
 
+  it('returns null when the feed has no date, so no figure goes undated', async () => {
+    (proxyListingsRead as jest.Mock).mockImplementation(async (path: string) =>
+      path === '/meta'
+        ? reply({ lastSyncedAt: null, dataUpdatedAt: null, sources: ['brightMLS'] })
+        : reply({ total: 1, results: [{ price: 100 }] }),
+    );
+    await expect(loadCityStats('', place)).resolves.toBeNull();
+  });
+
+  it('returns null when the feed names no source', async () => {
+    (proxyListingsRead as jest.Mock).mockImplementation(async (path: string) =>
+      path === '/meta'
+        ? reply({ lastSyncedAt: '2026-10-14T12:00:00.000Z', dataUpdatedAt: null, sources: [] })
+        : reply({ total: 1, results: [{ price: 100 }] }),
+    );
+    await expect(loadCityStats('', place)).resolves.toBeNull();
+  });
+
   it('returns null when the feed fails', async () => {
     (proxyListingsRead as jest.Mock).mockResolvedValue(reply({}, false));
     await expect(loadCityStats('', place)).resolves.toBeNull();
