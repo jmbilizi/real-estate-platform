@@ -60,6 +60,31 @@ SELECT * FROM analytics_funnel_daily_v ORDER BY day DESC;
 Columns: `searches`, `detail_views`, `saves`, `requests`, `search_to_view_rate`,
 `view_to_request_rate`. A rate is `NULL` when its divisor is zero.
 
+## Session funnel and reach (#828)
+
+`analytics_daily_reach` holds distinct `sessions` and `visitors` per `day` and `event`. The route
+timer fills it from the raw rows every hour for the last 3 days
+(`refresh_analytics_daily_reach(from_day)`). A day older than 13 months keeps its row.
+
+```sql
+SELECT * FROM analytics_funnel_sessions_daily_v ORDER BY day DESC;
+```
+
+Columns: sessions per step (`search`, `listing_impression`, `listing_click`, `listing_view`,
+`listing_save`, `lead_start`, `lead_submit`) and four step rates. A rate is `NULL` when its divisor
+is zero.
+
+## Retention
+
+```sql
+SELECT * FROM analytics_retention_weekly_v ORDER BY first_seen_week DESC;
+```
+
+A cohort is the visitors (`anon_id`) whose first event falls in one UTC week. A visitor is retained
+at D1, D7 or D30 when the visitor has an event exactly that many days after the first-seen day. A
+rate is `NULL` until the whole week is old enough. First-seen moves forward when the purge deletes
+old raw rows.
+
 The raw rows give per-session paths for the last 13 months:
 
 ```sql
