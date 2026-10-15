@@ -253,7 +253,9 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   never deploys, with no error. The CI image-build matrix is auto-derived from the `container-build`
   target — don't hardcode it. For `deploy-control.yaml` the omission is no longer silent:
   `pnpm run infra:validate` (run by CI's `validate-infra` job and both git hooks) fails when a
-  rendered Hetzner workload has no entry, or an entry has no workload.
+  rendered Hetzner workload has no entry, or an entry has no workload. The guard covers
+  `StatefulSet`, `Deployment`, `DaemonSet`, `CronJob` and `Job`. `CronJob` and `Job` need an owner
+  but never join the rollout-wait or rollback lists.
 - **A deploy-control key is a LABEL value, never a resource name.** `tools/infra/deploy-scope.js` is
   the single source of truth: a resource belongs to the key named by `app`, else
   `app.kubernetes.io/name`. There is no `metadata.name` fallback, because the deploy applies each
