@@ -1,4 +1,5 @@
 import type { AnalyticsEventName, AnalyticsSurface } from '@cribstop/property-contracts';
+import { deriveChannel } from './derive-channel';
 import { getAnonId, isNewAnonId } from './anon-id';
 import { isPersonalisationEnabled, PERSONALISE_EVENT } from './feed-profile';
 
@@ -205,6 +206,7 @@ export function trackEvent(event: AnalyticsEventName, options: TrackOptions = {}
     getAnalyticsSessionId();
     if (sessionIsNew && event !== 'session_start') {
       sessionIsNew = false;
+      const landing = landingProps();
       queue.push(
         build(
           'session_start',
@@ -213,6 +215,12 @@ export function trackEvent(event: AnalyticsEventName, options: TrackOptions = {}
             props: {
               landing_path: pathTemplate(window.location.pathname),
               is_new_anon: isNewAnonId(),
+              channel: deriveChannel({
+                utm_source: landing['utm_source'],
+                utm_medium: landing['utm_medium'],
+                utm_campaign: landing['utm_campaign'],
+                referrer_host: landing['referrer_host'],
+              }),
             },
           },
           anonId,
