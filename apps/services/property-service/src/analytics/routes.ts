@@ -8,6 +8,7 @@ import {
 import type { ReadClient } from '../listings/repository';
 import { type AnalyticsSink, createSinks, fanOut } from './sink';
 import { startPopularityRefreshTimer } from './popularity';
+import { startReachRefreshTimer } from './reach';
 
 /**
  * `POST /analytics/events` (#725, #824). Cookieless event counting.
@@ -104,6 +105,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
   // A timer, not a per-write check, so an idle pod still deletes rows older than the retention window.
   startPurgeTimer(deps.pool);
   startPopularityRefreshTimer();
+  startReachRefreshTimer();
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');
