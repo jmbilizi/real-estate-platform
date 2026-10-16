@@ -403,6 +403,31 @@
       }
     },
     {
+      "UpstreamPathTemplate": "/property/analytics/account-link",
+      "UpstreamHttpMethod": ["POST"],
+      "DownstreamPathTemplate": "/analytics/account-link",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "property-service-svc",
+          "Port": 3002
+        }
+      ],
+      "Priority": 2,
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "1m",
+        "PeriodTimespan": 60,
+        "Limit": 30
+      },
+      "QoSOptions": {
+        "Timeout": 5000,
+        "MinimumThroughput": 5,
+        "SamplingDuration": 45000,
+        "BreakDuration": 5000
+      }
+    },
+    {
       "UpstreamPathTemplate": "/property/saved-homes",
       "UpstreamHttpMethod": ["GET"],
       "DownstreamPathTemplate": "/saved-homes",

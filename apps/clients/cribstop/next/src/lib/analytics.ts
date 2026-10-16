@@ -192,6 +192,28 @@ function build(event: AnalyticsEventName, options: TrackOptions, anonId: string)
   };
 }
 
+/**
+ * Links this browser's anonymous id to the account that just signed in (#827). Call it once, right
+ * after a verified sign-in. It sends the anon id only. The session cookie proves the account, so
+ * the server never trusts an id from the body. It sends nothing after an opt-out or under Global
+ * Privacy Control, and it never throws.
+ */
+export function linkAnonToAccount(): void {
+  try {
+    if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+    const anonId = getAnonId();
+    if (!anonId || !isPersonalisationEnabled()) return;
+    void fetch('/api/analytics/account-link', {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anon_id: anonId }),
+    }).catch(() => undefined);
+  } catch {
+    // A failed link must never affect sign-in.
+  }
+}
+
 export function trackEvent(event: AnalyticsEventName, options: TrackOptions = {}): void {
   try {
     if (typeof window === 'undefined' || typeof fetch !== 'function') return;

@@ -44,6 +44,25 @@ sink exists.
 The body is one event or an array of 1 to 50 events. One bad event rejects the array. Send
 impressions in arrays: the gateway allows 120 requests per minute per client.
 
+## Lead and sign-in events (#827)
+
+Each lead step (`lead_open`, `lead_start`, `lead_submit`, `lead_error`) and each sign-in step
+(`auth_identify_shown`, `auth_code_sent`, `auth_code_verified`, `auth_signup_done`, `auth_fail`)
+records one event per occurrence.
+
+`error_code` is a fixed list: `LEAD_ERROR_CODES` and `AUTH_ERROR_CODES` in
+`libs/property-contracts/src/analytics-event.ts`. Add a code there. No event carries an email, a
+phone number or a name.
+
+## Account link (#827)
+
+After a verified sign-in, the web app calls `POST /api/analytics/account-link`. The relay forwards
+it to `POST /property/analytics/account-link` with the session. The body holds `anon_id` only.
+
+Property service resolves the account from the session. It writes one row per account and anon id to
+`analytics_account_links`. A signed-out call writes nothing and answers 401. Account-service stores
+no part of the link. `Sec-GPC: 1` and `ANALYTICS_ENABLED=false` store nothing.
+
 ## Switch
 
 Set `ANALYTICS_ENABLED=false` on property-service or the web app. The route then stores nothing.

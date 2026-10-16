@@ -8,11 +8,13 @@ import {
   type ConsentChannel,
   CURRENT_CONSENT_TEXT_VERSION,
   type InquiryKind,
+  type LeadErrorCode,
 } from '@cribstop/property-contracts';
 import AuthForm from '@/components/AuthForm';
 import { BRAND } from '@/lib/brand';
 import { useApp } from '@/lib/context';
-import { InquiryError, submitInquiry } from '@/lib/api/inquiries';
+import { trackEvent } from '@/lib/analytics';
+import { InquiryError, leadFormType, submitInquiry } from '@/lib/api/inquiries';
 import { normalizeUsPhone } from '@/lib/phone';
 
 const MESSAGE_MAX = 2000;
@@ -124,6 +126,22 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   const showFormRef = useRef(showForm);
   showFormRef.current = showForm;
 
+  // Funnel events (#827). Each event carries a fixed code and the form type, never typed text.
+  // A ref survives a StrictMode remount, so `lead_open` and `lead_start` fire once.
+  const openedRef = useRef(false);
+  const startedRef = useRef(false);
+  const trackLead = (event: 'lead_open' | 'lead_start' | 'lead_error', errorCode?: LeadErrorCode) =>
+    trackEvent(event, {
+      surface: 'detail',
+      listingId,
+      props: { form_type: leadFormType(kind), ...(errorCode && { error_code: errorCode }) },
+    });
+  useEffect(() => {
+    if (openedRef.current) return;
+    openedRef.current = true;
+    trackLead('lead_open');
+  }, []);
+
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null;
     const root = document.documentElement;
@@ -164,6 +182,10 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
   }, []);
 
   function update(field: Field, value: string) {
+    if (!startedRef.current) {
+      startedRef.current = true;
+      trackLead('lead_start');
+    }
     setValues((prev) => ({ ...prev, [field]: value }));
   }
 
@@ -186,6 +208,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
     const found = validate();
     setErrors(found);
     if (Object.keys(found).length > 0) {
+      trackLead('lead_error', 'validation');
       const firstInvalid = (['phone', 'message'] as Field[]).find((f) => found[f]);
       if (firstInvalid)
         cardRef.current?.querySelector<HTMLElement>(`[name="${firstInvalid}"]`)?.focus();
@@ -220,6 +243,7 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
       requestAnimationFrame(() => doneRef.current?.focus());
     } catch (err) {
       const failure = err instanceof InquiryError ? err.failure : 'retryable';
+      trackLead('lead_error', failure === 'retryable' ? 'network' : failure);
       if (failure === 'unauthorized' && !autoRetryRef.current) {
         // The session ended. Sign in again, then send once more.
         setPhase({ status: 'editing' });

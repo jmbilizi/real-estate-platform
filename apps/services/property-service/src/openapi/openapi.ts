@@ -7,6 +7,7 @@ import {
   agentLeadStatusRequestSchema,
   agentLeadTransitionResponseSchema,
   agentProfileSchema,
+  analyticsAccountLinkRequestSchema,
   analyticsEventBatchSchema,
   analyticsEventRequestSchema,
   brokersRequestSchema,
@@ -129,6 +130,7 @@ function componentSchemas() {
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
   registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
+  registry.add(analyticsAccountLinkRequestSchema, { id: 'AnalyticsAccountLinkRequest' });
   registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
   registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -795,6 +797,36 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/analytics/account-link': {
+        post: {
+          operationId: 'linkAnalyticsAccount',
+          summary: 'Link the anonymous id to the signed-in account',
+          description:
+            'Requires a verified sign-in. The body holds the anonymous id and nothing else. The ' +
+            'service stores the account id and the anonymous id in its own table. With ' +
+            'Sec-GPC: 1 or ANALYTICS_ENABLED=false it stores nothing and still answers 204.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AnalyticsAccountLinkRequest' },
+              },
+            },
+          },
+          responses: {
+            '204': { description: 'The link is stored, or analytics is off.' },
+            '400': {
+              description: 'Unknown field or malformed anonymous id.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },

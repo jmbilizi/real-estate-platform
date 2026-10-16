@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import type { AuthErrorCode } from '@cribstop/property-contracts';
 import { useApp } from '@/lib/context';
 import {
   CodesUnavailableError,
@@ -37,12 +38,15 @@ export default function AuthSetPasswordStep({
   proof,
   onDone,
   onFailed,
+  onFunnelFail,
 }: {
   email: string;
   flow?: 'signup' | 'reset';
   proof: string;
   onDone: () => void;
   onFailed: (reason: SetPasswordFailure) => void;
+  /** Funnel hook (#827): the step failed in place, with a fixed code. */
+  onFunnelFail?: (code: AuthErrorCode) => void;
 }) {
   const reset = flow === 'reset';
   const unavailableCopy = reset
@@ -85,6 +89,7 @@ export default function AuthSetPasswordStep({
         return;
       }
       if (outcome.reason === 'password_rejected') {
+        onFunnelFail?.('password_rejected');
         setError(rejectionCopy(outcome.errors, policy));
         setPassword('');
         setConfirm('');
@@ -93,6 +98,13 @@ export default function AuthSetPasswordStep({
       }
       onFailed(outcome.reason);
     } catch (err) {
+      onFunnelFail?.(
+        err instanceof RateLimitError
+          ? 'rate_limited'
+          : err instanceof CodesUnavailableError
+            ? 'unavailable'
+            : 'network',
+      );
       if (err instanceof RateLimitError) {
         setError(`Too many tries. Try again in ${err.retryAfterSeconds} seconds.`);
       } else if (err instanceof CodesUnavailableError) {
