@@ -138,7 +138,7 @@ describe('common schemas', () => {
 });
 
 /**
- * The exported enum types are what `cribstop-next` types its filter controls and its
+ * The exported enum types are what `cribstop-web` types its filter controls and its
  * `source`-driven provenance condition against. A type-only export is invisible to a runtime
  * assertion, so each one is exercised here by assigning a value through it: if the type is dropped
  * or its union narrows, this file stops compiling under `nx type-check`, which is the signal.

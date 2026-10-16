@@ -1,6 +1,6 @@
 /**
  * Pulls `@testing-library/jest-dom`'s matcher augmentation into the program that
- * `pnpm exec nx type-check cribstop-next` compiles.
+ * `pnpm exec nx type-check cribstop-web` compiles.
  *
  * Jest itself never needed this — `jest.setup.ts` imports the package at runtime and
  * `tsconfig.spec.json` compiles the specs — but the `type-check` target runs `tsc` against

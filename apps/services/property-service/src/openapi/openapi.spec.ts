@@ -14,7 +14,7 @@ describe('toOpenApiDocument', () => {
   const doc: any = toOpenApiDocument();
 
   // `<Domain> Service`, the shape every other aggregated document already uses (`Account
-  // Service`, `Inference Service`). Not named for a client — `cribstop-next` is one consumer of
+  // Service`, `Inference Service`). Not named for a client — `cribstop-web` is one consumer of
   // this document, not its owner — and not named for a resource: property-service owns the whole
   // Communities → Properties → Units → Listings hierarchy, so `listings` is one resource within
   // it (the same inversion #47 made when `libs/listing-contracts` became
