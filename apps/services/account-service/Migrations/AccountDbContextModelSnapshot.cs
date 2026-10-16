@@ -196,7 +196,7 @@ namespace AccountService.Migrations
                     b.Property<bool>("EmailNotificationsEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true);
+                        .HasDefaultValue(false);
 
                     b.Property<string>("FirstName")
                         .IsRequired()
