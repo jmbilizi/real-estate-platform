@@ -5,6 +5,8 @@ import { useAppDispatch } from '@/lib/store/hooks';
 import { dismissOnboarding, updateProfile } from '@/lib/store/slices/authSlice';
 import { updateProfile as updateProfileApi } from '@/lib/api/account';
 import { addToast } from '@/lib/store/slices/toastSlice';
+import { type ConsentWording, optInToEmail } from '@/lib/api/notification-preferences';
+import EmailConsentNotice, { useConsentWording } from './EmailConsentNotice';
 import Modal from './Modal';
 
 const STEPS = [
@@ -27,9 +29,10 @@ export default function OnboardingModal({ open }: { open: boolean }) {
   const [stepIdx, setStepIdx] = useState(0);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(false);
   const [pushNotifications, setPushNotifications] = useState(true);
   const [saving, setSaving] = useState(false);
+  const { wording, failed: wordingFailed } = useConsentWording(emailNotifications);
 
   const step = STEPS[stepIdx];
   const isLast = stepIdx === STEPS.length - 1;
@@ -57,8 +60,13 @@ export default function OnboardingModal({ open }: { open: boolean }) {
           updateProfile({ firstName: firstName.trim(), lastName: lastName.trim(), displayName }),
         );
       } else if (step.id === 'preferences') {
+        // An email opt-in records the wording the user saw. Email off stays a plain update.
+        if (emailNotifications) {
+          if (!wording) throw new Error('Wait for the email consent wording to load');
+          await optInToEmail(wording.id);
+        }
         await updateProfileApi({
-          emailNotificationsEnabled: emailNotifications,
+          emailNotificationsEnabled: emailNotifications ? undefined : false,
           pushNotificationsEnabled: pushNotifications,
         });
       }
@@ -124,6 +132,8 @@ export default function OnboardingModal({ open }: { open: boolean }) {
           {step.id === 'preferences' && (
             <PreferencesStep
               emailNotifications={emailNotifications}
+              wording={wording}
+              wordingFailed={wordingFailed}
               pushNotifications={pushNotifications}
               onEmailChange={setEmailNotifications}
               onPushChange={setPushNotifications}
@@ -210,11 +220,15 @@ function NameStep({
 
 function PreferencesStep({
   emailNotifications,
+  wording,
+  wordingFailed,
   pushNotifications,
   onEmailChange,
   onPushChange,
 }: {
   emailNotifications: boolean;
+  wording: ConsentWording | null;
+  wordingFailed: boolean;
   pushNotifications: boolean;
   onEmailChange: (v: boolean) => void;
   onPushChange: (v: boolean) => void;
@@ -224,10 +238,11 @@ function PreferencesStep({
       <ToggleRow
         emoji="📧"
         label="Email updates"
-        description="New listings matching your searches"
+        description="Email with new listings matching your searches. Turn this off in your account at any time."
         checked={emailNotifications}
         onChange={onEmailChange}
       />
+      {emailNotifications && <EmailConsentNotice wording={wording} failed={wordingFailed} />}
       <ToggleRow
         emoji="🔔"
         label="Push notifications"

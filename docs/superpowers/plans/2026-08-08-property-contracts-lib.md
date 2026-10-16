@@ -5,7 +5,7 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship one Zod-defined listings wire contract as an Nx library, consumed by
-`property-service` and `cribstop-next`, with the build wiring that keeps both images honest.
+`property-service` and `cribstop-web`, with the build wiring that keeps both images honest.
 
 **Architecture:** A `@nx/js` library holds the request and response schemas. Runtime validation, the
 TypeScript types the web app imports, and the OpenAPI document all derive from those same schemas —
@@ -1199,7 +1199,7 @@ This is the acceptance test for the whole runtime decision. It is type-only: it 
  * Type-only conformance assertions against @cribstop/property-contracts.
  *
  * This file exists so that renaming, adding or removing a contract field FAILS
- * `pnpm exec nx type-check cribstop-next` instead of silently shipping a card that stopped
+ * `pnpm exec nx type-check cribstop-web` instead of silently shipping a card that stopped
  * rendering an attribution field. It emits no runtime code and deliberately touches no component —
  * reconciling the rendering code with this contract is #24.
  */
@@ -1283,7 +1283,7 @@ export type _NoDescriptionOnCard = Expect<
 - [ ] **Step 3: Verify both consumers type-check**
 
 ```bash
-pnpm exec nx type-check cribstop-next
+pnpm exec nx type-check cribstop-web
 pnpm exec nx type-check property-service
 ```
 
@@ -1295,7 +1295,7 @@ Temporarily rename `officeBrokerLeadEmail` to `officeBrokerLeadEmailX` in
 `libs/property-contracts/src/common.ts`, then:
 
 ```bash
-pnpm exec nx type-check cribstop-next
+pnpm exec nx type-check cribstop-web
 ```
 
 Expected: **FAIL**, naming the field. **Capture this output — it goes in the PR body.** Then revert
@@ -1395,7 +1395,7 @@ Commit first (the tool diffs against `origin/dev`), touching only the library:
 git add apps/services/property-service/Dockerfile apps/clients/cribstop/next/Dockerfile skaffold.yaml
 git commit -m "#47 build(contracts): declare the library in both Dockerfiles and skaffold"
 node tools/ci/affected-images.js --base=origin/dev \
-  --projects="property-service cribstop-next" --explain
+  --projects="property-service cribstop-web" --explain
 ```
 
 Expected on **stderr**: `rebuilding (libs/property-contracts/… is an input to …)` for **both**

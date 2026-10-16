@@ -258,7 +258,7 @@ export function toOpenApiDocument() {
     openapi: '3.0.3',
     info: {
       // `<Domain> Service`, matching every other entry the gateway aggregates (`Account Service`,
-      // `Inference Service`). Deliberately NOT named for a client: `cribstop-next` is one consumer
+      // `Inference Service`). Deliberately NOT named for a client: `cribstop-web` is one consumer
       // of this document, not its owner, and a document named for one client is wrong the moment a
       // second one (an agent tool, a partner feed) reads it. Deliberately not "Listings API"
       // either: property-service owns the whole Communities → Properties → Units → Listings

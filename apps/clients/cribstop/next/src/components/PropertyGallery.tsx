@@ -144,8 +144,10 @@ function PhotoViewer({
   onIndex,
   onClose,
   actions,
+  altFallback,
 }: {
   media: GalleryPhoto[];
+  altFallback?: string;
   tour: GalleryTour | null;
   tourSlide: number;
   index: number;
@@ -220,6 +222,7 @@ function PhotoViewer({
         ) : (
           <ListingImage
             media={photo}
+            fallbackAlt={altFallback}
             className="max-h-full max-w-full rounded-xl object-contain"
             backdrop={false}
           />
@@ -375,9 +378,12 @@ export default function PropertyGallery({
   media,
   tourUrl,
   viewerActions,
+  altFallback,
   children,
 }: {
   media: GalleryPhoto[];
+  /** Alt for a photo with none. Built from facts, never the street. */
+  altFallback?: string;
   /** The unbranded virtual tour URL. The "3D tour" entry shows only when it passes `resolveTourEntry`. */
   tourUrl?: string | null;
   /** Buttons for the full-screen viewer's top bar, for example Share and Save. */
@@ -501,6 +507,7 @@ export default function PropertyGallery({
       onIndex={setActiveIdx}
       onClose={() => setOpen(false)}
       actions={viewerActions}
+      altFallback={altFallback}
     />
   ) : null;
 
@@ -565,6 +572,8 @@ export default function PropertyGallery({
                 >
                   <ListingImage
                     media={media[photoOfSlide(slide)]}
+                    priority={slide === 0}
+                    fallbackAlt={altFallback}
                     className="h-full w-full object-contain"
                   />
                 </button>
@@ -594,7 +603,12 @@ export default function PropertyGallery({
             aria-label="View primary photo"
             className="relative col-span-2 row-span-2 overflow-hidden bg-surface-soft transition hover:brightness-95"
           >
-            <ListingImage media={media[0]} className="h-full w-full object-contain" />
+            <ListingImage
+              media={media[0]}
+              priority
+              fallbackAlt={altFallback}
+              className="h-full w-full object-contain"
+            />
           </button>
           {tourTile}
           {tileIndices.slice(tourTile ? 2 : 1).map((mediaIdx, tileIdx) => (
@@ -608,7 +622,11 @@ export default function PropertyGallery({
               aria-label={`View photo ${mediaIdx + 1} of ${media.length}`}
               className="relative overflow-hidden bg-surface-soft transition hover:brightness-95"
             >
-              <ListingImage media={media[mediaIdx]} className="h-full w-full object-contain" />
+              <ListingImage
+                media={media[mediaIdx]}
+                fallbackAlt={altFallback}
+                className="h-full w-full object-contain"
+              />
             </button>
           ))}
           <button

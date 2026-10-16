@@ -1307,6 +1307,7 @@ export default function SearchExperience({
                       <ListingCard
                         listing={l}
                         track={{ listType: 'grid', rowId: 'search', position: i }}
+                        priority={i === 0}
                       />
                     </div>
                   ))}

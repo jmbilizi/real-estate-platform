@@ -187,6 +187,23 @@ export function formatCardAddress(listing: {
   return `${listing.address}, ${city}, ${listing.state} ${listing.zip}`;
 }
 
+/**
+ * The alt text for a photo that has none: "Photo of a 3 bed home in Frederick". Built from facts
+ * the row already publishes. It never carries the street, so a masked address stays masked.
+ */
+export function listingPhotoAlt(listing: {
+  beds: number | null;
+  propertyType: string;
+  city: string;
+}): string {
+  const city = titleCasePlace(listing.city);
+  if (listing.propertyType === 'Land') return `Land in ${city}`;
+  const kind = listing.propertyType === 'Condo' ? 'condo' : 'home';
+  return !listing.beds
+    ? `Photo of a ${kind} in ${city}`
+    : `Photo of a ${listing.beds} bed ${kind} in ${city}`;
+}
+
 /** True only when a row has both coordinates, which is the only case that may produce a map pin. */
 export function hasMapCoordinates(listing: {
   latitude: number | null;

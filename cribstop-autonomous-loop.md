@@ -153,8 +153,8 @@ Spawn a sub-agent with this exact intent:
 >
 > 1. The implemented change in the appropriate project (edit real files, do not scaffold throwaway
 >    demos).
-> 2. Verify it with the correct project scripts: `pnpm exec nx lint cribstop-next`,
->    `pnpm exec nx type-check cribstop-next`, `pnpm exec nx test cribstop-next`. Then run
+> 2. Verify it with the correct project scripts: `pnpm exec nx lint cribstop-web`,
+>    `pnpm exec nx type-check cribstop-web`, `pnpm exec nx test cribstop-web`. Then run
 >    `pnpm run nx:workspace-format` (a formatter, not a check) so that
 >    `pnpm run nx:workspace-format-check` passes downstream. Every check must pass.
 > 3. Write `outputs/product-change.md` describing: what changed, which files, why it matters to
@@ -274,8 +274,8 @@ Spawn a sub-agent with this exact intent:
 > INPUTS: everything in `outputs/` plus the actual repo changes.
 >
 > TASK 1 — QUALITY GATE Run the repo's own checks against the changed projects using ONLY project
-> scripts (e.g. `pnpm exec nx lint cribstop-next`, `pnpm exec nx type-check cribstop-next`,
-> `pnpm exec nx test cribstop-next`, `pnpm run nx:workspace-format-check`). Test changed projects
+> scripts (e.g. `pnpm exec nx lint cribstop-web`, `pnpm exec nx type-check cribstop-web`,
+> `pnpm exec nx test cribstop-web`, `pnpm run nx:workspace-format-check`). Test changed projects
 > directly by name — `nx affected` needs a committed base and can miss uncommitted work. Record
 > every command and its result.
 >

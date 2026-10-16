@@ -841,6 +841,10 @@ describe('ListingCard', () => {
   });
 
   describe('the Coming Soon status badge (#424, #438)', () => {
+    // The badge drops a past date, so pin the clock before the Oct 15 fixtures.
+    beforeEach(() => jest.useFakeTimers().setSystemTime(new Date('2026-10-10T12:00:00.000Z')));
+    afterEach(() => jest.useRealTimers());
+
     // Both the full and short forms render together — a container query on `.listing-card-root`
     // (`.listing-card-coming-soon-full`/`-short` in globals.css), not a JS conditional or a
     // viewport breakpoint, decides which one is visible at a given CARD width, and jsdom does

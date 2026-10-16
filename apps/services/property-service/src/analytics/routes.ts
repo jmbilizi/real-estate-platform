@@ -10,6 +10,7 @@ import type { ReadClient } from '../listings/repository';
 import { createAccountLinkRouter } from './account-link';
 import { type AnalyticsSink, createSinks, fanOut } from './sink';
 import { startPopularityRefreshTimer } from './popularity';
+import { startReachRefreshTimer } from './reach';
 
 /**
  * `POST /analytics/events` (#725, #824). Cookieless event counting.
@@ -113,6 +114,7 @@ export function createAnalyticsRouter(deps: AnalyticsRouterDeps): Router {
       createAccountLinkRouter({ pool: deps.pool, introspection: deps.introspection, enabled }),
     );
   }
+  startReachRefreshTimer();
 
   router.post('/analytics/events', (req: Request, res: Response, next: NextFunction): void => {
     res.set('Cache-Control', 'no-store');

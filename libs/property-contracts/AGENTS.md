@@ -13,7 +13,7 @@ it wrong here costs five times, not once.
 One schema definition with two projections derived from it:
 
 1. **Runtime validation** — the exact parsing `property-service` applies to a request.
-2. **TypeScript types** — the exact types `cribstop-next` renders against.
+2. **TypeScript types** — the exact types `cribstop-web` renders against.
 
 `property-service` derives the OpenAPI document from these schemas in `src/openapi/` (#63).
 
@@ -71,7 +71,7 @@ anything else.
 anywhere else.** Resolution is pnpm `workspace:*` (declare
 `"@cribstop/property-contracts": "workspace:*"` in a consumer's `package.json`) plus TypeScript
 project references. A `paths` alias resolves for `tsc` and then fails at webpack bundle time in
-`cribstop-next` — it is a trap that looks like it works until a real build is attempted. The
+`cribstop-web` — it is a trap that looks like it works until a real build is attempted. The
 `@nx/js:lib` generator writes a `paths` entry into the root `tsconfig.json` on every run; delete it,
 don't build on it.
 
