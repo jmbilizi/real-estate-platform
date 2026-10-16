@@ -33,6 +33,7 @@ import {
   formatLotSize,
   formatOpenHouse,
   formatStreetAddress,
+  listingPhotoAlt,
   officeInitial,
 } from '@/lib/listing-format';
 import { copyToClipboard } from '@/lib/clipboard';
@@ -347,6 +348,7 @@ export default function ListingDetailContent({
             media={listing.media}
             tourUrl={listing.virtualTourUrl}
             viewerActions={shareSaveButtons}
+            altFallback={listingPhotoAlt(listing)}
           >
             <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
           </PropertyGallery>

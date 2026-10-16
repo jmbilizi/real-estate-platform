@@ -24,6 +24,7 @@ import {
   formatOpenHouseBadge,
   formatOpenHouseDate,
   formatOpenHouseTimeAndDate,
+  listingPhotoAlt,
   officeAvatarTone,
   officeInitial,
 } from '@/lib/listing-format';
@@ -41,9 +42,12 @@ import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges'
 export default function ListingCard({
   listing,
   track,
+  priority = false,
 }: {
   listing: ListingCardRow;
   track?: CardTrack;
+  /** True for the first card on screen, the likely LCP image. */
+  priority?: boolean;
 }) {
   const { impressionRef, reportClick } = useCardTracking(listing.id, track);
   const { toggleSave, isSaved } = useApp();
@@ -214,6 +218,8 @@ export default function ListingCard({
       <div className="listing-card-media relative aspect-[4/3] overflow-hidden rounded-md bg-surface-soft">
         <ListingImage
           media={listing.primaryMedia}
+          priority={priority}
+          fallbackAlt={listingPhotoAlt(listing)}
           className={`h-full w-full object-contain ${isSold ? 'opacity-75 saturate-50' : ''}`}
         />
 
