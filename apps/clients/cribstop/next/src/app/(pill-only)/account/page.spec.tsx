@@ -42,7 +42,7 @@ async function startEditing(emailOn: boolean) {
   render(<AccountPage />);
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
   await screen.findByRole('button', { name: 'Save changes' });
-  return screen.getAllByRole('switch')[0];
+  return screen.getByRole('switch', { name: /^Email notifications/ });
 }
 
 describe('account page email consent', () => {
