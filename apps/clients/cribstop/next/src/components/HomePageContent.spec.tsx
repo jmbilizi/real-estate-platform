@@ -39,6 +39,15 @@ jest.mock('@/lib/context', () => ({
 // react-redux Provider absent from these tests. Same reasoning as the context mock above.
 jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
 
+// #868. The page mounts about 60 row-skeleton cards, roughly 30 nodes each, on first paint. That
+// render made each test take about 1 s alone and time out on a loaded runner. This file tests
+// the rows, not the card placeholder, so a one-node stand-in keeps the `data-skeleton-card`
+// marker and drops the cost. ListingStates owns the placeholder markup.
+jest.mock('@/components/listing/ListingStates', () => ({
+  ...jest.requireActual('@/components/listing/ListingStates'),
+  ListingCardSkeleton: () => <div aria-hidden="true" data-skeleton-card />,
+}));
+
 const mockedSearchListings = searchListings as jest.Mock;
 const mockedGetListingsMeta = getListingsMeta as jest.Mock;
 const mockedGetNeighborhoods = getNeighborhoods as jest.Mock;

@@ -3,6 +3,9 @@ export default {
   preset: '../../../../jest.preset.js',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  // #868. Safety margin for the parallel run. Do not raise it above 10 s. A slow spec needs a
+  // cheaper render, not a longer limit.
+  testTimeout: 10000,
   transform: {
     '^.+\\.[tj]sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
