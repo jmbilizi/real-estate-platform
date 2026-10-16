@@ -224,7 +224,8 @@ describe('formatOpenHouseWhen', () => {
 
 describe('formatComingSoonBadge (#424)', () => {
   it('formats the active date as "MMM d", never a numeric date', () => {
-    expect(formatComingSoonBadge('2026-10-15T00:00:00.000Z')).toBe('Coming soon Oct 15');
+    const now = new Date('2026-10-10T12:00:00.000Z');
+    expect(formatComingSoonBadge('2026-10-15T00:00:00.000Z', now)).toBe('Coming soon Oct 15');
   });
 
   it('shows "Coming soon" only, with no date fallback, when the date is null', () => {
@@ -244,7 +245,8 @@ describe('formatComingSoonBadge (#424)', () => {
 
 describe('formatComingSoonBadgeShort (#424)', () => {
   it('formats the active date as "Soon · MMM d", never a numeric date', () => {
-    expect(formatComingSoonBadgeShort('2026-10-15T00:00:00.000Z')).toBe('Soon · Oct 15');
+    const now = new Date('2026-10-10T12:00:00.000Z');
+    expect(formatComingSoonBadgeShort('2026-10-15T00:00:00.000Z', now)).toBe('Soon · Oct 15');
   });
 
   it('shows "Coming soon" only, with no date fallback, when the date is null', () => {
