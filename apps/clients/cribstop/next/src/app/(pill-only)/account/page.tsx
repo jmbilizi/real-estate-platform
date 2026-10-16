@@ -10,6 +10,8 @@ import { updateProfile } from '@/lib/store/slices/authSlice';
 import { addToast } from '@/lib/store/slices/toastSlice';
 import { selectUser } from '@/lib/store/selectors';
 import AccountSecuritySection from '@/components/AccountSecuritySection';
+import EmailConsentNotice, { useConsentWording } from '@/components/EmailConsentNotice';
+import { optInToEmail } from '@/lib/api/notification-preferences';
 import LookingForSection from '@/components/LookingForSection';
 import PersonaliseSwitch from '@/components/PersonaliseSwitch';
 
@@ -184,6 +186,9 @@ function ProfileSection() {
   const [emailNotifications, setEmailNotifications] = useState(
     user?.emailNotificationsEnabled ?? false,
   );
+  const [emailWasOn, setEmailWasOn] = useState(user?.emailNotificationsEnabled ?? false);
+  const turningEmailOn = editing && emailNotifications && !emailWasOn;
+  const { wording, failed: wordingFailed } = useConsentWording(turningEmailOn);
   const [pushNotifications, setPushNotifications] = useState(
     user?.pushNotificationsEnabled ?? true,
   );
@@ -196,6 +201,7 @@ function ProfileSection() {
     setBio(p.bio || '');
     setDateOfBirth(p.dateOfBirth || '');
     setEmailNotifications(p.emailNotificationsEnabled ?? false);
+    setEmailWasOn(p.emailNotificationsEnabled ?? false);
     setPushNotifications(p.pushNotificationsEnabled ?? true);
     setSmsNotifications(p.smsNotificationsEnabled ?? false);
     setMarketingOptIn(p.marketingOptIn ?? false);
@@ -213,8 +219,23 @@ function ProfileSection() {
   };
 
   const handleSave = async () => {
+    if (turningEmailOn && !wording) {
+      dispatch(
+        addToast({
+          id: `consent-err-${Date.now()}`,
+          message: 'Wait for the email consent wording to load, then save again',
+          type: 'error',
+          duration: 4000,
+        }),
+      );
+      return;
+    }
     setSaving(true);
     try {
+      // An opt-in records the wording the user saw. An opt-out stays a plain profile update.
+      if (turningEmailOn && wording) {
+        await optInToEmail(wording.id);
+      }
       const displayName =
         [firstName.trim(), lastName.trim()].filter(Boolean).join(' ') || undefined;
       await updateProfileApi({
@@ -223,7 +244,7 @@ function ProfileSection() {
         displayName,
         bio: bio.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
-        emailNotificationsEnabled: emailNotifications,
+        emailNotificationsEnabled: emailNotifications ? undefined : false,
         smsNotificationsEnabled: smsNotifications,
         pushNotificationsEnabled: pushNotifications,
         marketingOptIn,
@@ -246,6 +267,7 @@ function ProfileSection() {
           duration: 3000,
         }),
       );
+      setEmailWasOn(emailNotifications);
       setEditing(false);
     } catch (err) {
       dispatch(
@@ -268,6 +290,7 @@ function ProfileSection() {
     setBio(user?.bio || '');
     setDateOfBirth(user?.dateOfBirth || '');
     setEmailNotifications(user?.emailNotificationsEnabled ?? false);
+    setEmailWasOn(user?.emailNotificationsEnabled ?? false);
     setPushNotifications(user?.pushNotificationsEnabled ?? true);
     setSmsNotifications(user?.smsNotificationsEnabled ?? false);
     setMarketingOptIn(user?.marketingOptIn ?? false);
@@ -356,6 +379,7 @@ function ProfileSection() {
               onChange={setEmailNotifications}
               disabled={!editing}
             />
+            {turningEmailOn && <EmailConsentNotice wording={wording} failed={wordingFailed} />}
             <ToggleField
               label="Push notifications"
               description="Real-time alerts on your device"
