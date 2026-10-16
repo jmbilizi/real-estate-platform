@@ -37,12 +37,25 @@ export const UI_CLICK_ELEMENT_IDS = [
 
 export const DWELL_BUCKETS = ['0-5', '5-30', '30-120', '120+'] as const;
 
+/** Acquisition channels derived from utm and referrer parameters (#830). */
+export const ACQUISITION_CHANNELS = [
+  'direct',
+  'organic_search',
+  'paid',
+  'email',
+  'social',
+  'referral',
+  'ai_assistant',
+] as const;
+export type AcquisitionChannel = (typeof ACQUISITION_CHANNELS)[number];
+
 const key = z.string().regex(/^[A-Za-z0-9_.:-]{1,60}$/);
 const count = z.number().int().min(0).max(1_000_000);
 const flag = z.boolean();
 const pathTemplate = z.string().regex(/^\/[A-Za-z0-9_\-/[\].]{0,119}$/);
 const hostName = z.string().regex(/^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$/);
 const utmValue = z.string().regex(/^[a-z0-9_.-]{1,64}$/);
+const channel = z.enum(ACQUISITION_CHANNELS);
 /** `home:{rowId}:{position}`, set on a listing URL that a home-feed card opens. */
 const feedSource = z.string().regex(/^home:[A-Za-z0-9_.-]{1,40}:\d{1,3}$/);
 
@@ -138,7 +151,11 @@ export const EVENT_PROPS = {
   // Legacy #725 events keep their shape.
   listing_view: { ...listing },
   page_view: { title_key: key.optional() },
-  session_start: { landing_path: pathTemplate.optional(), is_new_anon: flag.optional() },
+  session_start: {
+    landing_path: pathTemplate.optional(),
+    is_new_anon: flag.optional(),
+    channel: channel.optional(),
+  },
   listing_impression: {
     ...listing,
     row_id: key.optional(),

@@ -634,6 +634,18 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "pattern": "^[A-Za-z0-9._+-]{1,32}$",
                 "type": "string",
               },
+              "channel": {
+                "enum": [
+                  "direct",
+                  "organic_search",
+                  "paid",
+                  "email",
+                  "social",
+                  "referral",
+                  "ai_assistant",
+                ],
+                "type": "string",
+              },
               "device": {
                 "enum": [
                   "mobile",
