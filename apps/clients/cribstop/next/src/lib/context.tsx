@@ -47,6 +47,12 @@ import {
 } from '@/lib/query/saved-homes';
 import { useToggleSaved } from '@/lib/query/useToggleSaved';
 import { syncSavedHomes } from '@/lib/saved-sync';
+import {
+  accountMarker,
+  SAVED_CHANNEL,
+  type SavedTabSync,
+  startSavedTabSync,
+} from '@/lib/query/saved-tab-sync';
 import { trackEvent } from '@/lib/analytics';
 import { recordFeedItem } from '@/lib/feed-profile';
 import { addToast } from '@/lib/store/slices/toastSlice';
@@ -124,6 +130,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <Provider store={store}>
       <SessionVerifier />
       <AccountQuerySync />
+      <SavedHomesTabSync />
       {children}
     </Provider>
   );
@@ -154,6 +161,48 @@ function AccountQuerySync() {
         dispatch(logout());
       }),
     [queryClient, dispatch],
+  );
+
+  return null;
+}
+
+/** Syncs saved homes with the other tabs of the signed-in user. Effects only, so SSR is safe. */
+function SavedHomesTabSync() {
+  const queryClient = useQueryClient();
+  const email = useAppSelector(selectUser)?.email ?? null;
+  const sync = useRef<SavedTabSync | null>(null);
+
+  useEffect(() => {
+    // The user changed. Tell the old user's other tabs only on a sign-out, then stop.
+    if (sync.current) {
+      if (!email) sync.current.announceLogout();
+      sync.current.stop();
+      sync.current = null;
+    }
+    if (!email) return;
+    let cancelled = false;
+    void accountMarker(email).then((marker) => {
+      if (cancelled || !marker) return;
+      sync.current = startSavedTabSync({
+        client: queryClient,
+        marker,
+        channel:
+          typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(SAVED_CHANNEL),
+        win: window,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [email, queryClient]);
+
+  // An unmount is not a sign-out. Stop without a logout message.
+  useEffect(
+    () => () => {
+      sync.current?.stop();
+      sync.current = null;
+    },
+    [],
   );
 
   return null;
