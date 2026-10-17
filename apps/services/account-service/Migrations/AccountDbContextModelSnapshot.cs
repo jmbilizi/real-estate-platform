@@ -204,12 +204,6 @@ namespace AccountService.Migrations
                         .HasColumnType("text")
                         .HasDefaultValue("");
 
-                    b.Property<List<string>>("Intents")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text[]")
-                        .HasDefaultValueSql("ARRAY[]::text[]");
-
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 

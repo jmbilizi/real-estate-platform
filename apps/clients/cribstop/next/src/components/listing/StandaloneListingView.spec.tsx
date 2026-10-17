@@ -1,4 +1,5 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import { renderWithClient as render } from '@/test/renderWithClient';
 import { aListingDetail } from '@/test/fixtures';
 import { toListingDetailView } from '@/lib/api/listings';
 import StandaloneListingView from './StandaloneListingView';

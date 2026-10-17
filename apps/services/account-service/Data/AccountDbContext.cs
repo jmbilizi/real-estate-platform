@@ -129,13 +129,6 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(u => u.SmsNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.PushNotificationsEnabled).HasDefaultValue(true);
             entity.Property(u => u.MarketingOptIn).HasDefaultValue(false);
-
-            // Onboarding intents (PRD §4.4) — Npgsql maps List<string> to a native text[] column.
-            // Fixed vocabulary (see OnboardingIntents) is validated at the API boundary, not via a
-            // DB CHECK constraint, to keep the migration simple.
-            entity.Property(u => u.Intents)
-                .HasColumnType("text[]")
-                .HasDefaultValueSql("ARRAY[]::text[]");
         });
 
         builder.Entity<AccountStatus>(entity =>
@@ -221,7 +214,7 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             // one; it is redundant there too, and is not copied forward.
 
             // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
-            // with a DB CHECK constraint — same approach as the onboarding intents above.
+            // with a DB CHECK constraint — same approach as other API-validated vocabularies.
         });
 
         // No FK to AspNetUsers, so the consent record outlives the account. The key leads with AccountId.
