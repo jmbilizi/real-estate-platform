@@ -197,8 +197,22 @@ runs:
         while read -r secret key envvar mode; do
           [ -n "$key" ] || continue
           env_value="${!envvar:-}"
-          # A missing Secret is normal on a new cluster. `|| true` keeps set -e quiet.
-          live=$(kubectl get secret "$secret" -o "jsonpath={.data.${key}}" 2>/dev/null | base64 -d 2>/dev/null || true)
+          # A missing Secret is normal on a new cluster. Any other read failure must stop the
+          # deploy: treating it as missing would replace live keys.
+          err_file=$(mktemp)
+          if raw=$(kubectl get secret "$secret" -o "jsonpath={.data.${key}}" 2>"$err_file"); then
+            live=""
+            if [ -n "$raw" ]; then
+              live=$(printf '%s' "$raw" | base64 -d)
+            fi
+          elif grep -q "NotFound" "$err_file"; then
+            live=""
+          else
+            echo "::error::Cannot read Secret $secret: $(cat "$err_file")"
+            rm -f "$err_file"
+            exit 1
+          fi
+          rm -f "$err_file"
           [ -z "$live" ] || echo "::add-mask::$live"
           [ -z "$env_value" ] || echo "::add-mask::$env_value"
 
@@ -219,7 +233,7 @@ runs:
             reason="kept"
             value="$live"
           elif ! is_missing "$env_value"; then
-            reason="generated"
+            reason="from env"
             value="$env_value"
           else
             reason="generated"
