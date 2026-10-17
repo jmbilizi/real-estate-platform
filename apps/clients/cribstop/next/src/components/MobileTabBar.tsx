@@ -1,21 +1,23 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Heart, Home, User, Users, Wrench } from 'lucide-react';
+import { Heart, Home, Settings, Users, Wrench } from 'lucide-react';
+import SettingsSheet from './SettingsSheet';
 
 /**
- * The phone tab bar (#923). Every href is an existing route. A tab for a page the app does not
- * have (Inbox, Updates) is not added.
+/**
+ * The phone tab bar (#923). Every link tab points at an existing route. A tab for a page the app
+ * does not have (Inbox, Updates) is not added. Account lives in the top bar (#943), so the last
+ * tab is Settings. It has no route: it opens the Settings sheet.
  */
 export const MOBILE_TABS = [
   { id: 'homes', label: 'Homes', href: '/', icon: Home },
   { id: 'services', label: 'Services', href: '/services', icon: Wrench },
   { id: 'connect', label: 'Connect', href: '/connect', icon: Users },
   { id: 'saved', label: 'Saved', href: '/favorites', icon: Heart },
-  // `/account` shows its own sign-in prompt when signed out, so one link serves both states and
-  // the bar renders the same before and after hydration.
-  { id: 'account', label: 'Account', href: '/account', icon: User },
+  { id: 'settings', label: 'Settings', href: null, icon: Settings },
 ] as const;
 
 /** Routes that draw their own sticky bottom action bar. The tab bar would stack on it. */
@@ -37,7 +39,7 @@ function isActive(id: (typeof MOBILE_TABS)[number]['id'], pathname: string): boo
     case 'saved':
       return pathname.startsWith('/favorites');
     default:
-      return pathname.startsWith('/account');
+      return false;
   }
 }
 
@@ -48,6 +50,7 @@ function isActive(id: (typeof MOBILE_TABS)[number]['id'], pathname: string): boo
  */
 export default function MobileTabBar() {
   const pathname = usePathname();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   if (HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
   return (
@@ -61,29 +64,50 @@ export default function MobileTabBar() {
       <nav
         aria-label="Primary"
         data-testid="mobile-tab-bar"
-        className="fixed inset-x-0 bottom-0 z-chrome border-t border-surface-border bg-white/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden"
+        className="mobile-tab-bar fixed inset-x-0 bottom-0 z-chrome border-t border-surface-border bg-white/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden"
       >
         <ul className="grid h-14 grid-cols-5">
           {MOBILE_TABS.map((tab) => {
-            const active = isActive(tab.id, pathname);
+            const active = tab.id === 'settings' ? settingsOpen : isActive(tab.id, pathname);
             const Icon = tab.icon;
+            const label = (
+              <>
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-5 top-0 h-0.5 rounded-b-full bg-brand"
+                  />
+                )}
+                <Icon className="h-6 w-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
+                <span className="truncate">{tab.label}</span>
+              </>
+            );
+            const cls = `relative flex h-full min-h-11 w-full touch-manipulation flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors active:bg-surface-alt ${
+              active ? 'text-brand' : 'text-ink-muted'
+            }`;
             return (
               <li key={tab.id} className="min-w-0">
-                <Link
-                  href={tab.href}
-                  aria-current={active ? 'page' : undefined}
-                  className={`flex h-full min-h-11 touch-manipulation flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors active:bg-surface-alt ${
-                    active ? 'text-brand' : 'text-ink-muted'
-                  }`}
-                >
-                  <Icon className="h-6 w-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
-                  <span className="truncate">{tab.label}</span>
-                </Link>
+                {tab.href === null ? (
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-expanded={settingsOpen}
+                    onClick={() => setSettingsOpen(true)}
+                    className={cls}
+                  >
+                    {label}
+                  </button>
+                ) : (
+                  <Link href={tab.href} aria-current={active ? 'page' : undefined} className={cls}>
+                    {label}
+                  </Link>
+                )}
               </li>
             );
           })}
         </ul>
       </nav>
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

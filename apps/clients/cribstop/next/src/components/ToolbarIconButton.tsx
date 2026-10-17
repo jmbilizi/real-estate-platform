@@ -214,7 +214,7 @@ export const SURFACE_CLASSES = {
 } as const;
 
 /** The round, gray, borderless look of a navbar control. A link uses it where a button does not fit. */
-export const NAV_BUTTON_CLASSES = `${SURFACE_CLASSES.nav} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 max-md:h-10 max-md:w-10`;
+export const NAV_BUTTON_CLASSES = `${SURFACE_CLASSES.nav} inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1`;
 
 /** The one round icon-only toolbar button: list toolbar and map (#748, #758). A transparent fill and a light border, on every surface. */
 export default function ToolbarIconButton({
@@ -245,7 +245,7 @@ export default function ToolbarIconButton({
       aria-label={label}
       title={tooltip ?? label}
       aria-pressed={pressed}
-      className={`${position} inline-flex ${SIZE_CLASSES[size]} shrink-0 cursor-pointer items-center justify-center rounded-full border ${surface === 'nav' ? 'border-transparent max-md:h-10 max-md:w-10' : 'border-gray-300'} ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
+      className={`${position} inline-flex ${SIZE_CLASSES[size]} shrink-0 cursor-pointer items-center justify-center rounded-full border ${surface === 'nav' ? 'border-transparent' : 'border-gray-300'} ${SURFACE_CLASSES[surface]} disabled:cursor-not-allowed transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
         dark || surface === 'nav' ? 'text-ink' : 'text-ink-muted'
       } ${className}`}
       {...rest}

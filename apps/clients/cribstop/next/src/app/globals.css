@@ -39,6 +39,19 @@
   --skeleton-tint: rgba(167, 139, 250, 0.14);
   /* Sticky navbar height — kept in sync with the h-16 + 1px border in NavBar.tsx */
   --navbar-h: 65px;
+  /* The phone tab bar's height plus the home-indicator inset (MobileTabBar.tsx). Zero from md up.
+     A fixed or sticky bottom action sits at bottom: var(--tab-bar-h) so the bar never covers it. */
+  --tab-bar-h: 0px;
+}
+@media (max-width: 767px) {
+  :root {
+    --tab-bar-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* A dialog or sheet owns the whole screen, so the tab bar hides while one is open (#943). */
+html:has([data-scroll-lock]) .mobile-tab-bar {
+  visibility: hidden;
 }
 
 /* Disabled document-wide: the .search-section collapse (below) is a layout-affecting
@@ -451,8 +464,8 @@ html[data-map-expanded] {
 }
 
 /* In-page search section: plain wrapper, no visual rules of its own —
-   .desktop-search-bar-wrapper and .mobile-search-pill-row (below) each handle
-   their own row. */
+   .desktop-search-bar-wrapper (below) handles its own row. Phones have no in-page
+   search row: the pill lives in the header (#943). */
 .search-section {
   opacity: 1;
 }
@@ -653,23 +666,14 @@ html[data-map-expanded] {
   }
 }
 
-/* Mobile in-page pill row — simple fade + collapse (max-height, not height, so
-   it doesn't need JS to measure the natural height) when the header's own
-   mobile pill overlay takes over. No shared-layout morph here: unlike the
-   desktop bar, MobileSearchPill has no matching layoutId counterpart to hand
-   off to, so it's just a hide, not a shape animation. */
-.mobile-search-pill-row {
-  opacity: 1;
-  max-height: 80px;
-  transition:
-    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
-    max-height 200ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-:root[data-header-pill] .mobile-search-pill-row {
-  opacity: 0;
-  max-height: 0;
-  overflow: hidden;
-  pointer-events: none;
+/* Phones keep one fixed header: the search pill never moves, so the header shadow never changes. */
+@media (max-width: 767px) {
+  .site-header-wrapper {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 2px 8px rgba(0, 0, 0, 0.04);
+  }
 }
 
 /*
