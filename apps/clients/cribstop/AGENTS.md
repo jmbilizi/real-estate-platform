@@ -94,6 +94,9 @@ pnpm exec nx lint cribstop-web        # Also: test, type-check
 - The home page stays ISR (#871). Do not add `force-dynamic` to it.
 - In a spec, render with `renderWithClient` from `src/test/renderWithClient.tsx`. It makes a new
   client for each call, with no retries.
+- Saved homes (#901) live in the Query cache under `['saved-homes']`, not in Redux. Toggle them only
+  through `useToggleSaved`. Its `scope` runs toggles in order. Never persist this cache. A logout
+  clears it through `AccountQuerySync`.
 
 ## Rules
 
