@@ -361,5 +361,3 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `NotificationConsentEndpointTests.cs`, `Tests/Helpers/UnsubscribeTokenServiceTests.cs`,
   `UnsubscribeTokenEdgeCaseTests.cs`. Gateway: `AccountNotificationRoutesTests`,
   `SensitiveQueryRedactorTests`.
-- Open work: `ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY` and `ACCOUNT_SERVICE_INTERNAL_KEY` are not wired
-  in `infra/` or CI yet. See the ticket comment on #694.

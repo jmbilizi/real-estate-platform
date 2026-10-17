@@ -10,6 +10,8 @@ const {
   main,
   checkSecretDrift,
   parseActionSubstitutions,
+  parseGeneratedKeys,
+  findSecretDriftProblems,
   parseWorkflowEnvKeys,
   ACTION_PATH,
   WORKFLOW_PATH,
@@ -139,4 +141,47 @@ test('the real action and workflow both parse to a non-empty set', () => {
   const keys = parseWorkflowEnvKeys(fs.readFileSync(WORKFLOW_PATH, 'utf-8'));
   assert.ok(pairs.length > 0, 'the deploy action must substitute secret values');
   assert.ok(keys.size > 0, 'the workflow must pass secret values to the deploy action');
+});
+
+const GENERATED_ACTION = [
+  "        GENERATED_KEYS=$(cat <<'GENERATED_KEYS_LIST'",
+  '        s-secret SHARED_KEY SHARED_VAR shared',
+  '        s-secret OWN_KEY OWN_VAR use',
+  '        GENERATED_KEYS_LIST',
+  '        )',
+].join('\n');
+
+test('parses the generated-key list from the action', () => {
+  assert.deepEqual(parseGeneratedKeys(GENERATED_ACTION), [
+    { secret: 's-secret', key: 'SHARED_KEY', envVar: 'SHARED_VAR', mode: 'shared' },
+    { secret: 's-secret', key: 'OWN_KEY', envVar: 'OWN_VAR', mode: 'use' },
+  ]);
+  assert.deepEqual(parseGeneratedKeys('no list here'), []);
+});
+
+test('a generated key counts as substituted and needs a workflow variable only in shared mode', () => {
+  const records = [{ key: 'SHARED_KEY' }, { key: 'OWN_KEY' }];
+  const base = {
+    records,
+    actionPairs: [],
+    generatedKeys: parseGeneratedKeys(GENERATED_ACTION),
+    envExampleActual: 'x',
+    envExampleExpected: 'x',
+  };
+  const withShared = findSecretDriftProblems({ ...base, workflowEnvKeys: new Set(['SHARED_VAR']) });
+  assert.deepEqual(withShared, []);
+  const without = findSecretDriftProblems({ ...base, workflowEnvKeys: new Set() });
+  assert.deepEqual(
+    without.map((p) => p.items),
+    [['SHARED_VAR']],
+  );
+});
+
+test('the real action lists the three account-service internal keys', () => {
+  const keys = parseGeneratedKeys(fs.readFileSync(ACTION_PATH, 'utf-8')).map((e) => e.key);
+  assert.deepEqual(keys.sort(), [
+    'ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY',
+    'ACCOUNT_SERVICE_INTERNAL_KEY',
+    'ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY',
+  ]);
 });

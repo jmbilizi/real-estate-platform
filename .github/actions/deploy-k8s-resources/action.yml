@@ -135,17 +135,9 @@ runs:
           echo "ℹ️  BRIGHT_ADMIN_TOKEN is not set for this environment. The committed placeholder stays in the Secret and the admin sync endpoint refuses every request."
         fi
 
-        # account-service secrets (#669). Each key is guarded alone: an unset variable must not write
+        # account-service secrets (#669). The three internal keys come from the generate step below (#896). Each remaining key is guarded alone: an unset variable must not write
         # null into stringData. The committed placeholder means "not configured": email codes refuse
         # and the Postmark webhook answers 401.
-        if [ -n "$ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY" ]; then
-          echo "🔐 account-service email code HMAC key present for this environment — substituting."
-          yq eval '.stringData.ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY = env(ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY)' infra/k8s/base/secrets/account-service.secret.yaml \
-          > /tmp/account-service.hmac.processed.yaml
-          mv /tmp/account-service.hmac.processed.yaml infra/k8s/base/secrets/account-service.secret.yaml
-        else
-          echo "::warning::ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY is not set for this environment. The placeholder stays and email codes refuse every call."
-        fi
         if [ -n "$ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD" ]; then
           echo "🔐 account-service Postmark webhook password present for this environment — substituting."
           yq eval '.stringData.ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD = env(ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD)' infra/k8s/base/secrets/account-service.secret.yaml \
@@ -180,6 +172,64 @@ runs:
         else
           echo "::warning::POSTMARK_SERVER_TOKEN is not set for this environment. The committed placeholder stays in the Secret and the sending code treats it as 'not configured' (#138). Provisioning is #133."
         fi
+
+    - name: Generate cluster-internal keys (kept from the live Secret, never printed)
+      shell: bash
+      run: |
+        # Keys that only the platform uses are generated in the cluster and never leave it (#896).
+        # One line per key: <secret name> <key> <env var> <mode>.
+        #   use    the env value is a fallback before a new random value.
+        #   shared the env value is a repo-level secret that all environments share. It only marks
+        #          a live value as shared. The key gets its own value once, then never rotates,
+        #          because it also keys the stored audit-row hashes.
+        # tools/infra/secret-drift.js reads this list. Add a key with one line.
+        GENERATED_KEYS=$(cat <<'GENERATED_KEYS_LIST'
+        account-service-secret ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY shared
+        account-service-secret ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY use
+        account-service-secret ACCOUNT_SERVICE_INTERNAL_KEY ACCOUNT_SERVICE_INTERNAL_KEY use
+        GENERATED_KEYS_LIST
+        )
+
+        is_missing() {
+          [ -z "$1" ] || [ "$1" = "StrongBase64Password" ] || [ "${#1}" -lt 32 ]
+        }
+
+        while read -r secret key envvar mode; do
+          [ -n "$key" ] || continue
+          env_value="${!envvar:-}"
+          # A missing Secret is normal on a new cluster. `|| true` keeps set -e quiet.
+          live=$(kubectl get secret "$secret" -o "jsonpath={.data.${key}}" 2>/dev/null | base64 -d 2>/dev/null || true)
+          [ -z "$live" ] || echo "::add-mask::$live"
+          [ -z "$env_value" ] || echo "::add-mask::$env_value"
+
+          if [ "$mode" = "shared" ]; then
+            if is_missing "$live"; then
+              reason="generated"
+            elif [ "$live" = "$env_value" ]; then
+              reason="rotated from shared value"
+            else
+              reason="kept"
+            fi
+            if [ "$reason" = "kept" ]; then
+              value="$live"
+            else
+              value=$(openssl rand -base64 48 | tr -d '\n')
+            fi
+          elif ! is_missing "$live"; then
+            reason="kept"
+            value="$live"
+          elif ! is_missing "$env_value"; then
+            reason="generated"
+            value="$env_value"
+          else
+            reason="generated"
+            value=$(openssl rand -base64 48 | tr -d '\n')
+          fi
+
+          echo "::add-mask::$value"
+          echo "🔐 $key: $reason"
+          SECRET_VALUE="$value" yq -i ".stringData.${key} = strenv(SECRET_VALUE)" "infra/k8s/base/secrets/${secret%-secret}.secret.yaml"
+        done <<< "$GENERATED_KEYS"
 
     - name: Substitute domain placeholders in ingress manifests
       shell: bash
