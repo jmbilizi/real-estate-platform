@@ -8,6 +8,15 @@ export const listingKeys = {
   detail: (id: string) => [...listingKeys.all, 'detail', id] as const,
 };
 
+/** Map keys (#899). Separate from `listingKeys` so other tickets can extend that one. */
+export const mapKeys = {
+  all: ['listings', 'map'] as const,
+  /** `filters` is the serialized search filters. `bounds` is `west,south,east,north`, rounded. */
+  viewport: (filters: string, bounds: string) =>
+    [...mapKeys.all, 'viewport', filters, bounds] as const,
+  card: (id: string) => [...mapKeys.all, 'card', id] as const,
+};
+
 /** Homes near one listing. Separate from `listingKeys` so parallel tickets do not collide. */
 export const nearbyKeys = {
   forListing: (id: string) => [...listingKeys.all, 'nearby', id] as const,

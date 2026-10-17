@@ -1,20 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import ListingCard from '@/components/ListingCard';
 import { SkeletonBar } from '@/components/Skeleton';
 import { ListingsApiError } from '@/lib/api/listings';
-import { loadListingCard, peekListingCard } from '@/lib/listing-card-cache';
+import { mapCardOptions } from '@/lib/query/map';
 import type { ListingCardRow } from '@/lib/types';
-
-type CardState =
-  | { status: 'ready'; row: ListingCardRow }
-  | { status: 'loading' }
-  | { status: 'error'; message: string; retryable: boolean };
 
 /**
  * The map popup body for one pin (#549). A pin for a home on the results page shows that row. Any
- * other pin loads the same card from the card endpoint, and a loaded card is kept, so the next
+ * other pin loads the same card from the card endpoint, and Query keeps a loaded card for 5 minutes, so the next
  * click is instant. The loaded card is the shared `ListingCard`, so address masking, badges and
  * the listing disclosures are the grid's own, and only a click on the card opens the detail.
  *
@@ -30,52 +26,24 @@ export default function MapPinCard({
   row?: ListingCardRow;
   onLayout?: () => void;
 }) {
-  const [state, setState] = useState<CardState>(() => {
-    const known = row ?? peekListingCard(id);
-    return known ? { status: 'ready', row: known } : { status: 'loading' };
-  });
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    if (state.status === 'ready' && attempt === 0) return;
-    let live = true;
-    setState({ status: 'loading' });
-    loadListingCard(id).then(
-      (loaded) => {
-        if (live) setState({ status: 'ready', row: loaded });
-      },
-      (error: unknown) => {
-        if (!live) return;
-        const notFound = error instanceof ListingsApiError && error.isNotFound;
-        setState({
-          status: 'error',
-          message:
-            error instanceof ListingsApiError
-              ? error.message
-              : 'We could not load this home. Please try again.',
-          retryable: !notFound,
-        });
-      },
-    );
-    return () => {
-      live = false;
-    };
-    // `state` is read once, on mount, to skip the fetch for a known row.
-  }, [id, attempt]);
+  const query = useQuery({ ...mapCardOptions(id), enabled: !row });
+  const loaded = row ?? query.data;
+  const status = loaded ? 'ready' : query.isError ? 'error' : 'loading';
 
   useEffect(() => {
     onLayout?.();
-  }, [state.status, onLayout]);
+  }, [status, onLayout]);
 
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const { refetch } = query;
+  const retry = useCallback(() => void refetch(), [refetch]);
+  const error = query.error;
+  const notFound = error instanceof ListingsApiError && error.isNotFound;
 
-  if (state.status === 'ready') {
-    return (
-      <ListingCard listing={state.row} track={{ listType: 'map', rowId: 'map', position: 0 }} />
-    );
+  if (loaded) {
+    return <ListingCard listing={loaded} track={{ listType: 'map', rowId: 'map', position: 0 }} />;
   }
 
-  if (state.status === 'loading') {
+  if (status === 'loading') {
     // The same boxes as the card: a 4:3 photo, then the price, the facts and the address lines.
     return (
       <div role="status" aria-busy="true" aria-label="Loading home" className="block">
@@ -97,8 +65,12 @@ export default function MapPinCard({
 
   return (
     <div role="alert" className="rounded-md border border-line p-3 text-sm text-ink">
-      <p>{state.message}</p>
-      {state.retryable && (
+      <p>
+        {error instanceof ListingsApiError
+          ? error.message
+          : 'We could not load this home. Please try again.'}
+      </p>
+      {!notFound && (
         <button
           type="button"
           onClick={retry}

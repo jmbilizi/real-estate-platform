@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CustomMapControls, type ViewControls } from '@/components/CustomMapControls';
 import MapDrawLayer, { type DrawOutcome } from '@/components/MapDrawLayer';
 import { MapContainer, useMap } from 'react-leaflet';
@@ -11,7 +12,8 @@ import NeighborhoodMapLayer, {
   selectMappableNeighborhoods,
 } from '@/components/NeighborhoodMapLayer';
 import type { ListingCardRow } from '@/lib/types';
-import { getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
+import type { ListingSearchQuery } from '@/lib/api/listings';
+import { viewportPinsOptions } from '@/lib/query/map';
 import { hasMapCoordinates } from '@/lib/listing-format';
 import { formatBounds, roundBounds } from '@/lib/map-bounds';
 import { reportMapMove } from '@/lib/map-move-event';
@@ -84,6 +86,9 @@ function toPin(listing: ListingCardRow & { latitude: number; longitude: number }
   };
 }
 
+/** Bounds for a disabled query. Never sent. */
+const ZERO_BOUNDS = { west: 0, south: 0, east: 0, north: 0 } as MapBounds;
+
 /**
  * Requests the viewport pins on load, on every pan or zoom (debounced), and on
  * every filter change. It never touches the list: the list keeps its own search and `total`.
@@ -96,35 +101,19 @@ function ViewportQuery({
   onResult: (result: MapResponse | null) => void;
 }) {
   const map = useMap();
-  const filterKey = JSON.stringify(filters);
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  const [bounds, setBounds] = useState<MapBounds | null>(null);
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
 
   useEffect(() => {
-    let controller: AbortController | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const run = () => {
-      controller?.abort();
-      controller = new AbortController();
+    const read = () => {
       const b = map.getBounds();
-      getListingsMap(
-        filtersRef.current,
-        { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() },
-        controller.signal,
-      )
-        .then((result) => onResultRef.current(result))
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
-          // The page's own pins stay on the map when the viewport request fails.
-          onResultRef.current(null);
-        });
+      setBounds({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
     };
     const schedule = () => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(run, 300);
+      timer = setTimeout(read, 300);
     };
 
     schedule();
@@ -132,9 +121,21 @@ function ViewportQuery({
     return () => {
       map.off('moveend', schedule);
       if (timer) clearTimeout(timer);
-      controller?.abort();
     };
-  }, [map, filterKey]);
+  }, [map]);
+
+  // Query cancels a superseded request through its `signal`. `keepPreviousData` keeps the last
+  // pins while the next view loads.
+  const { data, isError } = useQuery({
+    ...viewportPinsOptions(filters, bounds ?? ZERO_BOUNDS),
+    enabled: bounds !== null,
+  });
+
+  useEffect(() => {
+    // The page's own pins stay on the map when the viewport request fails.
+    if (isError) onResultRef.current(null);
+    else if (data) onResultRef.current(data);
+  }, [data, isError]);
 
   return null;
 }

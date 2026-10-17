@@ -1,9 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
 import MapPinCard from './MapPinCard';
 import { getListingCard, ListingsApiError } from '@/lib/api/listings';
 import { getListingPanel, resetListingPanel } from '@/lib/listing-panel';
-import { resetListingCardCache } from '@/lib/listing-card-cache';
+import { makeTestQueryClient, renderWithClient } from '@/test/renderWithClient';
 
 const mockToggleSave = jest.fn();
 jest.mock('@/lib/context', () => ({
@@ -21,7 +21,6 @@ const ADDRESS = '100 Test St, Bethesda, MD 20814';
 beforeEach(() => {
   getCard.mockReset();
   mockToggleSave.mockReset();
-  resetListingCardCache();
   resetListingPanel();
 });
 
@@ -29,18 +28,18 @@ describe('MapPinCard (#549)', () => {
   it('shows a loading state, then the shared card, for a pin off the results page', async () => {
     let resolve: (row: ReturnType<typeof aListingCardRow>) => void = () => undefined;
     getCard.mockReturnValue(new Promise((r) => (resolve = r)));
-    render(<MapPinCard id="off-page" />);
+    renderWithClient(<MapPinCard id="off-page" />);
 
     expect(screen.getByRole('status', { name: /loading home/i })).toBeInTheDocument();
-    expect(getCard).toHaveBeenCalledWith('off-page');
+    expect(getCard).toHaveBeenCalledWith('off-page', expect.any(AbortSignal));
 
     await act(async () => resolve(aListingCardRow({ id: 'off-page' })));
-    expect(screen.getByText(ADDRESS)).toBeInTheDocument();
+    expect(await screen.findByText(ADDRESS)).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('does not fetch for a row the results page already holds', () => {
-    render(<MapPinCard id="on-page" row={aListingCardRow({ id: 'on-page' })} />);
+    renderWithClient(<MapPinCard id="on-page" row={aListingCardRow({ id: 'on-page' })} />);
 
     expect(screen.getByText(ADDRESS)).toBeInTheDocument();
     expect(getCard).not.toHaveBeenCalled();
@@ -48,11 +47,12 @@ describe('MapPinCard (#549)', () => {
 
   it('keeps a fetched card, so the second click does not fetch again', async () => {
     getCard.mockResolvedValue(aListingCardRow({ id: 'off-page' }));
-    const first = render(<MapPinCard id="off-page" />);
+    const client = makeTestQueryClient();
+    const first = renderWithClient(<MapPinCard id="off-page" />, client);
     await screen.findByText(ADDRESS);
     first.unmount();
 
-    render(<MapPinCard id="off-page" />);
+    renderWithClient(<MapPinCard id="off-page" />, client);
 
     // The card is there on the first paint, with no loading state.
     expect(screen.getByText(ADDRESS)).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('MapPinCard (#549)', () => {
       ),
     );
     getCard.mockResolvedValueOnce(aListingCardRow({ id: 'off-page' }));
-    render(<MapPinCard id="off-page" />);
+    renderWithClient(<MapPinCard id="off-page" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('temporarily unavailable');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -81,7 +81,7 @@ describe('MapPinCard (#549)', () => {
     getCard.mockRejectedValue(
       new ListingsApiError('This listing is no longer available.', 'not_found', 404),
     );
-    render(<MapPinCard id="gone" />);
+    renderWithClient(<MapPinCard id="gone" />);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('no longer available');
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
@@ -89,7 +89,7 @@ describe('MapPinCard (#549)', () => {
 
   it('opens the detail on a click on the card, and not on a heart click', async () => {
     getCard.mockResolvedValue(aListingCardRow({ id: 'off-page' }));
-    render(<MapPinCard id="off-page" />);
+    renderWithClient(<MapPinCard id="off-page" />);
     await screen.findByText(ADDRESS);
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -104,7 +104,7 @@ describe('MapPinCard (#549)', () => {
 
   it('does not open the detail on a share click', async () => {
     getCard.mockResolvedValue(aListingCardRow({ id: 'off-page' }));
-    render(<MapPinCard id="off-page" />);
+    renderWithClient(<MapPinCard id="off-page" />);
     await screen.findByText(ADDRESS);
 
     fireEvent.click(screen.getByRole('button', { name: 'Share this listing' }));
@@ -121,7 +121,7 @@ describe('MapPinCard (#549)', () => {
         longitude: null,
       }),
     );
-    render(<MapPinCard id="masked" />);
+    renderWithClient(<MapPinCard id="masked" />);
 
     expect(await screen.findByText('Bethesda, MD')).toBeInTheDocument();
     expect(screen.queryByText(/20814/)).not.toBeInTheDocument();
