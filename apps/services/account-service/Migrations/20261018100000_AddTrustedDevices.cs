@@ -9,7 +9,7 @@ namespace AccountService.Migrations
 {
     /// <inheritdoc />
     [DbContext(typeof(AccountDbContext))]
-    [Migration("20261014100000_AddTrustedDevices")]
+    [Migration("20261018100000_AddTrustedDevices")]
     public partial class AddTrustedDevices : Migration
     {
         /// <inheritdoc />
