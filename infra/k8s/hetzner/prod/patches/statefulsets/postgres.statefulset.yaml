@@ -18,24 +18,14 @@ spec:
         - name: postgres
           # Built image (PostGIS + pgvector) — see infra/docker/postgres/Dockerfile.
           image: ghcr.io/GITHUB_REPOSITORY_OWNER/GITHUB_REPOSITORY_NAME/postgres-postgis-pgvector:latest
+          # Same as dev: the Bright sync worker starves a smaller database (#388).
           resources:
             requests:
-              memory: "512Mi"
+              memory: "768Mi"
               cpu: "250m"
             limits:
-              memory: "1Gi"
-              cpu: "500m"
-      # Anti-affinity to spread replicas across nodes
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                      - postgres
-              topologyKey: kubernetes.io/hostname
+              memory: "1536Mi"
+              cpu: "1500m"
   volumeClaimTemplates:
     - metadata:
         name: postgres-data
