@@ -8,6 +8,7 @@ import { CARD_HOVER_CLASS } from '@/components/cardHover';
 import type { ListingCardRow } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { openListingPanel } from '@/lib/listing-panel';
+import { usePrefetchListing } from '@/lib/query/usePrefetchListing';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatNewListingBadge, formatTimeOnMarket } from '@/lib/format';
 import { useMinuteClock } from '@/lib/useMinuteClock';
@@ -50,6 +51,7 @@ export default function ListingCard({
   priority?: boolean;
 }) {
   const { impressionRef, reportClick } = useCardTracking(listing.id, track);
+  const prefetchDetail = usePrefetchListing(listing.id);
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
   const saved = isSaved(listing.propertyId);
@@ -206,6 +208,7 @@ export default function ListingCard({
       aria-label={`View listing at ${formatCardAddress(listing)}`}
       className={`listing-card-root group block cursor-pointer rounded-md ${CARD_HOVER_CLASS} focus:outline-none`}
       onClick={openPanel}
+      {...prefetchDetail}
       onKeyDown={(e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         // Space scrolls the page by default, which would move the results out from under the panel
