@@ -24,6 +24,7 @@ import {
   USER_MOVE_INTENT_WINDOW_MS,
 } from '@/lib/user-move-gate';
 import PricePinLayer from '@/components/PricePinLayer';
+import { useDebouncer } from '@tanstack/react-pacer';
 import BasemapLayer from '@/components/BasemapLayer';
 import MapErrorBoundary from '@/components/MapErrorBoundary';
 import { useMapConfig, useTileFailure } from '@/components/map-tiles';
@@ -105,24 +106,22 @@ function ViewportQuery({
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const read = () => {
+  const { maybeExecute: schedule, cancel } = useDebouncer(
+    () => {
       const b = map.getBounds();
       setBounds({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
-    };
-    const schedule = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(read, 300);
-    };
+    },
+    { wait: 300 },
+  );
 
+  useEffect(() => {
     schedule();
     map.on('moveend', schedule);
     return () => {
       map.off('moveend', schedule);
-      if (timer) clearTimeout(timer);
+      cancel();
     };
-  }, [map]);
+  }, [map, schedule, cancel]);
 
   // Query cancels a superseded request through its `signal`. `keepPreviousData` keeps the last
   // pins while the next view loads.

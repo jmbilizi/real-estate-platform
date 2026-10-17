@@ -21,5 +21,9 @@ export default {
   // are read as regex escapes and the pattern silently matches nothing. Same trap as
   // property-service/jest.config.ts.
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+  // TanStack Pacer and its store ship ESM only. Transform them so Jest can load them.
+  transformIgnorePatterns: [
+    '/node_modules/(?!.pnpm|@tanstack/(react-pacer|pacer|react-store|store))',
+  ],
   coverageDirectory: '../../../../coverage/apps/clients/cribstop/next',
 };

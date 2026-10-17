@@ -7,6 +7,7 @@
     // The app compiles with `jsx: "preserve"` because Next owns the JSX transform. Jest has
     // no Next pipeline in front of ts-jest, so tests need a transform that actually emits.
     "jsx": "react-jsx",
+    "allowJs": true,
     "types": ["jest", "node"]
   },
   "include": [
