@@ -1,4 +1,5 @@
 import { cleanup, screen, waitFor } from '@testing-library/react';
+import { pinClock, restoreClock } from '@/test/fixed-clock';
 import { renderWithClient } from '@/test/renderWithClient';
 import type { HomeFeedResponse } from '@cribstop/property-contracts';
 import { aListingCardRow } from '@/test/fixtures';
@@ -84,10 +85,7 @@ function feedResponse(overrides: Partial<HomeFeedResponse> = {}): HomeFeedRespon
 }
 
 function titles(container: HTMLElement): string[] {
-  // The trust heading carries a relative age that moves with the wall clock.
-  return [...container.querySelectorAll('h2')].map((h) =>
-    (h.textContent ?? '').replace(/^(Real listings, updated ).*$/, '$1<age>'),
-  );
+  return [...container.querySelectorAll('h2')].map((h) => h.textContent ?? '');
 }
 
 // The first test renders the page twice and takes 3 s alone. A loaded CI runner needs more than 5 s.
@@ -95,6 +93,7 @@ jest.setTimeout(20_000);
 
 describe('HomePageContent home feed (#836)', () => {
   beforeEach(() => {
+    pinClock();
     mockSeenImpressions.clear();
     (getListingsMeta as jest.Mock).mockResolvedValue({
       dataUpdatedAt: '2026-04-20T18:00:00.000Z',
@@ -120,6 +119,7 @@ describe('HomePageContent home feed (#836)', () => {
   });
 
   afterEach(() => {
+    restoreClock();
     cleanup();
     mockedGetHomeFeed.mockReset();
     mockedTrack.mockReset();

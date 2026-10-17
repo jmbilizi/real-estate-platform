@@ -2,6 +2,8 @@ export default {
   displayName: 'property-service',
   preset: '../../../jest.preset.js',
   testEnvironment: 'node',
+  // #940. Clock guard: TEST_CLOCK_OFFSET_DAYS moves the system clock ahead.
+  setupFiles: ['../../../tools/node/configs/jest-clock-offset.js'],
   transform: {
     '^.+\\.[tj]s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
