@@ -5,6 +5,7 @@ import { useAppSelector } from '@/lib/store/hooks';
 import { selectUser } from '@/lib/store/selectors';
 import ChangeEmailFlow from '@/components/ChangeEmailFlow';
 import ChangePasswordFlow from '@/components/ChangePasswordFlow';
+import NewDeviceCodeSetting from '@/components/NewDeviceCodeSetting';
 
 type Panel = 'email' | 'password' | null;
 
@@ -63,6 +64,7 @@ export default function AccountSecuritySection() {
       <ul className="divide-y divide-surface-border">
         {row('email', 'Email', user.email)}
         {row('password', 'Password', '••••••••••')}
+        <NewDeviceCodeSetting />
       </ul>
     </section>
   );

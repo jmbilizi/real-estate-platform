@@ -11,8 +11,10 @@ import {
   type CodeNotSentReason,
   CodesUnavailableError,
   CodeTiming,
+  DeviceCodeRequiredError,
   identifyEmail,
   RateLimitError,
+  resendDeviceCode,
   SignInFailedError,
   startPasswordReset,
   UndeliverableEmailError,
@@ -63,7 +65,9 @@ export default function AuthForm({
   const [loginFailed, setLoginFailed] = useState(false);
   // The code step serves sign-up and password reset. Its copy must stay neutral for a reset:
   // the server never says whether the address has an account.
-  const [codeFlow, setCodeFlow] = useState<'signup' | 'reset'>('signup');
+  const [codeFlow, setCodeFlow] = useState<'signup' | 'reset' | 'device'>('signup');
+  // The password of a sign-in that waits for a device code. It lives in memory only.
+  const [devicePassword, setDevicePassword] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [codeTiming, setCodeTiming] = useState<CodeTiming>({
     resendAfterSeconds: 0,
@@ -77,7 +81,7 @@ export default function AuthForm({
   // The one-time sign-up proof. It lives in memory only: never in the URL, storage or logs.
   const [signupProof, setSignupProof] = useState<string | null>(null);
   const [resetProof, setResetProof] = useState<string | null>(null);
-  const { login } = useApp();
+  const { login, completeDeviceLogin } = useApp();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -114,6 +118,7 @@ export default function AuthForm({
     setNotice(null);
     // A proof lives only while its own step shows.
     if (next !== 'resetPassword') setResetProof(null);
+    if (next !== 'code') setDevicePassword(null);
     if (next !== 'setPassword') setSignupProof(null);
   };
 
@@ -170,6 +175,16 @@ export default function AuthForm({
     } catch (err) {
       if (err instanceof SignInFailedError) {
         setLoginFailed(true);
+      } else if (err instanceof DeviceCodeRequiredError) {
+        // The password was right and the account sent a code. Keep the password in memory for the code step.
+        setDevicePassword(password);
+        setCodeFlow('device');
+        setCodeTiming(err.timing);
+        setCodeNotSent(err.timing.notSentReason);
+        setCodeRun((n) => n + 1);
+        goToStep('code');
+      } else if (err instanceof CodesUnavailableError) {
+        toast('Sign-in codes are unavailable right now. Try again soon.', 'error');
       } else {
         toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
       }
@@ -213,6 +228,35 @@ export default function AuthForm({
       setSignupProof(proof);
       goToStep('setPassword');
     }
+  };
+
+  // A wrong code stays on the step. A wrong password or a lock moves the user back to the password step.
+  const verifyDeviceCode = async (code: string) => {
+    try {
+      const outcome = await completeDeviceLogin(email, devicePassword ?? '', code, remember);
+      return outcome.ok
+        ? { ok: true as const, proof: '' }
+        : { ok: false as const, attemptsLeft: outcome.attemptsLeft };
+    } catch (err) {
+      if (err instanceof SignInFailedError) {
+        goToStep('password');
+        setLoginFailed(true);
+        return { ok: false as const, attemptsLeft: null };
+      }
+      throw err;
+    }
+  };
+
+  const handleDeviceVerified = () => {
+    try {
+      if (remember) localStorage.setItem(getRememberEmailKey(), email);
+      else localStorage.removeItem(getRememberEmailKey());
+    } catch {
+      // ignore
+    }
+    toast('Welcome back!');
+    if (onSuccess) onSuccess();
+    else router.push('/');
   };
 
   const handleResetFailed = () => {
@@ -281,6 +325,9 @@ export default function AuthForm({
           {step === 'code' && codeFlow === 'signup' && <>Enter the 6-digit code for {emailChip}.</>}
           {step === 'code' && codeFlow === 'reset' && (
             <>If an account exists for {emailChip}, we sent a 6-digit code.</>
+          )}
+          {step === 'code' && codeFlow === 'device' && (
+            <>You are signing in on a new device. Enter the 6-digit code we sent to {emailChip}.</>
           )}
           {step === 'setPassword' && <>Pick a password for {emailChip}.</>}
           {step === 'forgot' && "Enter your email and we'll send a code."}
@@ -503,12 +550,24 @@ export default function AuthForm({
             <AuthCodeStep
               key={codeRun}
               email={email}
-              flow={codeFlow}
+              flow={codeFlow === 'reset' ? 'reset' : 'signup'}
               resendAfterSeconds={codeTiming.resendAfterSeconds}
               expiresInSeconds={codeTiming.expiresInSeconds}
               notSentReason={codeNotSent}
-              onVerified={handleVerified}
-              onChangeEmail={() => goToStep(codeFlow === 'reset' ? 'forgot' : 'email')}
+              onVerified={codeFlow === 'device' ? handleDeviceVerified : handleVerified}
+              onChangeEmail={() =>
+                goToStep(
+                  codeFlow === 'reset' ? 'forgot' : codeFlow === 'device' ? 'password' : 'email',
+                )
+              }
+              {...(codeFlow === 'device'
+                ? {
+                    verify: verifyDeviceCode,
+                    resend: () => resendDeviceCode(email, devicePassword ?? ''),
+                    unavailableMessage: 'Sign-in codes are unavailable right now. Try again soon.',
+                    focusOnMount: true,
+                  }
+                : {})}
             />
           </div>
         )}

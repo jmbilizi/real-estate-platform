@@ -288,6 +288,31 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   unique index, so the database guard has no test.
 - Tests: `Tests/Integration/EmailChangeEndpointTests.cs`.
 
+## Email code on a new device (#818)
+
+- Off by default. `ApplicationUser.RequireDeviceCode` is the setting. A password sign-in from an
+  unrecognized device then needs an emailed `NewDeviceSignIn` code (`EmailCodeService`, same
+  cooldown, caps and lock as every code flow).
+- `Helpers/DeviceSignInFilter.cs` runs over Identity's `/login`. Only a correct password gets the
+  challenge: `401 { error: "device_code_required", resendAfterSeconds, expiresInSeconds, reason }`.
+  A wrong password, a lock and a setting that is off fall through to Identity, so lockout counts and
+  answers stay the framework's. With no way to send a code the filter answers `503` (fails closed).
+- `POST /account/login/device { email, password, code }` checks the password again, then the code,
+  then signs in like `/login` (`useCookies`, `useSessionCookies`). `/login/device/resend` needs the
+  password too. Both share `AccountRecoveryThrottleFilter` (scope `devicecode`).
+- Trusted devices: `TrustedDevices` holds the SHA-256 hash of 32 random bytes, never the token. The
+  token is `base64url(bytes).base64url(HMAC)`. The HMAC key derives from
+  `ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY`, so no new secret exists. Section `DeviceTrust`: `Lifetime`
+  (30 days), `MaxDevices` (20). The purge service deletes expired rows.
+- The web app owns the cookie (`device_token`, httpOnly, SameSite=Lax, Secure in production). It
+  sends the value in `X-Device-Token` and a short name in `X-Device-Label`. This service answers
+  with the new token in `X-Device-Token-Issued` and its life in `X-Device-Max-Age`.
+- `GET|PUT /account/security/new-device`, `DELETE /account/security/new-device/devices/{id}`. A
+  cookie or bearer session is required. `PUT` needs `currentPassword` (step-up: a wrong password
+  counts toward the sign-in lock). It refuses `enabled: true` with `503` when codes cannot send.
+  Turning it on trusts the calling device. Turning it off removes every device.
+- Tests: `Tests/Integration/DeviceSignInEndpointTests.cs`.
+
 ## Undeliverable email (#664)
 
 - `EmailSuppressions` holds one row per normalized address that Postmark will not deliver to

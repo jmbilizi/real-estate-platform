@@ -79,6 +79,17 @@ export class SignInFailedError extends Error {
   }
 }
 
+/**
+ * The password was right, but the account asks for an emailed code on a new device (#818).
+ * `timing` carries the resend wait, the code life and, when no code went out, why (#813).
+ */
+export class DeviceCodeRequiredError extends Error {
+  constructor(public timing: CodeTiming) {
+    super('A code is needed for this device');
+    this.name = 'DeviceCodeRequiredError';
+  }
+}
+
 export async function loginAccount(payload: LoginRequest): Promise<LoginResponse> {
   const res = await fetch('/api/account/login', {
     method: 'POST',
@@ -89,6 +100,10 @@ export async function loginAccount(payload: LoginRequest): Promise<LoginResponse
   if (res.status === 401) throw new SignInFailedError();
 
   const body = await res.json().catch(() => null);
+  // Right password, new device: the account sent a code and holds the sign-in until it checks (#818).
+  if (res.status === 202 && body?.deviceCodeRequired === true) {
+    throw new DeviceCodeRequiredError(toTiming(body));
+  }
   if (!res.ok) {
     const message =
       typeof body?.error === 'string' && body.error.length > 0
@@ -505,4 +520,103 @@ export async function getPasswordPolicy(): Promise<PasswordPolicy> {
     // Network failure. Use the default below.
   }
   return DEFAULT_PASSWORD_POLICY;
+}
+
+export type DeviceSignInResult =
+  | { ok: true; session: LoginResponse }
+  | { ok: false; reason: 'invalid_code'; attemptsLeft: number | null };
+
+/**
+ * Second step of a sign-in from a new device. The password goes again with the code. A wrong code
+ * returns `ok: false`. A wrong password throws SignInFailedError. A lock throws RateLimitError.
+ */
+export async function verifyDeviceSignIn(payload: {
+  email: string;
+  password: string;
+  code: string;
+  remember?: boolean;
+}): Promise<DeviceSignInResult> {
+  const res = await postJson('/api/account/login/device', payload);
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, session: body as LoginResponse };
+  if (res.status === 401) throw new SignInFailedError();
+  if (res.status === 400 && body?.error === 'invalid_code') {
+    const left = body?.attemptsLeft;
+    return {
+      ok: false,
+      reason: 'invalid_code',
+      attemptsLeft: typeof left === 'number' ? left : null,
+    };
+  }
+  throw new Error('Unable to check the code');
+}
+
+/** Sends a new device code. The password gates the send. */
+export async function resendDeviceCode(email: string, password: string): Promise<CodeTiming> {
+  const res = await postJson('/api/account/login/device/resend', { email, password });
+  if (res.status === 401) throw new SignInFailedError();
+  return toTiming(await readCodeAnswer(res, 'Unable to send a new code'));
+}
+
+export interface TrustedDevice {
+  id: string;
+  label: string;
+  firstSeenAt: string;
+  lastUsedAt: string;
+  current: boolean;
+}
+
+export interface NewDeviceSetting {
+  enabled: boolean;
+  devices: TrustedDevice[];
+}
+
+/** The new-device setting and the device list. A `401` or `403` throws AuthError. */
+export async function getNewDeviceSetting(): Promise<NewDeviceSetting> {
+  const res = await fetch('/api/account/security/new-device');
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  if (!res.ok) throw new Error('Unable to load the setting');
+  const body = await res.json().catch(() => null);
+  return {
+    enabled: body?.enabled === true,
+    devices: Array.isArray(body?.devices) ? body.devices : [],
+  };
+}
+
+export type SetNewDeviceOutcome =
+  | { ok: true; enabled: boolean }
+  | { ok: false; reason: 'wrong_password' };
+
+/**
+ * Turns the setting on or off. The password is the step-up proof. A wrong password returns
+ * `ok: false` and counts toward the sign-in lock, so a lock throws RateLimitError. No way to send
+ * a code throws CodesUnavailableError.
+ */
+export async function setNewDeviceSetting(
+  enabled: boolean,
+  currentPassword: string,
+): Promise<SetNewDeviceOutcome> {
+  const res = await fetch('/api/account/security/new-device', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled, currentPassword }),
+  });
+  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
+  if (res.status === 503) throw new CodesUnavailableError();
+  const body = await res.json().catch(() => null);
+  if (res.ok) return { ok: true, enabled: body?.enabled === true };
+  if (res.status === 403 && body?.error === 'step_up_failed') {
+    return { ok: false, reason: 'wrong_password' };
+  }
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  throw new Error('Unable to change the setting');
+}
+
+/** Signs a device out of "trusted". It asks for a code at its next sign-in. */
+export async function removeTrustedDevice(id: string): Promise<void> {
+  const res = await fetch(`/api/account/security/new-device/devices/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (res.status === 401 || res.status === 403) throw new AuthError(res.status);
+  if (!res.ok && res.status !== 404) throw new Error('Unable to remove the device');
 }

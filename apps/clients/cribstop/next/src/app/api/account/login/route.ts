@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchGateway } from '@/app/api/_lib/gateway';
 import { authCookies } from '@/app/api/_lib/cookies';
+import { deviceHeaders, deviceTiming } from '@/app/api/_lib/device';
 import { visitorIpHeaders } from '@/app/api/_lib/account-relay';
 
 export async function POST(req: Request) {
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json',
         Accept: 'application/json',
         ...visitorIpHeaders(req),
+        ...deviceHeaders(req),
       },
       body: JSON.stringify({ email, password }),
     },
@@ -36,6 +38,14 @@ export async function POST(req: Request) {
 
   if (!upstream.ok) {
     if (upstream.status === 401) {
+      // Right password, new device: the account asks for an emailed code (#818).
+      const challenge = await upstream
+        .clone()
+        .json()
+        .catch(() => null);
+      if (challenge?.error === 'device_code_required') {
+        return NextResponse.json(deviceTiming(challenge, true), { status: 202 });
+      }
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
     return NextResponse.json({ error: 'Sign-in failed' }, { status: upstream.status });

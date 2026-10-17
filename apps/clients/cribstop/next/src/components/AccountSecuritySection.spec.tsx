@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AccountSecuritySection from './AccountSecuritySection';
 import {
   changePassword,
+  getNewDeviceSetting,
   getPasswordPolicy,
   startEmailChange,
   verifyEmailChange,
@@ -17,6 +18,7 @@ jest.mock('@/lib/api/account', () => ({
   startEmailChange: jest.fn(),
   verifyEmailChange: jest.fn(),
   changePassword: jest.fn(),
+  getNewDeviceSetting: jest.fn(),
   getPasswordPolicy: jest.fn().mockResolvedValue({
     minLength: 8,
     passphraseLength: 15,
@@ -43,6 +45,7 @@ function press(name: string) {
 describe('AccountSecuritySection', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    (getNewDeviceSetting as jest.Mock).mockResolvedValue({ enabled: false, devices: [] });
     (getPasswordPolicy as jest.Mock).mockResolvedValue({
       minLength: 8,
       passphraseLength: 15,
