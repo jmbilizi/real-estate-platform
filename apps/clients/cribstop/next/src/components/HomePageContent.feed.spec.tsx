@@ -87,6 +87,9 @@ function titles(container: HTMLElement): string[] {
   return [...container.querySelectorAll('h2')].map((h) => h.textContent ?? '');
 }
 
+// The first test renders the page twice and takes 3 s alone. A loaded CI runner needs more than 5 s.
+jest.setTimeout(20_000);
+
 describe('HomePageContent home feed (#836)', () => {
   beforeEach(() => {
     mockSeenImpressions.clear();
