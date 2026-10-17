@@ -8,6 +8,7 @@
  */
 
 import { CAROUSEL_ITEM_CLASS } from '@/components/CarouselShell';
+import ToolbarIconButton, { BACK_ICON } from '@/components/ToolbarIconButton';
 import type { ListingCardRow } from '@/lib/types';
 
 /**
@@ -562,6 +563,39 @@ export function ListingErrorState({
           {actionLabel}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * The error state inside the listing modal's own layout (#907).
+ *
+ * It uses the skeleton's two slots: a header bar with the back button, then a scrolling body on
+ * the `surface-alt` canvas. A bare `ListingErrorState` with a vertical margin left an empty white
+ * band above the grey box and ignored the header. Same markup at every width.
+ */
+export function ListingErrorPanel({
+  message,
+  onRetry,
+  onClose,
+}: {
+  message: string;
+  onRetry?: () => void;
+  onClose?: () => void;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
+        {onClose && <ToolbarIconButton label="Go back" icon={BACK_ICON} onClick={onClose} />}
+      </div>
+      <div
+        data-error-body
+        className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt px-6 py-4 pb-8 sm:px-8"
+      >
+        <div className="mx-auto max-w-lg rounded-2xl border border-surface-border bg-white p-4">
+          <ListingErrorState message={message} onRetry={onRetry} />
+        </div>
+      </div>
     </div>
   );
 }
