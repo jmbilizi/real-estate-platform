@@ -149,28 +149,21 @@ export default function NavBar() {
       )}
 
       <header className="relative bg-white overflow-visible">
-        {/* ── Mobile full-width pill overlay (only on mobile, only when scrolled) ── */}
-        {showHeaderPill && !headerExpanded && (
-          <div
-            className="md:hidden absolute inset-0 z-10 bg-white flex items-center px-3"
-            style={{
-              boxShadow:
-                'rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0',
-            }}
-          >
-            <MobileSearchPill />
-          </div>
-        )}
-
         {/* ── Logo | Tabs/Pill | Nav ── */}
-        <div className="relative grid grid-cols-[auto_1fr_auto] h-16 items-center gap-2 px-3 md:px-4 lg:px-6">
+        {/*
+         * Phones (#943): one row, Apps | search pill | Account, and nothing in it moves on scroll.
+         * The pill is the real MobileSearchPill and sits in the same DOM position at every scroll
+         * depth. Desktop keeps the three column grid. Below `md` the right nav is `display: contents`,
+         * so Apps and Account become items of this row, ordered by `max-md:order-*`.
+         */}
+        <div className="relative flex h-16 items-center gap-2 px-3 md:grid md:grid-cols-[auto_1fr_auto] md:px-4 lg:px-6">
           {/*
            * Logo. Brand name and wordmark render unconditionally, never behind the `hydrated`
            * gate. Both are compile-time constants (`BRAND.brokerage`, "CRIB"/"STOP"). There is no
            * hydration uncertainty to placeholder over. PRD §6.1 requires Real Broker, LLC to read
            * from the server-rendered HTML at its most prominent placement.
            */}
-          <Link href="/" className="flex flex-shrink-0 items-center -ml-1">
+          <Link href="/" className="flex flex-shrink-0 items-center -ml-1 max-md:hidden">
             <span className="flex items-center gap-0">
               <span className="flex flex-col">
                 <span className="font-display text-xl font-bold leading-tight">
@@ -185,7 +178,7 @@ export default function NavBar() {
           </Link>
 
           {/* ── Center: tabs / compact pill ── */}
-          <div className="absolute left-1/2 -translate-x-1/2 w-[520px] max-w-[calc(100vw-160px)] h-16 flex items-center justify-center">
+          <div className="absolute left-1/2 -translate-x-1/2 max-md:hidden w-[520px] max-w-[calc(100vw-160px)] h-16 flex items-center justify-center">
             {/* TABS — visible when NOT scrolled, or when expanded */}
             <div
               className="header-tabs absolute inset-0 hidden md:flex items-stretch justify-center"
@@ -258,12 +251,14 @@ export default function NavBar() {
                 down the page. This slot just hosts the tabs above. */}
           </div>
           {/* Empty grid cell placeholder for col 2 */}
-          <div />
+          <div className="max-md:hidden" />
+
+          <div className="order-2 flex min-w-0 flex-1 md:hidden">
+            <MobileSearchPill />
+          </div>
 
           {/* Right nav */}
-          <div
-            className={`relative z-20 flex items-center gap-1.5 md:gap-2 ${showHeaderPill ? 'hidden md:flex' : 'flex'}`}
-          >
+          <div className="relative z-20 items-center gap-1.5 max-md:contents md:flex md:gap-2">
             {/*
              * Saved and Apps are identical whether or not anyone is signed in, so they render
              * straight away. They used to sit behind the `hydrated` gate below, which hid three
@@ -281,11 +276,11 @@ export default function NavBar() {
             </Link>
 
             {hydrated ? (
-              <span className="content-resolved flex items-center">
+              <span className="content-resolved flex items-center max-md:order-1">
                 <AppsDropdown />
               </span>
             ) : (
-              <NavButtonSkeleton />
+              <NavButtonSkeleton className="max-md:order-1" />
             )}
 
             {/*
@@ -304,7 +299,9 @@ export default function NavBar() {
              * Every outcome is the same circle, so the nav's width never changes and the other
              * controls cannot slide sideways on hydration.
              */}
-            <div className={`flex justify-end ${hydrated ? 'content-resolved' : ''}`}>
+            <div
+              className={`flex justify-end max-md:order-3 ${hydrated ? 'content-resolved' : ''}`}
+            >
               {!hydrated ? (
                 <NavButtonSkeleton />
               ) : user ? (
@@ -435,11 +432,11 @@ export default function NavBar() {
             </div>
 
             {hydrated ? (
-              <span className="content-resolved flex items-center">
+              <span className="content-resolved flex items-center max-md:hidden">
                 <NavMenu signedIn={!!user} onAuth={openModal} />
               </span>
             ) : (
-              <SkeletonBlock className="-mr-1 h-6 w-1 shrink-0 rounded" />
+              <SkeletonBlock className="-mr-1 h-6 w-1 shrink-0 rounded max-md:hidden" />
             )}
           </div>
         </div>
@@ -450,10 +447,10 @@ export default function NavBar() {
 
 /**
  * A navbar control that is not known until hydration: Apps, Account and More. Same 44px circle
- * (40px on mobile) as the loaded button, so nothing shifts when the real control arrives.
+ * as the loaded button, so nothing shifts when the real control arrives.
  * `aria-hidden`: the nav stays interactive, so this is one unresolved control, not a page-level
  * loading state to announce.
  */
-function NavButtonSkeleton() {
-  return <SkeletonBlock className="h-11 w-11 shrink-0 rounded-full max-md:h-10 max-md:w-10" />;
+function NavButtonSkeleton({ className = '' }: { className?: string }) {
+  return <SkeletonBlock className={`h-11 w-11 shrink-0 rounded-full ${className}`} />;
 }

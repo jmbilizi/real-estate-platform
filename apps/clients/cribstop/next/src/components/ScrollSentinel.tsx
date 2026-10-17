@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react';
 import { useApp } from '@/lib/context';
 import CompactSearchBar from './CompactSearchBar';
-import MobileSearchPill from './MobileSearchPill';
 
 // Hysteresis buffer (px) below the swap threshold, applied on the way BACK only.
 // Trackpad scrolling decelerates smoothly and can settle with the scroll position
@@ -149,13 +148,10 @@ export default function ScrollSentinel({ alwaysPill = false }: { alwaysPill?: bo
         <CompactSearchBar />
       </div>
 
-      {/* Mobile only: search pill */}
-      <div className="mobile-search-pill-row md:hidden px-4 py-3 bg-white flex">
-        <MobileSearchPill />
-      </div>
+      {/* Phones have no in-page pill: it lives in the header and never moves (#943). */}
       {/* Gradient fade divider */}
       <div
-        className="h-3 pointer-events-none"
+        className="h-3 pointer-events-none max-md:hidden"
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.07), transparent)' }}
       />
     </div>

@@ -339,7 +339,7 @@ export default function AgentLeadDetailView({ id }: { id: string }) {
       </Section>
 
       {isAssigned && (
-        <div className="fixed inset-x-0 bottom-0 z-chrome flex gap-2 border-t border-surface-border bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 layout:hidden">
+        <div className="fixed inset-x-0 bottom-[var(--tab-bar-h)] z-chrome flex gap-2 border-t border-surface-border bg-white px-4 py-3 layout:hidden">
           <Button
             className="min-h-11 flex-1"
             isLoading={busy}
