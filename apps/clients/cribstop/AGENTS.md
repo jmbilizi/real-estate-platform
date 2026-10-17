@@ -83,6 +83,18 @@ pnpm exec nx lint cribstop-web        # Also: test, type-check
   The gateway rate-limits on that address. Without it, every visitor shares the one bucket of this
   pod.
 
+## Server data (#897)
+
+- Use TanStack Query for client-side server data. `QueryProvider` in `layout.tsx` supplies one
+  client. Defaults live in `src/lib/query/query-client.ts`.
+- Each domain owns one key factory and its `queryOptions` in `src/lib/query/`. See `keys.ts`. Never
+  write a key inline.
+- Pass the `signal` from `queryFn` to the `lib/api` call.
+- Never prefetch per-user data on an ISR page. The cached HTML would show one user's data to all.
+- The home page stays ISR (#871). Do not add `force-dynamic` to it.
+- In a spec, render with `renderWithClient` from `src/test/renderWithClient.tsx`. It makes a new
+  client for each call, with no retries.
+
 ## Rules
 
 - Airbnb-quality polish; mobile-first; accessible (labels, alt text, focus states, semantic HTML).
