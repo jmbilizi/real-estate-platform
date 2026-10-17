@@ -88,7 +88,8 @@ function titles(container: HTMLElement): string[] {
   return [...container.querySelectorAll('h2')].map((h) => h.textContent ?? '');
 }
 
-// The first test renders the page twice and takes 3 s alone. A loaded CI runner needs more than 5 s.
+// One render starts 9 row queries and 6 neighborhood queries. #938 found no request loop. A full run
+// under load from other lanes took over 5 s for one render, so the test timeout stays at 20 s.
 jest.setTimeout(20_000);
 
 describe('HomePageContent home feed (#836)', () => {
@@ -123,6 +124,8 @@ describe('HomePageContent home feed (#836)', () => {
     cleanup();
     mockedGetHomeFeed.mockReset();
     mockedTrack.mockReset();
+    (searchListings as jest.Mock).mockClear();
+    (getNeighborhoods as jest.Mock).mockClear();
   });
 
   async function settledTitles(ui: React.ReactElement) {
@@ -267,6 +270,18 @@ describe('HomePageContent home feed (#836)', () => {
     rerender(<HomePageContent homeFeed={ON} />);
     await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
     expect(mockedGetHomeFeed).not.toHaveBeenCalled();
+  });
+
+  it('requests the feed once and each home row a bounded number of times (#938)', async () => {
+    mockedGetHomeFeed.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(feedResponse()), 300)),
+    );
+    await settledTitles(<HomePageContent homeFeed={ON} />);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(mockedGetHomeFeed).toHaveBeenCalledTimes(1);
+    // Nine home rows read one query each. The neighborhoods row reads six scopes.
+    expect(searchListings).toHaveBeenCalledTimes(9);
+    expect(getNeighborhoods).toHaveBeenCalledTimes(6);
   });
 
   it('shows a skeleton with card rows while the feed loads', async () => {
