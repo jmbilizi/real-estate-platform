@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import AccountPage from './page';
 import { getProfile, updateProfile } from '@/lib/api/account';
 import { getNotificationPreferences, optInToEmail } from '@/lib/api/notification-preferences';
@@ -39,7 +40,7 @@ const WORDING = { id: 'email_non_transactional', version: 1, text: 'Send me Crib
 async function startEditing(emailOn: boolean) {
   currentUser = { ...USER, emailNotificationsEnabled: emailOn };
   mockGetProfile.mockResolvedValue({ ...currentUser });
-  render(<AccountPage />);
+  renderWithClient(<AccountPage />);
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
   await screen.findByRole('button', { name: 'Save changes' });
   return screen.getByRole('switch', { name: /^Email notifications/ });

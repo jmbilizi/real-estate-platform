@@ -2,6 +2,8 @@
 
 import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Provider } from 'react-redux';
+import { useQueryClient } from '@tanstack/react-query';
+import { accountKeys } from '@/lib/query/account';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import {
   AuthError,
@@ -106,9 +108,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <Provider store={store}>
       <SessionVerifier />
+      <AccountQuerySync />
       {children}
     </Provider>
   );
+}
+
+/**
+ * Keeps the Query cache in step with the signed-in account.
+ * - A user switch or a sign-out clears the cache, so no query shows the previous user's data.
+ * - An `AuthError` (401) from an account query signs the user out. Query does not retry it.
+ */
+function AccountQuerySync() {
+  const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
+  const email = useAppSelector(selectUser)?.email ?? null;
+  const previous = useRef(email);
+
+  useEffect(() => {
+    if (previous.current !== null && previous.current !== email) queryClient.clear();
+    previous.current = email;
+  }, [email, queryClient]);
+
+  useEffect(
+    () =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (event.type !== 'updated' || event.action.type !== 'error') return;
+        if (event.query.queryKey[0] !== accountKeys.all[0]) return;
+        if (!(event.action.error instanceof AuthError)) return;
+        dispatch(logout());
+        dispatch(clearSaved());
+      }),
+    [queryClient, dispatch],
+  );
+
+  return null;
 }
 
 function notifyError(dispatch: (action: ReturnType<typeof addToast>) => unknown) {

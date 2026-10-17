@@ -11,8 +11,10 @@ export interface NotificationPreferences {
   preferences: { channel: string; category: string; enabled: boolean }[];
 }
 
-export async function getNotificationPreferences(): Promise<NotificationPreferences> {
-  const res = await fetch('/api/account/notification-preferences');
+export async function getNotificationPreferences(
+  signal?: AbortSignal,
+): Promise<NotificationPreferences> {
+  const res = await fetch('/api/account/notification-preferences', { signal });
   if (!res.ok) throw new Error('Could not load the email consent wording');
   return res.json();
 }

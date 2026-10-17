@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { accountKeys } from '@/lib/query/account';
 import { useAppDispatch } from '@/lib/store/hooks';
 import { dismissOnboarding, updateProfile } from '@/lib/store/slices/authSlice';
 import { updateProfile as updateProfileApi } from '@/lib/api/account';
@@ -26,6 +28,7 @@ const STEPS = [
 
 export default function OnboardingModal({ open }: { open: boolean }) {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
   const [stepIdx, setStepIdx] = useState(0);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -70,6 +73,7 @@ export default function OnboardingModal({ open }: { open: boolean }) {
           pushNotificationsEnabled: pushNotifications,
         });
       }
+      await queryClient.invalidateQueries({ queryKey: accountKeys.all });
     } catch (err) {
       dispatch(
         addToast({
