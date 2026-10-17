@@ -270,7 +270,13 @@ export default function NavBar() {
              * controls because one of them was uncertain — and left the whole right-hand nav blank
              * from first paint until the bundle finished hydrating.
              */}
-            <Link href="/favorites" className={NAV_BUTTON_CLASSES} aria-label="Saved" title="Saved">
+            {/* Phones get Saved in the bottom tab bar (#923), so the top bar drops it below md. */}
+            <Link
+              href="/favorites"
+              className={`${NAV_BUTTON_CLASSES} max-md:hidden`}
+              aria-label="Saved"
+              title="Saved"
+            >
               {HEART_ICON}
             </Link>
 
