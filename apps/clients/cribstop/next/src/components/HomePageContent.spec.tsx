@@ -54,6 +54,13 @@ const mockedGetListingsMeta = getListingsMeta as jest.Mock;
 const mockedGetNeighborhoods = getNeighborhoods as jest.Mock;
 const mockedRecentSaved = listRecentSavedHomes as jest.Mock;
 
+// The trust heading carries a relative age that moves with the wall clock.
+function rowTitles(container: HTMLElement): (string | null)[] {
+  return Array.from(container.querySelectorAll('h2')).map(
+    (h) => h.textContent?.replace(/^(Real listings, updated ).*$/, '$1<age>') ?? null,
+  );
+}
+
 function neighborhoodRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     name: 'Columbia Heights',
@@ -255,7 +262,7 @@ describe('HomePageContent', () => {
         expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument(),
       );
 
-      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
+      const headings = rowTitles(container);
       expect(headings).toEqual([
         'Newest homes for sale',
         'Be first to see homes coming for sale',
@@ -265,7 +272,7 @@ describe('HomePageContent', () => {
         'Cheapest homes for sale',
         'Cheapest rentals',
         'Explore neighborhoods',
-        'Real listings, updated 5 months ago',
+        'Real listings, updated <age>',
       ]);
     });
 
@@ -280,7 +287,7 @@ describe('HomePageContent', () => {
       await screen.findByText('Newest homes for sale');
       await waitFor(() => expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument());
 
-      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
+      const headings = rowTitles(container);
       expect(headings).toEqual([
         'Newest homes for sale',
         'Newest rentals',
@@ -290,7 +297,7 @@ describe('HomePageContent', () => {
         'Cheapest rentals',
         'Cheapest homes for sale',
         'Explore neighborhoods',
-        'Real listings, updated 5 months ago',
+        'Real listings, updated <age>',
       ]);
     });
 

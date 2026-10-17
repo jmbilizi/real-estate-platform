@@ -11,6 +11,6 @@ exports[`HomePageContent home feed (#836) flag off renders exactly today's rows 
   "See new rentals before they're listed",
   "Cheapest homes for sale",
   "Cheapest rentals",
-  "Real listings, updated 5 months ago",
+  "Real listings, updated <age>",
 ]
 `;

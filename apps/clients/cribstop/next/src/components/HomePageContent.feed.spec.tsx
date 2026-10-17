@@ -84,7 +84,10 @@ function feedResponse(overrides: Partial<HomeFeedResponse> = {}): HomeFeedRespon
 }
 
 function titles(container: HTMLElement): string[] {
-  return [...container.querySelectorAll('h2')].map((h) => h.textContent ?? '');
+  // The trust heading carries a relative age that moves with the wall clock.
+  return [...container.querySelectorAll('h2')].map((h) =>
+    (h.textContent ?? '').replace(/^(Real listings, updated ).*$/, '$1<age>'),
+  );
 }
 
 // The first test renders the page twice and takes 3 s alone. A loaded CI runner needs more than 5 s.
