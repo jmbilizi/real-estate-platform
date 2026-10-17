@@ -2,15 +2,19 @@
 
 import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Provider } from 'react-redux';
+import { useQueryClient } from '@tanstack/react-query';
+import { accountKeys } from '@/lib/query/account';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import {
   AuthError,
   completeSignup,
   CompleteSignupOutcome,
+  type DeviceSignInResult,
   getProfile,
   getSession,
   loginAccount,
   logoutAccount,
+  verifyDeviceSignIn,
 } from '@/lib/api/account';
 import { store } from '@/lib/store/store';
 import {
@@ -72,6 +76,13 @@ interface AppContextValue {
     signupProof: string,
     password: string,
   ) => Promise<CompleteSignupOutcome>;
+  /** Finishes a sign-in that asked for an emailed code on a new device (#818). */
+  completeDeviceLogin: (
+    email: string,
+    password: string,
+    code: string,
+    remember?: boolean,
+  ) => Promise<DeviceSignInResult>;
   logout: () => void;
   /** Flips the home of a listing, so every listing of that home flips together. */
   toggleSave: (listing: { id: string; propertyId: string; city?: string; state?: string }) => void;
@@ -106,9 +117,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <Provider store={store}>
       <SessionVerifier />
+      <AccountQuerySync />
       {children}
     </Provider>
   );
+}
+
+/**
+ * Keeps the Query cache in step with the signed-in account.
+ * - A user switch or a sign-out clears the cache, so no query shows the previous user's data.
+ * - An `AuthError` (401) from an account query signs the user out. Query does not retry it.
+ */
+function AccountQuerySync() {
+  const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
+  const email = useAppSelector(selectUser)?.email ?? null;
+  const previous = useRef(email);
+
+  useEffect(() => {
+    if (previous.current !== null && previous.current !== email) queryClient.clear();
+    previous.current = email;
+  }, [email, queryClient]);
+
+  useEffect(
+    () =>
+      queryClient.getQueryCache().subscribe((event) => {
+        if (event.type !== 'updated' || event.action.type !== 'error') return;
+        if (event.query.queryKey[0] !== accountKeys.all[0]) return;
+        if (!(event.action.error instanceof AuthError)) return;
+        dispatch(logout());
+        dispatch(clearSaved());
+      }),
+    [queryClient, dispatch],
+  );
+
+  return null;
 }
 
 function notifyError(dispatch: (action: ReturnType<typeof addToast>) => unknown) {
@@ -255,6 +298,15 @@ export function useApp(): AppContextValue {
     async (email: string, password: string, remember?: boolean) => {
       const res = await loginAccount({ email, password, remember });
       await startSession(email, res);
+    },
+    [startSession],
+  );
+
+  const completeDeviceLoginUser = useCallback(
+    async (email: string, password: string, code: string, remember?: boolean) => {
+      const outcome = await verifyDeviceSignIn({ email, password, code, remember });
+      if (outcome.ok) await startSession(email, outcome.session);
+      return outcome;
     },
     [startSession],
   );
@@ -409,6 +461,7 @@ export function useApp(): AppContextValue {
     savedPropertyIds,
     login: loginUser,
     completeSignup: completeSignupUser,
+    completeDeviceLogin: completeDeviceLoginUser,
     logout: logoutUser,
     toggleSave: toggleSavedListing,
     removeSaved,

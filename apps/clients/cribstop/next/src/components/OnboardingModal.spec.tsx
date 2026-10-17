@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import OnboardingModal from './OnboardingModal';
 import { updateProfile } from '@/lib/api/account';
 import { getNotificationPreferences, optInToEmail } from '@/lib/api/notification-preferences';
@@ -18,7 +19,7 @@ const mockOptIn = optInToEmail as jest.Mock;
 const WORDING = { id: 'email_non_transactional', version: 1, text: 'Send me Cribstop emails.' };
 
 function openPreferencesStep() {
-  render(<OnboardingModal open />);
+  renderWithClient(<OnboardingModal open />);
   fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
 }
 function emailToggle() {

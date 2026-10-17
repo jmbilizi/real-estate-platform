@@ -65,6 +65,7 @@ internal sealed class IdentityEmailComposer(IOptions<TransactionalEmailOptions> 
             EmailCodePurpose.PasswordReset => ("Reset your password", "Enter this code to reset the password on your Cribstop account."),
             EmailCodePurpose.EmailChangeNew => ("Confirm your new email", "Enter this code to confirm this address for your Cribstop account."),
             EmailCodePurpose.EmailChangeOld => ("Confirm your email change", "Enter this code to approve the email change on your Cribstop account."),
+            EmailCodePurpose.NewDeviceSignIn => ("Approve this sign-in", "Enter this code to sign in to your Cribstop account on a new device."),
             _ => ("Verify your email", "Enter this code to finish creating your Cribstop account."),
         };
         var notes = new[] { $"This code expires in {FormatLifetime(lifetime)}.", "If you did not request this, you can ignore this email." };

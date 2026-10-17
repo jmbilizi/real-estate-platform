@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { makeTestQueryClient } from '@/test/renderWithClient';
 import { AppProvider, useApp } from './context';
 import { store } from '@/lib/store/store';
 import { clearSaved, saveEntry } from '@/lib/store/slices/favoritesSlice';
@@ -18,7 +20,11 @@ jest.mock('@/lib/api/account', () => ({
   getSession: jest.fn().mockResolvedValue({ authenticated: false }),
 }));
 
-const wrapper = ({ children }: { children: ReactNode }) => <AppProvider>{children}</AppProvider>;
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <QueryClientProvider client={makeTestQueryClient()}>
+    <AppProvider>{children}</AppProvider>
+  </QueryClientProvider>
+);
 const LISTING = { id: '0190a000-0000-7000-8000-000000000001', propertyId: 'p1' };
 
 describe('save and unsave events (#826)', () => {

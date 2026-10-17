@@ -1,36 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import {
-  type ConsentWording,
-  getNotificationPreferences,
-} from '@/lib/api/notification-preferences';
+import { useQuery } from '@tanstack/react-query';
+import type { ConsentWording } from '@/lib/api/notification-preferences';
+import { consentWordingOptions } from '@/lib/query/account';
 
 /**
  * Loads the server-held email consent wording once `active` is true. The save handler sends only
  * the wording id. A user must see the text before the opt-in goes out.
  */
 export function useConsentWording(active: boolean) {
-  const [wording, setWording] = useState<ConsentWording | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!active || wording) return;
-    let cancelled = false;
-    setFailed(false);
-    getNotificationPreferences()
-      .then((p) => {
-        if (!cancelled) setWording(p.consentWording);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [active, wording]);
-
-  return { wording, failed };
+  const { data, isError } = useQuery({ ...consentWordingOptions(), enabled: active });
+  return { wording: data ?? null, failed: isError };
 }
 
 export default function EmailConsentNotice({

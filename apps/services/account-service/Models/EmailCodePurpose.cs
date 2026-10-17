@@ -18,4 +18,7 @@ internal enum EmailCodePurpose
 
     /// <summary>The owner of the old address confirms an email change.</summary>
     EmailChangeOld,
+
+    /// <summary>The owner of an account approves a password sign-in from an unrecognized device (#818).</summary>
+    NewDeviceSignIn,
 }

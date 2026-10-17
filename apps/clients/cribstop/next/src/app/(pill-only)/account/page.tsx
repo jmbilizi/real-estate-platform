@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/lib/context';
 import { openAuthModal } from '@/lib/auth-modal';
 import { useRouter } from 'next/navigation';
 import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
-import { getProfile, ProfileResponse, updateProfile as updateProfileApi } from '@/lib/api/account';
+import { type ProfileUpdateRequest, updateProfile as updateProfileApi } from '@/lib/api/account';
+import { accountKeys, profileOptions } from '@/lib/query/account';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import { updateProfile } from '@/lib/store/slices/authSlice';
 import { addToast } from '@/lib/store/slices/toastSlice';
@@ -173,10 +175,14 @@ export default function AccountPage() {
 
 function ProfileSection() {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
   const user = useAppSelector(selectUser);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const profileQuery = useQuery({
+    ...profileOptions(user?.email ?? ''),
+    enabled: editing && !!user,
+  });
+  const loading = editing && profileQuery.isPending && profileQuery.fetchStatus !== 'idle';
 
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
@@ -194,28 +200,33 @@ function ProfileSection() {
   const [smsNotifications, setSmsNotifications] = useState(user?.smsNotificationsEnabled ?? false);
   const [marketingOptIn, setMarketingOptIn] = useState(user?.marketingOptIn ?? false);
 
-  const populateForm = useCallback((p: ProfileResponse) => {
-    setFirstName(p.firstName || '');
-    setLastName(p.lastName || '');
-    setBio(p.bio || '');
-    setDateOfBirth(p.dateOfBirth || '');
-    setEmailNotifications(p.emailNotificationsEnabled ?? false);
-    setEmailWasOn(p.emailNotificationsEnabled ?? false);
-    setPushNotifications(p.pushNotificationsEnabled ?? true);
-    setSmsNotifications(p.smsNotificationsEnabled ?? false);
-    setMarketingOptIn(p.marketingOptIn ?? false);
-  }, []);
+  // Fill the form from the server profile. `profileStamp` changes on each new fetch.
+  const profile = profileQuery.data;
+  const profileStamp = profileQuery.dataUpdatedAt;
+  useEffect(() => {
+    if (!editing || !profile) return;
+    setFirstName(profile.firstName || '');
+    setLastName(profile.lastName || '');
+    setBio(profile.bio || '');
+    setDateOfBirth(profile.dateOfBirth || '');
+    setEmailNotifications(profile.emailNotificationsEnabled ?? false);
+    setEmailWasOn(profile.emailNotificationsEnabled ?? false);
+    setPushNotifications(profile.pushNotificationsEnabled ?? true);
+    setSmsNotifications(profile.smsNotificationsEnabled ?? false);
+    setMarketingOptIn(profile.marketingOptIn ?? false);
+  }, [editing, profileStamp]);
 
-  const handleEdit = () => {
-    setEditing(true);
-    setLoading(true);
-    getProfile()
-      .then((p) => {
-        populateForm(p);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  };
+  const handleEdit = () => setEditing(true);
+
+  // An opt-in records the wording the user saw. An opt-out stays a plain profile update.
+  const saveMutation = useMutation({
+    mutationFn: async (input: { consentWordingId?: string; profile: ProfileUpdateRequest }) => {
+      if (input.consentWordingId) await optInToEmail(input.consentWordingId);
+      await updateProfileApi(input.profile);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+  });
+  const saving = saveMutation.isPending;
 
   const handleSave = async () => {
     if (turningEmailOn && !wording) {
@@ -229,24 +240,22 @@ function ProfileSection() {
       );
       return;
     }
-    setSaving(true);
     try {
-      // An opt-in records the wording the user saw. An opt-out stays a plain profile update.
-      if (turningEmailOn && wording) {
-        await optInToEmail(wording.id);
-      }
       const displayName =
         [firstName.trim(), lastName.trim()].filter(Boolean).join(' ') || undefined;
-      await updateProfileApi({
-        firstName: firstName.trim() || undefined,
-        lastName: lastName.trim() || undefined,
-        displayName,
-        bio: bio.trim() || undefined,
-        dateOfBirth: dateOfBirth || undefined,
-        emailNotificationsEnabled: emailNotifications ? undefined : false,
-        smsNotificationsEnabled: smsNotifications,
-        pushNotificationsEnabled: pushNotifications,
-        marketingOptIn,
+      await saveMutation.mutateAsync({
+        consentWordingId: turningEmailOn && wording ? wording.id : undefined,
+        profile: {
+          firstName: firstName.trim() || undefined,
+          lastName: lastName.trim() || undefined,
+          displayName,
+          bio: bio.trim() || undefined,
+          dateOfBirth: dateOfBirth || undefined,
+          emailNotificationsEnabled: emailNotifications ? undefined : false,
+          smsNotificationsEnabled: smsNotifications,
+          pushNotificationsEnabled: pushNotifications,
+          marketingOptIn,
+        },
       });
       dispatch(
         updateProfile({
@@ -278,7 +287,6 @@ function ProfileSection() {
         }),
       );
     }
-    setSaving(false);
   };
 
   const handleCancel = () => {

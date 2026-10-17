@@ -44,6 +44,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<SecureAccountToken> SecureAccountTokens => Set<SecureAccountToken>();
 
+    public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
+
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
 
     public DbSet<NotificationPreferenceAudit> NotificationPreferenceAudits => Set<NotificationPreferenceAudit>();
@@ -58,6 +60,7 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.Property(u => u.FirstName).HasDefaultValue(string.Empty);
             entity.Property(u => u.LastName).HasDefaultValue(string.Empty);
             entity.Property(u => u.MiddleName).HasDefaultValue(string.Empty);
+            entity.Property(u => u.RequireDeviceCode).HasDefaultValue(false);
 
             // Core identity defaults (VerifiedAt/VerifiedByUserId/VerificationNote are null until set by admin)
 
@@ -343,6 +346,18 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.HasIndex(t => t.TokenHash).IsUnique();
             entity.HasIndex(t => t.ExpiresAt);
             entity.HasIndex(t => t.UserId);
+        });
+
+        // No FK to AspNetUsers. Only the token hash is stored (#818).
+        builder.Entity<TrustedDevice>(entity =>
+        {
+            entity.ToTable("TrustedDevices");
+            entity.Property(d => d.UserId).IsRequired();
+            entity.Property(d => d.TokenHash).IsRequired();
+            entity.Property(d => d.Label).IsRequired().HasMaxLength(TrustedDevice.MaxLabelLength);
+            entity.HasIndex(d => d.TokenHash).IsUnique();
+            entity.HasIndex(d => d.UserId);
+            entity.HasIndex(d => d.ExpiresAt);
         });
     }
 }

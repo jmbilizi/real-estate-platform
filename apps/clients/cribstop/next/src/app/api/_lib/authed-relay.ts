@@ -3,29 +3,32 @@ import { fetchGateway } from '@/app/api/_lib/gateway';
 import { AUTH_COOKIES, authCookies } from '@/app/api/_lib/cookies';
 import { tryRefreshToken } from '@/app/api/_lib/refresh';
 import { visitorIpHeaders } from '@/app/api/_lib/account-relay';
+import { deviceHeaders } from '@/app/api/_lib/device';
 
-function post(path: string, token: string, payload: unknown, req: NextRequest) {
+function send(method: string, path: string, token: string, payload: unknown, req: NextRequest) {
   return fetchGateway(
     path,
     {
-      method: 'POST',
+      method,
       headers: {
         ...visitorIpHeaders(req),
+        ...deviceHeaders(req),
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: payload === undefined ? undefined : JSON.stringify(payload),
     },
     60_000, // .NET cold-start + EF Core pool init can be slow on first request
   );
 }
 
 /**
- * POSTs to the gateway as the signed-in caller. An expired token is refreshed once. Returns
- * `null` when the gateway is unreachable. No access token gives a 401.
+ * Calls the gateway as the signed-in caller. An expired token is refreshed once. Returns `null`
+ * when the gateway is unreachable. No access token gives a 401.
  */
-export async function postAuthed(
+export async function requestAuthed(
+  method: string,
   req: NextRequest,
   path: string,
   payload: unknown,
@@ -34,7 +37,7 @@ export async function postAuthed(
   const token = req.cookies.get(AUTH_COOKIES.accessToken)?.value;
   if (!token) return new Response(null, { status: 401 });
   const attempt = (t: string) =>
-    post(path, t, payload, req).catch((err: unknown) => {
+    send(method, path, t, payload, req).catch((err: unknown) => {
       // Log the failure only. The payload holds a password or a code.
       console.error(`Gateway ${label} failed`, err instanceof Error ? err.message : 'unknown');
       return null;
@@ -45,6 +48,16 @@ export async function postAuthed(
     if (fresh) upstream = await attempt(fresh);
   }
   return upstream;
+}
+
+/** POSTs to the gateway as the signed-in caller. See {@link requestAuthed}. */
+export function postAuthed(
+  req: NextRequest,
+  path: string,
+  payload: unknown,
+  label: string,
+): Promise<Response | null> {
+  return requestAuthed('POST', req, path, payload, label);
 }
 
 /** The session email cookie, which the client reads for display. */
