@@ -2,6 +2,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import { searchListings } from '@/lib/api/listings';
 import type { SearchFilters } from '@/lib/types';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { makeTestQueryClient } from '@/test/renderWithClient';
 import { useListingSearch } from './useListingSearch';
 
 /**
@@ -18,9 +20,9 @@ import { useListingSearch } from './useListingSearch';
  */
 
 jest.mock('@/lib/api/listings', () => ({
+  ...jest.requireActual('@/lib/api/listings'),
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
-  ListingsApiError: class extends Error {},
 }));
 
 // Errors surface through the redux-backed toast; these tests assert on the hook, not the toast.
@@ -50,10 +52,18 @@ function deferred<T>() {
 
 const FILTERS: SearchFilters = { query: 'Bethesda, MD' };
 
+let client = makeTestQueryClient();
+
 const renderSearch = (page = 1) =>
-  renderHook(({ page: p }) => useListingSearch(FILTERS, p), { initialProps: { page } });
+  renderHook(({ page: p }) => useListingSearch(FILTERS, p), {
+    initialProps: { page },
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
 
 beforeEach(() => {
+  client = makeTestQueryClient();
   mockedSearchListings.mockResolvedValue(envelope(1));
 });
 
@@ -80,7 +90,7 @@ describe('useListingSearch reports the page it is searching for', () => {
       pending.resolve(envelope(3));
     });
 
-    expect(result.current.status).toBe('ready');
+    await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(result.current.page).toBe(3);
   });
 
@@ -137,7 +147,12 @@ describe('useListingSearch reports the page it is searching for', () => {
   it('holds a disabled search on the page it will ask for, not on a previous one', async () => {
     const { result, rerender } = renderHook(
       ({ page, enabled }) => useListingSearch(FILTERS, page, enabled),
-      { initialProps: { page: 1, enabled: true } },
+      {
+        initialProps: { page: 1, enabled: true },
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
     );
     await waitFor(() => expect(result.current.status).toBe('ready'));
     expect(mockedSearchListings).toHaveBeenCalledTimes(1);

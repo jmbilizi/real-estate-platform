@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import type { SearchPlace } from '@cribstop/property-contracts';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
@@ -142,7 +143,7 @@ describe.each(CASES)('count links on a $scope (#528, #533)', (c) => {
     });
 
     it('opens exactly the rent homes for the rent count, with the card number', async () => {
-      render(<SearchExperience initialQuery={query} place={place} />);
+      renderWithClient(<SearchExperience initialQuery={query} place={place} />);
       const link = await screen.findByRole('link', { name: /for rent in Kingstowne/ });
       expect(link.textContent).toContain('13');
       const href = await hrefOf(/for rent in Kingstowne/);
@@ -154,7 +155,7 @@ describe.each(CASES)('count links on a $scope (#528, #533)', (c) => {
     });
 
     it('opens exactly the sale homes for the sale count', async () => {
-      render(<SearchExperience initialQuery={query} place={place} />);
+      renderWithClient(<SearchExperience initialQuery={query} place={place} />);
       const link = await screen.findByRole('link', { name: /for sale in Kingstowne/ });
       expect(link.textContent).toContain('28');
       const href = await hrefOf(/for sale in Kingstowne/);
@@ -164,7 +165,7 @@ describe.each(CASES)('count links on a $scope (#528, #533)', (c) => {
     });
 
     it('keeps the grouped view type on the name link', async () => {
-      render(<SearchExperience initialQuery={query} place={place} />);
+      renderWithClient(<SearchExperience initialQuery={query} place={place} />);
       const href = await hrefOf(/^Kingstowne$/);
       expect(href.pathname).toBe(`${NEIGHBORHOOD}/homes-for-sale`);
       expect(href.searchParams.get('type')).toBe(viewType === 'all' ? 'all' : null);
@@ -172,7 +173,7 @@ describe.each(CASES)('count links on a $scope (#528, #533)', (c) => {
     });
 
     it('repeats no value of the path in the query', async () => {
-      render(<SearchExperience initialQuery={query} place={place} />);
+      renderWithClient(<SearchExperience initialQuery={query} place={place} />);
       for (const name of [/^Kingstowne$/, /for sale in Kingstowne/, /for rent in Kingstowne/]) {
         const href = await hrefOf(name);
         for (const key of ['city', 'state', 'neighborhood', 'groupFrom', 'groupBy']) {
@@ -182,7 +183,7 @@ describe.each(CASES)('count links on a $scope (#528, #533)', (c) => {
     });
 
     it('goes to the link on a click, so that the URL is the shareable one', async () => {
-      render(<SearchExperience initialQuery={query} place={place} />);
+      renderWithClient(<SearchExperience initialQuery={query} place={place} />);
       const link = await screen.findByRole('link', { name: /for rent in Kingstowne/ });
       fireEvent.click(link);
       expect(mockPush).toHaveBeenCalledWith(link.getAttribute('href'));

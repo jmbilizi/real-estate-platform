@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import {
   getBrokerGroups,
   getNeighborhoodGroups,
@@ -100,14 +101,14 @@ afterEach(() => {
 
 describe('Group by broker (#722)', () => {
   it('always lists the Broker option, even on a single-ZIP search', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
 
     expect(openGroupOptions()).toEqual(['None', 'Neighborhood', 'Broker']);
   });
 
   it('never groups by broker by default, and reads an unknown groupBy as no grouping', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=office" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=office" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(mockedBrokers).not.toHaveBeenCalled();
@@ -116,7 +117,7 @@ describe('Group by broker (#722)', () => {
   });
 
   it('shows one card per office in the order given, every card in the same style', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
     fireEvent.click(screen.getByTestId('group-by-control'));
     fireEvent.click(screen.getByRole('option', { name: 'Broker' }));
 
@@ -132,7 +133,7 @@ describe('Group by broker (#722)', () => {
   });
 
   it('sends order=name for the name order', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
     await screen.findByTestId('broker-group-grid');
 
     fireEvent.click(screen.getByTestId('group-order-control'));
@@ -142,7 +143,7 @@ describe('Group by broker (#722)', () => {
   });
 
   it('opens an office with a removable chip, and removing it returns to the broker groups', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
     fireEvent.click(await screen.findByRole('link', { name: 'Broker Acme Realty, 9 homes' }));
 
     await waitFor(() => expect(currentParams().get('officeKey')).toBe('1001'));
@@ -162,7 +163,7 @@ describe('Group by broker (#722)', () => {
   });
 
   it('ignores a label in the URL: the chip shows the name the server gives for the key', async () => {
-    render(
+    renderWithClient(
       <SearchExperience initialQuery="q=Bethesda&officeKey=1001&groupLabel=Real+Broker%2C+LLC" />,
     );
 
@@ -175,7 +176,7 @@ describe('Group by broker (#722)', () => {
   it('shows a neutral name while the name loads, and the key for an unknown key', async () => {
     let resolve: (value: unknown) => void = () => undefined;
     mockedBrokers.mockImplementation(() => new Promise((r) => (resolve = r)));
-    render(<SearchExperience initialQuery="q=Bethesda&officeKey=999" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&officeKey=999" />);
     expect((await screen.findByTestId('clear-group-drill')).textContent).toBe('Brokerage');
 
     resolve({ groups: [], total: 0, listingTotal: 0 });
@@ -185,7 +186,7 @@ describe('Group by broker (#722)', () => {
   });
 
   it('always shows a chip for an officeKey filter, and removing it just clears the filter', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&officeKey=1234567" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&officeKey=1234567" />);
     const chip = await screen.findByTestId('clear-group-drill');
 
     fireEvent.click(chip);
@@ -195,14 +196,14 @@ describe('Group by broker (#722)', () => {
   });
 
   it('opens the unlisted group with the `unlisted` key', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
     fireEvent.click(await screen.findByRole('link', { name: 'Broker Other / unlisted, 2 homes' }));
 
     await waitFor(() => expect(currentParams().get('officeKey')).toBe('unlisted'));
   });
 
   it('has no brokerage picker in the filter bar', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     fireEvent.click(screen.getByLabelText('Open filters'));
 
     expect(screen.queryByText(/broker/i)).toBeNull();
@@ -211,7 +212,7 @@ describe('Group by broker (#722)', () => {
   it('shows the loading skeleton, then the empty state', async () => {
     let resolve: (value: unknown) => void = () => undefined;
     mockedBrokers.mockImplementation(() => new Promise((r) => (resolve = r)));
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
     expect(await screen.findByTestId('broker-group-skeleton')).toBeTruthy();
 
     resolve({ groups: [], total: 0, listingTotal: 0 });
@@ -227,7 +228,7 @@ describe('Group by broker (#722)', () => {
         503,
       ),
     );
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=broker" />);
 
     expect(await screen.findByText(/could not load brokerages/i)).toBeTruthy();
     expect(screen.queryByText(/listings service/i)).toBeNull();

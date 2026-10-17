@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import type { MapBounds } from '@cribstop/property-contracts';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
@@ -116,7 +117,7 @@ afterEach(() => {
 
 describe('the map view starts only after the user moves the map', () => {
   it('sends no bounds on the first load and shows no map-area control', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(lastQuery().bounds).toBeUndefined();
@@ -127,7 +128,7 @@ describe('the map view starts only after the user moves the map', () => {
 
   it('filters the list by the view, resets to page 1 and updates the count', async () => {
     mockedSearch.mockResolvedValueOnce(envelope(240));
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&page=3" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&page=3" />);
     await waitFor(() => expect(lastQuery().page).toBe(3));
 
     mockedSearch.mockResolvedValue(envelope(31));
@@ -143,7 +144,7 @@ describe('the map view starts only after the user moves the map', () => {
   });
 
   it('keeps the viewport out of the map pin request, which reads its own view', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
 
@@ -152,7 +153,7 @@ describe('the map view starts only after the user moves the map', () => {
   });
 
   it('rounds the view, so a one-meter pan is not a new request', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -164,7 +165,7 @@ describe('the map view starts only after the user moves the map', () => {
   });
 
   it('cancels the in-flight list request when the view moves again', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     mockedSearch.mockReturnValue(new Promise(() => undefined));
@@ -182,7 +183,7 @@ describe('the map view starts only after the user moves the map', () => {
 
 describe('the URL carries the map view', () => {
   it('writes bounds with replaceState and drops the page', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&page=2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&page=2" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const entries = window.history.length;
     const replace = jest.spyOn(window.history, 'replaceState');
@@ -206,7 +207,7 @@ describe('the URL carries the map view', () => {
       '',
       '/search?q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189',
     );
-    render(
+    renderWithClient(
       <SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189" />,
     );
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
@@ -218,7 +219,7 @@ describe('the URL carries the map view', () => {
   });
 
   it('drops a malformed bounds value instead of sending a request the API rejects', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77,38,-78,39" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77,38,-78,39" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(lastQuery().bounds).toBeUndefined();
@@ -226,7 +227,7 @@ describe('the URL carries the map view', () => {
   });
 
   it('follows Back and Forward between a view and the whole place', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -251,7 +252,7 @@ describe('the URL carries the map view', () => {
 
 describe('the way back to the whole place', () => {
   it('clears the view: full results, URL without bounds, map free to fit the place', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -267,7 +268,7 @@ describe('the way back to the whole place', () => {
   });
 
   it('clears the map area from the chip', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(screen.getByTestId('clear-map-area')).toBeTruthy());
@@ -278,7 +279,7 @@ describe('the way back to the whole place', () => {
   });
 
   it('explains an empty view and clears it', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
 
@@ -292,7 +293,7 @@ describe('the way back to the whole place', () => {
 describe('the view works with the other controls', () => {
   it('keeps filters in the request and the view in the URL', async () => {
     window.history.replaceState(null, '', '/search?q=Alexandria%2C+VA&beds=2&minPrice=300000');
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&beds=2&minPrice=300000" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&beds=2&minPrice=300000" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     moveMap(OLD_TOWN);
@@ -304,7 +305,7 @@ describe('the view works with the other controls', () => {
   });
 
   it('keeps the view when the sort changes', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -318,7 +319,7 @@ describe('the view works with the other controls', () => {
   });
 
   it('keeps the newer map view when the filter modal applies an older draft', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -334,7 +335,7 @@ describe('the view works with the other controls', () => {
   });
 
   it('drops the view when the URL changes to another place', async () => {
-    const { rerender } = render(
+    const { rerender } = renderWithClient(
       <SearchExperience initialQuery="q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189" />,
     );
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -347,7 +348,7 @@ describe('the view works with the other controls', () => {
   });
 
   it('does not count the view as a filter', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -360,7 +361,7 @@ describe('the view works with the other controls', () => {
       filters: { city: 'Alexandria', state: 'VA', listingType: 'sale' as const },
       label: 'Alexandria, VA',
     };
-    render(<SearchExperience initialQuery="" place={place} />);
+    renderWithClient(<SearchExperience initialQuery="" place={place} />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     moveMap(OLD_TOWN);
@@ -370,7 +371,9 @@ describe('the view works with the other controls', () => {
   });
 
   it('narrows the neighborhood cards in the grouped view and resets their page', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&groupBy=neighborhood&page=2" />);
+    renderWithClient(
+      <SearchExperience initialQuery="q=Alexandria%2C+VA&groupBy=neighborhood&page=2" />,
+    );
     await waitFor(() => expect(mockedGroups).toHaveBeenCalled());
     expect((mockedGroups.mock.calls.at(-1)?.[0] as Query).bounds).toBeUndefined();
 
@@ -389,7 +392,7 @@ describe('a search with no place', () => {
   });
 
   it('uses the view alone as the area and follows the map anywhere', async () => {
-    render(<SearchExperience initialQuery="" />);
+    renderWithClient(<SearchExperience initialQuery="" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     expect(lastQuery().bounds).toBeUndefined();
 
@@ -406,7 +409,7 @@ describe('a search with no place', () => {
 
   it('restores the view from a direct load of the URL', async () => {
     window.history.replaceState(null, '', '/homes-for-sale?viewport=-105.31,39.97,-105.2,40.05');
-    render(<SearchExperience initialQuery="viewport=-105.31,39.97,-105.2,40.05" />);
+    renderWithClient(<SearchExperience initialQuery="viewport=-105.31,39.97,-105.2,40.05" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(queries()).toHaveLength(1);
@@ -415,7 +418,7 @@ describe('a search with no place', () => {
   });
 
   it('clears back to every match', async () => {
-    render(<SearchExperience initialQuery="" />);
+    renderWithClient(<SearchExperience initialQuery="" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(FAR_AWAY);
     await waitFor(() => expect(lastQuery().bounds).toEqual(FAR_AWAY));

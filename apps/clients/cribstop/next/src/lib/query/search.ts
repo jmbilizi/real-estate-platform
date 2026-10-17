@@ -2,6 +2,7 @@ import { keepPreviousData, queryOptions, type UseQueryOptions } from '@tanstack/
 import type {
   BrokersResponse,
   ListingsEnvelope,
+  MapBounds,
   NeighborhoodsResponse,
   ZipsResponse,
 } from '@cribstop/property-contracts';
@@ -13,20 +14,32 @@ import {
   getZipGroups,
   type ListingSearchQuery,
   searchListings,
-  toSearchParams,
 } from '@/lib/api/listings';
+import { formatBounds } from '@/lib/map-bounds';
 import { searchKeys } from './keys';
 
 /**
- * The request as one string. It uses the serializer that builds the URL, so two queries that send
- * the same request share a key whatever their property order. Absent and empty values drop out.
+ * The request as one string, with keys sorted. Two queries that send the same request share a
+ * key whatever their property order. Absent and empty values drop out, as in the request URL.
+ * It does not call `toSearchParams`, so a spec that mocks `lib/api/listings` still gets a key.
  */
 export function requestKey(query: object): string {
-  return [...toSearchParams(query as ListingSearchQuery)]
-    .sort(([ak, av], [bk, bv]) => (ak === bk ? av.localeCompare(bv) : ak.localeCompare(bk)))
-    .map(([k, v]) => `${k}=${v}`)
-    .join('&');
+  const pairs: string[] = [];
+  for (const [key, value] of Object.entries(query).sort(([a], [b]) => a.localeCompare(b))) {
+    if (value === undefined || value === null || value === '') continue;
+    if (key === 'bounds' && typeof value === 'object' && !Array.isArray(value)) {
+      pairs.push(`${key}=${formatBounds(value as MapBounds)}`);
+    } else if (Array.isArray(value)) {
+      for (const entry of value.map(String).sort()) pairs.push(`${key}=${entry}`);
+    } else {
+      pairs.push(`${key}=${typeof value === 'object' ? JSON.stringify(value) : String(value)}`);
+    }
+  }
+  return pairs.join('&');
 }
+
+/** A server-rendered page stays fresh this long, so hydration does not fetch it again. */
+const SEED_STALE_MS = 60_000;
 
 type GroupQuery = Parameters<typeof getZipGroups>[0];
 
@@ -45,7 +58,9 @@ export function searchResultsOptions(
     queryKey: searchKeys.results(requestKey(query)),
     queryFn: ({ signal }) => searchListings(query, signal),
     ...(keepPrevious ? { placeholderData: keepPreviousData } : {}),
-    ...(initialData ? { initialData, initialDataUpdatedAt: Date.now() } : {}),
+    ...(initialData
+      ? { initialData, initialDataUpdatedAt: Date.now(), staleTime: SEED_STALE_MS }
+      : {}),
   });
 }
 

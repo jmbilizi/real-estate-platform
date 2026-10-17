@@ -1,4 +1,5 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import type { HomeFeedResponse } from '@cribstop/property-contracts';
 import { aListingCardRow } from '@/test/fixtures';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
@@ -15,9 +16,14 @@ jest.mock('@/lib/api/listings', () => ({
 jest.mock('@/lib/api/saved-homes', () => ({ listRecentSavedHomes: jest.fn() }));
 jest.mock('@/lib/api/home-feed', () => ({ getHomeFeed: jest.fn() }));
 jest.mock('@/lib/analytics', () => ({ trackEvent: jest.fn() }));
+// The real hook reports once per key. A key fires once here, so a re-render adds no impression.
+const mockSeenImpressions = new Set<string>();
 jest.mock('@/lib/useImpression', () => ({
   useImpression: (key: string | null, onImpression: () => void) => (node: HTMLElement | null) => {
-    if (node && key) onImpression();
+    if (node && key && !mockSeenImpressions.has(key)) {
+      mockSeenImpressions.add(key);
+      onImpression();
+    }
   },
 }));
 jest.mock('@/lib/context', () => ({
@@ -83,6 +89,7 @@ function titles(container: HTMLElement): string[] {
 
 describe('HomePageContent home feed (#836)', () => {
   beforeEach(() => {
+    mockSeenImpressions.clear();
     (getListingsMeta as jest.Mock).mockResolvedValue({
       dataUpdatedAt: '2026-04-20T18:00:00.000Z',
       sources: ['internal'],
@@ -113,7 +120,7 @@ describe('HomePageContent home feed (#836)', () => {
   });
 
   async function settledTitles(ui: React.ReactElement) {
-    const { container } = render(ui);
+    const { container } = renderWithClient(ui);
     await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByTestId('home-feed-skeleton')).not.toBeInTheDocument());
     return { container, rows: titles(container) };
@@ -223,7 +230,7 @@ describe('HomePageContent home feed (#836)', () => {
     global.fetch = jest.fn(
       () => new Promise((resolve) => (resolveConfig = resolve)),
     ) as unknown as typeof fetch;
-    const { container } = render(<HomePageContent />);
+    const { container } = renderWithClient(<HomePageContent />);
     await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
     expect(titles(container)).toContain('Newest homes for sale');
     expect(mockedGetHomeFeed).not.toHaveBeenCalled();
@@ -247,7 +254,9 @@ describe('HomePageContent home feed (#836)', () => {
 
   it("keeps today's rows when the visitor already touched the page", async () => {
     mockedGetHomeFeed.mockResolvedValue(feedResponse());
-    const { rerender } = render(<HomePageContent homeFeed={{ enabled: false, rolloutPct: 0 }} />);
+    const { rerender } = renderWithClient(
+      <HomePageContent homeFeed={{ enabled: false, rolloutPct: 0 }} />,
+    );
     window.dispatchEvent(new Event('pointerdown'));
     rerender(<HomePageContent homeFeed={ON} />);
     await waitFor(() => expect(screen.getByText('Explore neighborhoods')).toBeInTheDocument());
@@ -256,7 +265,7 @@ describe('HomePageContent home feed (#836)', () => {
 
   it('shows a skeleton with card rows while the feed loads', async () => {
     mockedGetHomeFeed.mockReturnValue(new Promise(() => undefined));
-    render(<HomePageContent homeFeed={ON} />);
+    renderWithClient(<HomePageContent homeFeed={ON} />);
     const skeleton = await screen.findByTestId('home-feed-skeleton');
     expect(skeleton.querySelectorAll('section')).toHaveLength(3);
     expect(screen.queryByText('Newest homes for sale')).not.toBeInTheDocument();

@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import { aListingCardRow } from '@/test/fixtures';
 import { RESULTS_GRID_COLUMNS_CLASS, RESULTS_GRID_GAP_CLASS } from './resultsGridColumns';
@@ -75,7 +76,7 @@ beforeEach(() => {
 /** #517: a neighborhood card and a listing card show the same cards per row. */
 describe('results grid parity between neighborhood and listing cards (#517)', () => {
   it('gives the listing grid and the neighborhood grid the shared columns', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     const listingGrid = (await screen.findByText(/100 Test St/)).closest('[class*="grid-cols"]');
     expect(columnsOf(listingGrid)).toEqual(SHARED);
 
@@ -88,7 +89,7 @@ describe('results grid parity between neighborhood and listing cards (#517)', ()
   });
 
   it('gives the neighborhood skeleton the shared columns', () => {
-    render(<NeighborhoodGroupGridSkeleton />);
+    renderWithClient(<NeighborhoodGroupGridSkeleton />);
     const skeleton = screen.getByTestId('neighborhood-group-skeleton');
     expect(columnsOf(skeleton)).toEqual(SHARED);
     expect(gapOf(skeleton)).toEqual(SHARED_GAP);

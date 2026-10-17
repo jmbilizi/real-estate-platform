@@ -1,5 +1,7 @@
 import { renderToString } from 'react-dom/server';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { makeTestQueryClient, renderWithClient } from '@/test/renderWithClient';
 import { getNeighborhoodGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
 
@@ -127,14 +129,14 @@ afterEach(() => {
 
 describe('Group by neighborhood (#502)', () => {
   it('does not request groups until the control is on, and is not a filter', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     expect(mockedGroups).not.toHaveBeenCalled();
     expect(screen.getByLabelText('Open filters, 1 active').textContent).toBe('1');
   });
 
   it('shows neighborhood cards, writes groupBy to the URL and sends the search filters', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
     choose('group-by-control', 'Neighborhood');
 
     expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
@@ -154,7 +156,7 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('shows icon-only Group and Sort buttons, and names the current choice in the aria-label', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const groupBy = screen.getByTestId('group-by-control');
     const sort = screen.getByTestId('sort-control');
@@ -188,17 +190,17 @@ describe('Group by neighborhood (#502)', () => {
       appliedFilters: {},
     });
     mockedSearch.mockResolvedValue(env(1418));
-    const { unmount } = render(<SearchExperience initialQuery="q=Bethesda" />);
+    const { unmount } = renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     expect((await screen.findByText('1,418')).parentElement?.textContent).toBe('1,418 Homes');
     unmount();
 
     mockedSearch.mockResolvedValue(env(1));
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     expect((await screen.findByText('1')).parentElement?.textContent).toBe('1 Home');
   });
 
   it('checks the selected option in the dropdown', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     fireEvent.click(screen.getByTestId('sort-control'));
     const selected = screen.getByRole('option', { name: 'Recommended' });
     expect(selected.getAttribute('aria-selected')).toBe('true');
@@ -207,7 +209,7 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('shows Filters, Group and Sort as icon-only 44px buttons with a tooltip', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     for (const button of [
       screen.getByLabelText('Open filters'),
       screen.getByTestId('group-by-control'),
@@ -223,7 +225,7 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('orders by name and keeps the order in the URL', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     await screen.findByTestId('neighborhood-group-grid');
     choose('group-order-control', 'Name A-Z');
 
@@ -232,7 +234,7 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('loads the same grouped view from a shared URL', async () => {
-    render(
+    renderWithClient(
       <SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood&groupOrder=name&page=2" />,
     );
     await waitFor(() => expect(lastGroupQuery()).toMatchObject({ order: 'name', offset: 24 }));
@@ -241,7 +243,7 @@ describe('Group by neighborhood (#502)', () => {
 
   it('drills into a neighborhood on its own path, with no repeated city or state (#533)', async () => {
     window.history.replaceState(null, '', '/search?q=Bethesda&beds=2&groupBy=neighborhood');
-    render(<SearchExperience initialQuery="q=Bethesda&beds=2&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&beds=2&groupBy=neighborhood" />);
     const link = await screen.findByRole('link', { name: 'Chevy Chase' });
     const href = new URL(link.getAttribute('href') ?? '', 'http://x');
     expect(href.pathname).toBe('/bethesda-md/chevy-chase-neighborhood/homes-for-sale');
@@ -263,7 +265,9 @@ describe('Group by neighborhood (#502)', () => {
       results: [row('Dupont Circle', 'Washington', 'DC')],
       total: 1,
     });
-    const { unmount } = render(<SearchExperience initialQuery="state=MD&groupBy=neighborhood" />);
+    const { unmount } = renderWithClient(
+      <SearchExperience initialQuery="state=MD&groupBy=neighborhood" />,
+    );
     const href = new URL(
       (await screen.findByRole('link', { name: 'Dupont Circle' })).getAttribute('href') ?? '',
       'http://x',
@@ -273,7 +277,7 @@ describe('Group by neighborhood (#502)', () => {
     unmount();
 
     window.history.replaceState(null, '', `${href.pathname}${href.search}`);
-    render(
+    renderWithClient(
       <SearchExperience
         initialQuery={href.search.slice(1)}
         place={drillPlace({
@@ -290,7 +294,7 @@ describe('Group by neighborhood (#502)', () => {
 
   it('comes back to the city grouped view from a shared neighborhood path (#533)', async () => {
     window.history.replaceState(null, '', '/bethesda-md/chevy-chase-neighborhood/homes-for-sale');
-    render(<SearchExperience initialQuery="" place={drillPlace()} />);
+    renderWithClient(<SearchExperience initialQuery="" place={drillPlace()} />);
     fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
     expect(mockPush).toHaveBeenCalledWith('/bethesda-md/homes-for-sale?groupBy=neighborhood');
   });
@@ -298,7 +302,7 @@ describe('Group by neighborhood (#502)', () => {
   it('puts the back arrow and a truncated, titled name in the results bar (#523)', async () => {
     const longName = 'Friendship Heights Village Center and Environs of Chevy Chase';
     window.history.replaceState(null, '', '/bethesda-md/long-neighborhood/homes-for-sale');
-    render(<SearchExperience initialQuery="" place={drillPlace({ name: longName })} />);
+    renderWithClient(<SearchExperience initialQuery="" place={drillPlace({ name: longName })} />);
     const back = await screen.findByTestId('back-to-neighborhoods');
     expect(back.getAttribute('aria-label')).toBe('Back to all neighborhoods');
     expect(back.className).toContain('h-11');
@@ -330,13 +334,17 @@ describe('Group by neighborhood (#502)', () => {
     beforeEach(() => window.history.replaceState(null, '', PATH));
 
     it('renders the arrow and the name in the server HTML', () => {
-      const html = renderToString(<SearchExperience initialQuery="" place={drillPlace()} />);
+      const html = renderToString(
+        <QueryClientProvider client={makeTestQueryClient()}>
+          <SearchExperience initialQuery="" place={drillPlace()} />
+        </QueryClientProvider>,
+      );
       expect(html).toContain('data-testid="back-to-neighborhoods"');
       expect(html).toContain('Chevy Chase');
     });
 
     it('searches the exact neighborhood, city and state, and never a boundary', async () => {
-      render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      renderWithClient(<SearchExperience initialQuery="" place={drillPlace()} />);
       await waitFor(() =>
         expect(mockedSearch.mock.calls.at(-1)?.[0]).toMatchObject({
           neighborhood: 'Chevy Chase',
@@ -351,15 +359,15 @@ describe('Group by neighborhood (#502)', () => {
     });
 
     it('survives a reload: the same props give the same view', async () => {
-      const first = render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      const first = renderWithClient(<SearchExperience initialQuery="" place={drillPlace()} />);
       const html = first.container.innerHTML;
       first.unmount();
-      const again = render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      const again = renderWithClient(<SearchExperience initialQuery="" place={drillPlace()} />);
       expect(again.container.innerHTML).toBe(html);
     });
 
     it('returns to the same city and type by default', async () => {
-      render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      renderWithClient(<SearchExperience initialQuery="" place={drillPlace()} />);
       fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
       expect(mockPush).toHaveBeenCalledWith('/bethesda-md/homes-for-sale?groupBy=neighborhood');
     });
@@ -370,7 +378,7 @@ describe('Group by neighborhood (#502)', () => {
         '',
         `${PATH}?groupOrder=name&from=montgomery-county-md.all`,
       );
-      render(
+      renderWithClient(
         <SearchExperience
           initialQuery="groupOrder=name&from=montgomery-county-md.all"
           place={drillPlace()}
@@ -384,7 +392,9 @@ describe('Group by neighborhood (#502)', () => {
 
     it('returns to the all type of a type=all path', async () => {
       window.history.replaceState(null, '', `${PATH}?type=all`);
-      render(<SearchExperience initialQuery="" place={drillPlace({ query: 'type=all' })} />);
+      renderWithClient(
+        <SearchExperience initialQuery="" place={drillPlace({ query: 'type=all' })} />,
+      );
       fireEvent.click(await screen.findByTestId('back-to-neighborhoods'));
       expect(mockPush).toHaveBeenCalledWith(
         '/bethesda-md/homes-for-sale?type=all&groupBy=neighborhood',
@@ -397,7 +407,7 @@ describe('Group by neighborhood (#502)', () => {
         label: 'Bethesda, MD',
         query: '',
       };
-      const { rerender } = render(
+      const { rerender } = renderWithClient(
         <SearchExperience initialQuery="groupBy=neighborhood" place={grouped} />,
       );
       await screen.findByTestId('neighborhood-group-grid');
@@ -413,7 +423,7 @@ describe('Group by neighborhood (#502)', () => {
     });
 
     it('keeps the path when a filter changes', async () => {
-      render(<SearchExperience initialQuery="" place={drillPlace()} />);
+      renderWithClient(<SearchExperience initialQuery="" place={drillPlace()} />);
       await screen.findByTestId('back-to-neighborhoods');
       fireEvent.click(screen.getByLabelText('Open filters'));
       expect(window.location.pathname).toBe(PATH);
@@ -421,14 +431,14 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('shows no arrow and no name outside a drill-down (#523)', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     await screen.findByTestId('neighborhood-group-grid');
     expect(screen.queryByTestId('back-to-neighborhoods')).toBeNull();
     expect(screen.queryByTestId('drilled-neighborhood-name')).toBeNull();
   });
 
   it('gives Filters and Group the one shared icon button class (#748)', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const filters = screen.getByLabelText('Open filters').className;
     expect(screen.getByTestId('group-by-control').className).toBe(filters);
@@ -437,7 +447,7 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('follows Back and Forward', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     choose('group-by-control', 'Neighborhood');
     await screen.findByTestId('neighborhood-group-grid');
 
@@ -452,7 +462,7 @@ describe('Group by neighborhood (#502)', () => {
 
   it('says no neighborhoods match, not no homes', async () => {
     mockedGroups.mockResolvedValue({ results: [], total: 0 });
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     expect((await screen.findByTestId('neighborhood-group-empty')).textContent).toContain(
       'No neighborhoods match',
     );
@@ -460,13 +470,13 @@ describe('Group by neighborhood (#502)', () => {
 
   it('shows the error state with a retry', async () => {
     mockedGroups.mockRejectedValueOnce(new Error('boom'));
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
     expect(await screen.findByTestId('neighborhood-group-grid')).toBeTruthy();
   });
 
   it('gives the map the page of groups, and no markers outside the grouped view (#503)', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockMapProps.current).not.toBeNull());
     expect(mockMapProps.current?.neighborhoods).toBeUndefined();
 
@@ -480,7 +490,7 @@ describe('Group by neighborhood (#502)', () => {
   });
 
   it('links a card and its marker by key on hover and focus (#503)', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     await screen.findByTestId('neighborhood-group-grid');
     const key = 'md|bethesda|chevy chase';
     const card = () => document.querySelector(`[data-neighborhood-key="${key}"]`) as HTMLElement;
@@ -511,7 +521,7 @@ describe('Group by neighborhood (#502)', () => {
       results: [{ ...row('Chevy Chase'), centroid: { lat: 38.95, lng: -77.05 }, bounds }],
       total: 1,
     });
-    render(<SearchExperience initialQuery="q=Bethesda&beds=2&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&beds=2&groupBy=neighborhood" />);
     await screen.findByTestId('neighborhood-group-grid');
     await waitFor(() => expect(mockMapProps.current?.neighborhoods?.rows).toHaveLength(1));
 
@@ -525,7 +535,7 @@ describe('Group by neighborhood (#502)', () => {
 
   it('pages the groups by offset', async () => {
     mockedGroups.mockResolvedValue({ results: [row('A')], total: 60 });
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=neighborhood" />);
     await screen.findByTestId('neighborhood-group-grid');
     fireEvent.click(screen.getByRole('button', { name: '3' }));
     expect(currentParams().get('page')).toBe('3');
@@ -547,7 +557,7 @@ describe('Expanded map filter and group buttons (#576)', () => {
     ).viewControls;
 
   it('opens the toolbar filter dialog and passes the active filter count', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&beds=2" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(viewControls().filterCount).toBe(1);
@@ -557,7 +567,7 @@ describe('Expanded map filter and group buttons (#576)', () => {
   });
 
   it('toggles Group by neighborhood on and off with the same URL as the toolbar', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(viewControls().grouped).toBe(false);
