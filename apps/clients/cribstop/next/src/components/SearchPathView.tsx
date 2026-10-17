@@ -18,9 +18,9 @@ import { thinPageMinListings } from '@/lib/seo-config';
  * for the right place. There is no `<Suspense>` here, for the reason in `search/page.tsx` history:
  * the results shell must be in the first HTML.
  *
- * A place page carries one H1 and a dated summary of the feed (#842). The summary block is plain
- * server HTML in the first response, so it needs no loading skeleton. When the figures cannot be
- * read, the page keeps the H1 and drops the figures.
+ * A place page carries one visually hidden H1 and, below the results, a dated summary of the feed
+ * (#842, #929). Both are plain server HTML in the first response, so neither needs a loading
+ * skeleton. When the figures cannot be read, the page keeps the H1 and drops the summary.
  */
 export default async function SearchPathView({
   parsed,
@@ -44,26 +44,7 @@ export default async function SearchPathView({
   const experience = <SearchExperience initialQuery={props.initialQuery} place={props.place} />;
   return (
     <>
-      {label ? (
-        <header className="mx-auto w-full max-w-3xl px-4 pb-2 pt-4 sm:px-6">
-          <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{`${noun} in ${label}`}</h1>
-          {stats ? (
-            <>
-              <p className="mt-2 text-sm text-ink-body">
-                {citySummary(label, parsed.segment, stats)}
-              </p>
-              <p className="mt-1 text-xs text-ink-muted">
-                <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
-                {' · '}
-                <time dateTime={stats.asOf}>{`Updated ${formatDate(stats.asOf)}`}</time>
-                {stats.sources.includes('brightMLS')
-                  ? ' · Listing information provided by Bright MLS. Each listing names its listing broker. Deemed reliable but not guaranteed.'
-                  : ' · Each listing names its listing broker.'}
-              </p>
-            </>
-          ) : null}
-        </header>
-      ) : null}
+      {label ? <h1 className="sr-only">{`${noun} in ${label}`}</h1> : null}
       {initialResults ? (
         <HydratedSearch
           request={initialRequestFor(props.initialQuery, props.place)}
@@ -74,6 +55,22 @@ export default async function SearchPathView({
       ) : (
         experience
       )}
+      {label && stats ? (
+        <section
+          aria-label="About these listings"
+          className="mx-auto w-full max-w-3xl px-4 pb-6 pt-4 sm:px-6"
+        >
+          <p className="text-sm text-ink-body">{citySummary(label, parsed.segment, stats)}</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
+            {' · '}
+            <time dateTime={stats.asOf}>{`Updated ${formatDate(stats.asOf)}`}</time>
+            {stats.sources.includes('brightMLS')
+              ? ' · Listing information provided by Bright MLS. Each listing names its listing broker. Deemed reliable but not guaranteed.'
+              : ' · Each listing names its listing broker.'}
+          </p>
+        </section>
+      ) : null}
     </>
   );
 }

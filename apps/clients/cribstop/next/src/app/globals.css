@@ -844,3 +844,13 @@ html[data-map-expanded] {
     display: none;
   }
 }
+
+/* App-like touch feel (#923). Touch devices only, so desktop hover and focus do not change. */
+@media (hover: none) and (pointer: coarse) {
+  a,
+  button,
+  [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}

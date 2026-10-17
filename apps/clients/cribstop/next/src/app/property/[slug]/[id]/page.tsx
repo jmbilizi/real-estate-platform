@@ -5,6 +5,7 @@ import JsonLd from '@/components/JsonLd';
 import ListingLoadError from '@/components/listing/ListingLoadError';
 import PropertyPageView, { PropertyHistory } from '@/components/listing/PropertyPageView';
 import StandaloneListingView from '@/components/listing/StandaloneListingView';
+import HydratedListing from '@/lib/query/HydratedListing';
 import { toListingDetailView } from '@/lib/api/listings';
 import {
   loadPropertyByHomeId,
@@ -103,16 +104,17 @@ export default async function PropertyRoute({ params }: RouteProps) {
   return (
     <>
       {jsonLd ? <JsonLd data={jsonLd} /> : null}
-      <StandaloneListingView
-        id={listing.id}
-        initialState={{ status: 'ready', listing }}
-        cityQuery={cityQuery}
-        statusLabel={page.marketStatus}
-        nearby={page.nearby}
-        propertyPanel={
-          page.history.length > 0 ? <PropertyHistory entries={page.history} /> : undefined
-        }
-      />
+      <HydratedListing listing={listing}>
+        <StandaloneListingView
+          id={listing.id}
+          cityQuery={cityQuery}
+          statusLabel={page.marketStatus}
+          nearby={page.nearby}
+          propertyPanel={
+            page.history.length > 0 ? <PropertyHistory entries={page.history} /> : undefined
+          }
+        />
+      </HydratedListing>
     </>
   );
 }

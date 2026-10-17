@@ -91,6 +91,22 @@ describe('SearchPathView (#533)', () => {
     expect(html).toContain('Real Broker, LLC');
   });
 
+  it('hides the H1 visually and places the summary after the results (#929)', async () => {
+    (searchRouteProps as jest.Mock).mockResolvedValue(found);
+    (loadInitialResults as jest.Mock).mockResolvedValue(undefined);
+    (loadCityStats as jest.Mock).mockResolvedValue(stats);
+    const view = await SearchPathView({ parsed: parsed as never, params: new URLSearchParams() });
+    const html = renderToStaticMarkup(view);
+    expect(html).toMatch(/<h1 class="sr-only">Homes for sale in Alexandria, VA<\/h1>/);
+    const children = (view as { props: { children: unknown[] } }).props.children;
+    expect(children).toHaveLength(3);
+    const summary = renderToStaticMarkup(children[2] as never);
+    expect(summary).toContain('42 active listings');
+    expect(summary).toContain('Real Broker, LLC');
+    expect(summary).toContain('Listing information provided by Bright MLS');
+    expect(summary).toContain('Deemed reliable but not guaranteed');
+  });
+
   it('keeps the H1 and drops the figures when the stats read fails (#842)', async () => {
     (searchRouteProps as jest.Mock).mockResolvedValue(found);
     (loadInitialResults as jest.Mock).mockResolvedValue(undefined);
