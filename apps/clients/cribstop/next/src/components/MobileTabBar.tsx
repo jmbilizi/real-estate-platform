@@ -72,11 +72,17 @@ export default function MobileTabBar() {
             const Icon = tab.icon;
             const label = (
               <>
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-5 top-0 h-0.5 rounded-b-full bg-brand"
+                  />
+                )}
                 <Icon className="h-6 w-6" strokeWidth={active ? 2.25 : 1.75} aria-hidden="true" />
                 <span className="truncate">{tab.label}</span>
               </>
             );
-            const cls = `flex h-full min-h-11 w-full touch-manipulation flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors active:bg-surface-alt ${
+            const cls = `relative flex h-full min-h-11 w-full touch-manipulation flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors active:bg-surface-alt ${
               active ? 'text-brand' : 'text-ink-muted'
             }`;
             return (

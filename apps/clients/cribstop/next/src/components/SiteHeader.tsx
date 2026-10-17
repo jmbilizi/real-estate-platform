@@ -19,9 +19,13 @@ export default function SiteHeader() {
     <>
       <div
         data-testid="mobile-brand-line"
-        className="flex h-11 items-center justify-center bg-white md:hidden"
+        className="flex h-9 items-center justify-center bg-white md:hidden"
       >
-        <Link href="/" className="flex min-h-11 items-center gap-2" aria-label={BRAND.brokerage}>
+        <Link
+          href="/"
+          className="relative flex items-center gap-2 before:absolute before:-inset-y-1.5 before:-inset-x-2 before:content-['']"
+          aria-label={BRAND.brokerage}
+        >
           <span className="font-display text-base font-bold leading-tight">{BRAND.brokerage}</span>
           <span className="flex gap-1 font-display text-xs leading-tight" aria-hidden="true">
             <span>CRIB</span>
