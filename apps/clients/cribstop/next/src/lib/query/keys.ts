@@ -29,3 +29,8 @@ export const searchKeys = {
   brokers: (request: string) => [...searchKeys.all, 'brokers', request] as const,
   meta: () => [...searchKeys.all, 'meta'] as const,
 };
+
+/** Homes near one listing. Separate from `listingKeys` so parallel tickets do not collide. */
+export const nearbyKeys = {
+  forListing: (id: string) => [...listingKeys.all, 'nearby', id] as const,
+};
