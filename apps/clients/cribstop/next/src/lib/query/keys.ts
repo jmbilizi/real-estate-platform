@@ -7,3 +7,8 @@ export const listingKeys = {
   all: ['listings'] as const,
   detail: (id: string) => [...listingKeys.all, 'detail', id] as const,
 };
+
+/** Homes near one listing. Separate from `listingKeys` so parallel tickets do not collide. */
+export const nearbyKeys = {
+  forListing: (id: string) => [...listingKeys.all, 'nearby', id] as const,
+};
