@@ -4,6 +4,7 @@
  */
 import { loadPropertyPage } from '@/lib/api/property-page';
 import { aPropertyPage } from '@/test/fixtures';
+import HydratedListing from '@/lib/query/HydratedListing';
 import PropertyRoute from './page';
 
 jest.mock('next/navigation', () => ({
@@ -39,14 +40,17 @@ describe('PropertyRoute hard load', () => {
   it('renders the modal over the listing city search when the property has a listing', async () => {
     const wrapper = await render(aPropertyPage());
     // The page is a fragment: the JSON-LD block (null here, no SITE_ORIGIN) and the modal.
-    const element = wrapper.props.children[1];
+    // The listing reaches the client through the hydrated query cache, once, not as a prop.
+    const hydrated = wrapper.props.children[1];
+    expect(hydrated.type).toBe(HydratedListing);
+    const element = hydrated.props.children;
 
     expect(element.type.name).toBe('default');
     expect(element.props.id).toBe(ID);
-    expect(element.props.initialState.status).toBe('ready');
+    expect(element.props.initialState).toBeUndefined();
     const query = new URLSearchParams(element.props.cityQuery);
-    expect(query.get('city')).toBe(element.props.initialState.listing.city);
-    expect(query.get('state')).toBe(element.props.initialState.listing.state);
+    expect(query.get('city')).toBe(hydrated.props.listing.city);
+    expect(query.get('state')).toBe(hydrated.props.listing.state);
     expect(element.props.statusLabel).toBe('Active');
   });
 

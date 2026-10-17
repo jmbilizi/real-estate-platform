@@ -34,7 +34,8 @@ export default function StandaloneListingView({
   propertyPanel,
 }: {
   id: string;
-  initialState: ListingDetailState;
+  /** Omit for a listing that arrives through the Query cache (`HydratedListing`). */
+  initialState?: ListingDetailState;
   /**
    * The search that would have produced this listing, as a query string — or null when the listing
    * failed to load and there is therefore no city to fall back on.
