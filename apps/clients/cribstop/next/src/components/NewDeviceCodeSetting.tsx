@@ -5,10 +5,10 @@ import {
   AuthError,
   CodesUnavailableError,
   getNewDeviceSetting,
+  type NewDeviceSetting,
   RateLimitError,
   removeTrustedDevice,
   setNewDeviceSetting,
-  type NewDeviceSetting,
 } from '@/lib/api/account';
 import { useCountdown } from '@/lib/useCountdown';
 

@@ -7,12 +7,12 @@ import {
   AuthError,
   completeSignup,
   CompleteSignupOutcome,
+  type DeviceSignInResult,
   getProfile,
   getSession,
   loginAccount,
   logoutAccount,
   verifyDeviceSignIn,
-  type DeviceSignInResult,
 } from '@/lib/api/account';
 import { store } from '@/lib/store/store';
 import {
