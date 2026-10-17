@@ -1,4 +1,5 @@
 import { cleanup, configure, fireEvent, screen, waitFor } from '@testing-library/react';
+import { pinClock, restoreClock } from '@/test/fixed-clock';
 import { renderWithClient } from '@/test/renderWithClient';
 import { aListingCardRow } from '@/test/fixtures';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
@@ -53,13 +54,6 @@ const mockedSearchListings = searchListings as jest.Mock;
 const mockedGetListingsMeta = getListingsMeta as jest.Mock;
 const mockedGetNeighborhoods = getNeighborhoods as jest.Mock;
 const mockedRecentSaved = listRecentSavedHomes as jest.Mock;
-
-// The trust heading carries a relative age that moves with the wall clock.
-function rowTitles(container: HTMLElement): (string | null)[] {
-  return Array.from(container.querySelectorAll('h2')).map(
-    (h) => h.textContent?.replace(/^(Real listings, updated ).*$/, '$1<age>') ?? null,
-  );
-}
 
 function neighborhoodRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -126,6 +120,7 @@ describe('HomePageContent', () => {
   afterAll(() => configure({ asyncUtilTimeout: defaultAsyncTimeout }));
 
   beforeEach(() => {
+    pinClock();
     mockedGetListingsMeta.mockResolvedValue({
       dataUpdatedAt: '2026-04-20T18:00:00.000Z',
       sources: ['internal'],
@@ -138,6 +133,7 @@ describe('HomePageContent', () => {
   });
 
   afterEach(() => {
+    restoreClock();
     cleanup();
     mockedSearchListings.mockReset();
     mockedGetListingsMeta.mockReset();
@@ -262,7 +258,7 @@ describe('HomePageContent', () => {
         expect(screen.queryByText('Homes for sale near you')).not.toBeInTheDocument(),
       );
 
-      const headings = rowTitles(container);
+      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
       expect(headings).toEqual([
         'Newest homes for sale',
         'Be first to see homes coming for sale',
@@ -272,7 +268,7 @@ describe('HomePageContent', () => {
         'Cheapest homes for sale',
         'Cheapest rentals',
         'Explore neighborhoods',
-        'Real listings, updated <age>',
+        'Real listings, updated 5 months ago',
       ]);
     });
 
@@ -287,7 +283,7 @@ describe('HomePageContent', () => {
       await screen.findByText('Newest homes for sale');
       await waitFor(() => expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument());
 
-      const headings = rowTitles(container);
+      const headings = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
       expect(headings).toEqual([
         'Newest homes for sale',
         'Newest rentals',
@@ -297,7 +293,7 @@ describe('HomePageContent', () => {
         'Cheapest rentals',
         'Cheapest homes for sale',
         'Explore neighborhoods',
-        'Real listings, updated <age>',
+        'Real listings, updated 5 months ago',
       ]);
     });
 
@@ -501,12 +497,10 @@ describe('HomePageContent', () => {
       const title = await screen.findByText('Newest homes for sale');
 
       expect(title.textContent).not.toMatch(/Richmond/);
-      const href = title
-        .closest('section')
-        ?.querySelector('a[href*="newly-listed"]')
-        ?.getAttribute('href');
-      expect(href).toContain('city=Richmond');
-      expect(href).toContain('state=VA');
+      const hrefOf = () =>
+        title.closest('section')?.querySelector('a[href*="newly-listed"]')?.getAttribute('href');
+      await waitFor(() => expect(hrefOf()).toContain('city=Richmond'));
+      expect(hrefOf()).toContain('state=VA');
       expect(title.closest('section')).toHaveAttribute('data-target-source', 'ip');
     });
 
@@ -1108,7 +1102,7 @@ describe('HomePageContent', () => {
       renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
-      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+      expect(screen.getByText('Real listings, updated 5 months ago')).toBeInTheDocument();
     });
 
     it('falls back to a plain, fact-backed trust-block title when freshness is not known yet', async () => {
@@ -1155,7 +1149,7 @@ describe('HomePageContent', () => {
 
       // Both are months old at test time, but lastSyncedAt is the newer of the two, so it must be
       // what the relative-time text is computed from.
-      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+      expect(screen.getByText('Real listings, updated 5 months ago')).toBeInTheDocument();
     });
 
     it('falls back to dataUpdatedAt when lastSyncedAt is absent (older deployment)', async () => {
@@ -1168,7 +1162,7 @@ describe('HomePageContent', () => {
       renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
-      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+      expect(screen.getByText('Real listings, updated 5 months ago')).toBeInTheDocument();
     });
 
     it('falls back to dataUpdatedAt when lastSyncedAt is null (no sync run has succeeded yet)', async () => {
@@ -1182,7 +1176,7 @@ describe('HomePageContent', () => {
       renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
-      expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
+      expect(screen.getByText('Real listings, updated 5 months ago')).toBeInTheDocument();
     });
   });
 

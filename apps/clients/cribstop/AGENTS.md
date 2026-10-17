@@ -9,7 +9,12 @@ Nx project name: **`cribstop-web`**.
 pnpm run cribstop:web                  # Dev server with HMR
 pnpm run skaffold:services             # Run backend in K8s alongside (2nd terminal)
 pnpm exec nx lint cribstop-web        # Also: test, type-check
+pnpm run test:clock-guard              # Specs with the system clock one year ahead
 ```
+
+A spec that renders a relative or clock-dependent value pins the clock with `pinClock()` from
+`src/test/fixed-clock.ts`. It asserts the exact text. Run `test:clock-guard` before you add a spec
+with a fixed date. A failure means a spec reads the real clock.
 
 ## Key Docs
 

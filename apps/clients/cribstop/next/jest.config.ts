@@ -2,6 +2,8 @@ export default {
   displayName: 'cribstop-web',
   preset: '../../../../jest.preset.js',
   testEnvironment: 'jsdom',
+  // #940. Clock guard: TEST_CLOCK_OFFSET_DAYS moves the system clock ahead.
+  setupFiles: ['../../../../tools/node/configs/jest-clock-offset.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   // #868. Safety margin for the parallel run. Do not raise it above 10 s. A slow spec needs a
   // cheaper render, not a longer limit.
