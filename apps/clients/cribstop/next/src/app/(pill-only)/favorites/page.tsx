@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/context';
+import { openAuthModal } from '@/lib/auth-modal';
 import ListingCard from '@/components/ListingCard';
 import OffMarketHomeCard from '@/components/OffMarketHomeCard';
 import { getListing, type ListingDetailView, ListingsApiError } from '@/lib/api/listings';
@@ -10,7 +11,6 @@ import type { SavedHome } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 const DEFAULT_ERROR_MESSAGE = "We couldn't load your saved homes. Please try again.";
 
@@ -39,7 +39,6 @@ type FavoriteItem =
 
 export default function FavoritesPage() {
   const { user, savedHomes, savedPropertyIds, removeSaved, adoptSaved } = useApp();
-  const router = useRouter();
 
   const [items, setItems] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,9 +127,7 @@ export default function FavoritesPage() {
   );
 
   const openModal = (mode: 'login' | 'signup') => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('modal', mode);
-    router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+    openAuthModal(mode);
   };
 
   // While loading, show the count the store holds rather than the still-empty list, so the header

@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import StandaloneAuth from '@/components/StandaloneAuth';
 
 export default function SignupPage() {
-  redirect('/?modal=signup');
+  return <StandaloneAuth />;
 }

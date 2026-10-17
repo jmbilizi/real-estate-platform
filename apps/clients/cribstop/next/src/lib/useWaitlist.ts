@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
 import { useApp } from '@/lib/context';
+import { openAuthModal } from '@/lib/auth-modal';
 import { useToast } from '@/lib/useToast';
 import {
   getWaitlistInterests,
@@ -28,8 +28,6 @@ const PENDING_JOIN_TTL_MS = 5 * 60_000;
  */
 export function useWaitlist() {
   const { user, sessionLoading } = useApp();
-  const router = useRouter();
-  const pathname = usePathname();
   const { toast } = useToast();
 
   const [joined, setJoined] = useState<ReadonlySet<WaitlistInterest>>(new Set());
@@ -115,13 +113,13 @@ export function useWaitlist() {
     (kind: WaitlistInterest) => {
       if (!signedIn) {
         pendingJoin.current = { kind, at: Date.now() };
-        router.push(`${pathname}?modal=login`, { scroll: false });
+        openAuthModal('login');
         return;
       }
       if (joined.has(kind)) void withdraw(kind);
       else void join(kind);
     },
-    [signedIn, joined, join, withdraw, router, pathname],
+    [signedIn, joined, join, withdraw],
   );
 
   return {
