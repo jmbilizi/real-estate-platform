@@ -3,7 +3,8 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { type ParsedSearchPath, searchPath } from '@cribstop/property-contracts';
 import SearchExperience from '@/components/SearchExperience';
 import { loadCityStats } from '@/lib/api/city-stats';
-import { loadInitialResults } from '@/lib/api/listings-initial';
+import { initialRequestFor, loadInitialResults } from '@/lib/api/listings-initial';
+import HydratedSearch from '@/lib/query/HydratedSearch';
 import { BRAND } from '@/lib/brand';
 import { cityRobots, citySummary, cityTitle } from '@/lib/city-summary';
 import { formatDate } from '@/lib/format';
@@ -40,6 +41,7 @@ export default async function SearchPathView({
     label ? loadCityStats(props.initialQuery, props.place) : null,
   ]);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
+  const experience = <SearchExperience initialQuery={props.initialQuery} place={props.place} />;
   return (
     <>
       {label ? (
@@ -62,11 +64,16 @@ export default async function SearchPathView({
           ) : null}
         </header>
       ) : null}
-      <SearchExperience
-        initialQuery={props.initialQuery}
-        place={props.place}
-        initialResults={initialResults}
-      />
+      {initialResults ? (
+        <HydratedSearch
+          request={initialRequestFor(props.initialQuery, props.place)}
+          results={initialResults}
+        >
+          {experience}
+        </HydratedSearch>
+      ) : (
+        experience
+      )}
     </>
   );
 }

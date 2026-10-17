@@ -14,6 +14,23 @@ export function initialQueryFor(request: ListingSearchQuery): string {
 }
 
 /**
+ * The search request the first render makes for a path (#841). The client builds the same request
+ * from the same inputs, so its query key matches the key of the server's data.
+ */
+export function initialRequestFor(
+  initialQuery: string,
+  place: { readonly filters: SearchFilters },
+): ListingSearchQuery {
+  const params = new URLSearchParams(initialQuery);
+  return {
+    ...parseQueryFilters(params, place),
+    ...place.filters,
+    page: parsePageFromSearchParams(params),
+    pageSize: PAGE_SIZE_DEFAULT,
+  };
+}
+
+/**
  * The first page of a search path, fetched on the server (#841), so the first HTML holds the
  * listing cards. It makes the call the browser makes through `/api/listings`: the same allowlist,
  * the same gateway, the same masking and suppression rules.
@@ -29,12 +46,7 @@ export async function loadInitialResults(
   const params = new URLSearchParams(initialQuery);
   if (parseGroupState(params).groupBy) return undefined;
 
-  const request = {
-    ...parseQueryFilters(params, place),
-    ...place.filters,
-    page: parsePageFromSearchParams(params),
-    pageSize: PAGE_SIZE_DEFAULT,
-  };
+  const request = initialRequestFor(initialQuery, place);
   try {
     const clientIp = clientIpOf(await headers());
     const response = await proxyListingsRead('', initialQueryFor(request), {

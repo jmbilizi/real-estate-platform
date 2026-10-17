@@ -13,10 +13,15 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/components/SearchExperience', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/lib/search-route', () => ({ searchRouteProps: jest.fn() }));
 
-jest.mock('@/lib/api/listings-initial', () => ({ loadInitialResults: jest.fn() }));
+jest.mock('@/lib/api/listings-initial', () => ({
+  loadInitialResults: jest.fn(),
+  initialRequestFor: jest.fn(() => ({ page: 1 })),
+}));
 jest.mock('@/lib/api/city-stats', () => ({ loadCityStats: jest.fn() }));
 
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { makeTestQueryClient } from '@/test/renderWithClient';
 import { loadCityStats } from '@/lib/api/city-stats';
 import { loadInitialResults } from '@/lib/api/listings-initial';
 import { searchRouteProps } from '@/lib/search-route';
@@ -60,13 +65,15 @@ describe('SearchPathView (#533)', () => {
     });
     (loadInitialResults as jest.Mock).mockResolvedValue(results);
     const view = await SearchPathView({ parsed: parsed as never, params: new URLSearchParams() });
-    const html = renderToStaticMarkup(view);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={makeTestQueryClient()}>{view}</QueryClientProvider>,
+    );
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).toContain('Homes for sale in Alexandria, VA');
     expect(loadInitialResults).toHaveBeenCalledWith('', expect.objectContaining({ filters: {} }));
-    const grid = (view as { props: { children: { props: { initialResults: unknown } }[] } }).props
+    const grid = (view as { props: { children: { props: { results: unknown } }[] } }).props
       .children[1];
-    expect(grid.props.initialResults).toBe(results);
+    expect(grid.props.results).toBe(results);
   });
 
   it('renders the dated summary, the update date and the attribution (#842)', async () => {
