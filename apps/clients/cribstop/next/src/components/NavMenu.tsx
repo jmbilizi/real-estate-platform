@@ -35,17 +35,65 @@ export function getNavMenuItems(signedIn: boolean): {
 }
 
 const ITEM_CLASS =
-  'block w-full px-5 py-2.5 text-left text-sm text-ink hover:bg-gray-100 focus:bg-gray-100 focus:outline-none';
+  'flex min-h-11 w-full items-center px-5 py-2.5 text-left text-sm text-ink hover:bg-gray-100 focus:bg-gray-100 focus:outline-none active:bg-gray-100';
 
-/** The More (3 vertical dots) menu at the far right of the navbar. It uses the Apps panel. */
+/**
+ * The menu items, shared by the desktop panel and the phone Settings sheet (#943). One list, so the
+ * two surfaces cannot drift. `onDone` runs before a link navigates or the auth action starts.
+ */
+export function NavMenuItems({
+  signedIn,
+  onAuth,
+  onDone,
+}: {
+  signedIn: boolean;
+  onAuth: () => void;
+  onDone: () => void;
+}) {
+  const { primary, secondary } = getNavMenuItems(signedIn);
+  const renderItem = (item: NavMenuItem) =>
+    item.kind === 'link' ? (
+      <Link
+        key={item.label}
+        href={item.href}
+        role="menuitem"
+        className={ITEM_CLASS}
+        onClick={onDone}
+      >
+        {item.label}
+      </Link>
+    ) : (
+      <button
+        key={item.label}
+        type="button"
+        role="menuitem"
+        className={ITEM_CLASS}
+        onClick={() => {
+          onDone();
+          onAuth();
+        }}
+      >
+        {item.label}
+      </button>
+    );
+  return (
+    <>
+      {primary.map(renderItem)}
+      {primary.length > 0 && (
+        <div role="separator" className="mx-4 my-2 border-t border-black/[0.06]" />
+      )}
+      {secondary.map(renderItem)}
+    </>
+  );
+}
+
+/** The More (3 vertical dots) menu on the desktop navbar. Phones use the Settings tab (#943). */
 export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAuth: () => void }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // SlidePanel closes on the trigger's mousedown. The click that follows must not reopen it.
   const closedAt = useRef(0);
-  const { primary, secondary } = getNavMenuItems(signedIn);
-
   const close = useCallback(() => {
     closedAt.current = Date.now();
     setOpen(false);
@@ -89,32 +137,6 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
     else if (e.key === 'Tab') close();
   };
 
-  const renderItem = (item: NavMenuItem) =>
-    item.kind === 'link' ? (
-      <Link
-        key={item.label}
-        href={item.href}
-        role="menuitem"
-        className={ITEM_CLASS}
-        onClick={close}
-      >
-        {item.label}
-      </Link>
-    ) : (
-      <button
-        key={item.label}
-        type="button"
-        role="menuitem"
-        className={ITEM_CLASS}
-        onClick={() => {
-          close();
-          onAuth();
-        }}
-      >
-        {item.label}
-      </button>
-    );
-
   return (
     <>
       {/*
@@ -133,7 +155,7 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
           if (Date.now() - closedAt.current < 300) return;
           setOpen((v) => !v);
         }}
-        className="relative -mr-1 inline-flex h-6 w-1 shrink-0 cursor-pointer items-center justify-end rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-2 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+        className="relative -mr-1 inline-flex max-md:hidden h-6 w-1 shrink-0 cursor-pointer items-center justify-end rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-2 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
       >
         {MORE_ICON}
       </button>
@@ -145,11 +167,7 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
           onKeyDown={onMenuKeyDown}
           className="py-2"
         >
-          {primary.map(renderItem)}
-          {primary.length > 0 && (
-            <div role="separator" className="mx-4 my-2 border-t border-black/[0.06]" />
-          )}
-          {secondary.map(renderItem)}
+          <NavMenuItems signedIn={signedIn} onAuth={onAuth} onDone={close} />
         </div>
       </SlidePanel>
     </>
