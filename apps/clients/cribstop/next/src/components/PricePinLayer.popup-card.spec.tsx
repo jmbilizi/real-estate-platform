@@ -61,9 +61,9 @@ afterEach(() => {
 
 it('shows the card in the popup after a click on a pin off the results page', async () => {
   render(<PricePinLayer pins={[pin]} rowsById={new Map()} activeId={null} />);
-  let target: (L.CircleMarker & { pin: MapPin }) | undefined;
+  let target: L.CircleMarker | undefined;
   mockMap.eachLayer((layer) => {
-    if ('pin' in layer && 'label' in layer) target = layer as L.CircleMarker & { pin: MapPin };
+    if ('pin' in layer && 'label' in layer) target = layer as unknown as L.CircleMarker;
   });
 
   await act(async () => {
