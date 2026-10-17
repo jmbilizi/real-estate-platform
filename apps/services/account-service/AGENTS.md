@@ -277,12 +277,12 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   send that code. The web page opens the reset flow.
 - Purge: `PendingRegistrationPurgeService` also runs `EmailChangeService.PurgeAsync`.
 - Data keyed on email (checked for #660): waitlist interests key on `UserId` (FK, composite key).
-  API keys and onboarding intents key on `UserId`. Property-service leads (`listing_inquiries`) key
-  the account link on `account_id`. Their `email` column is a contact snapshot from the inquiry. It
-  stays as it was and does not change with the account. The staff duplicate check groups leads by
-  that snapshot, so one person's leads from before and after a change do not merge. Nothing orphans.
-  Account-service tables keyed on an address (`EmailCodes`, `EmailCodeThrottles`,
-  `PendingRegistrations`) hold short-lived state.
+  API keys key on `UserId`. Property-service leads (`listing_inquiries`) key the account link on
+  `account_id`. Their `email` column is a contact snapshot from the inquiry. It stays as it was and
+  does not change with the account. The staff duplicate check groups leads by that snapshot, so one
+  person's leads from before and after a change do not merge. Nothing orphans. Account-service
+  tables keyed on an address (`EmailCodes`, `EmailCodeThrottles`, `PendingRegistrations`) hold
+  short-lived state.
 - Known limits: counters are per process. Any signed-in caller can lock the `EmailChangeNew` purpose
   of an address by five wrong tries, which bounds as in sign-up. The in-memory test provider has no
   unique index, so the database guard has no test.
