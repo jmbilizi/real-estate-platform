@@ -743,8 +743,10 @@ metadata:
   name: account-service-secret
 stringData:
   ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY: StrongBase64Password
+  ACCOUNT_SERVICE_INTERNAL_KEY: StrongBase64Password
   ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD: StrongBase64Password
   ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER: StrongBase64Password
+  ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY: StrongBase64Password
 type: Opaque
 ---
 apiVersion: v1
@@ -1199,6 +1201,16 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
+                  name: account-service-secret
+            - name: ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY
+                  name: account-service-secret
+            - name: ACCOUNT_SERVICE_INTERNAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: ACCOUNT_SERVICE_INTERNAL_KEY
                   name: account-service-secret
             - name: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD
               valueFrom:

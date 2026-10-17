@@ -1145,6 +1145,13 @@ mv /tmp/postgres.secret.processed.yaml infra/k8s/base/secrets/postgres.secret.ya
 - ✅ No `.gitignore` complexity or accidental commits
 - ✅ Same pattern as Hetzner cluster provisioning (consistency)
 
+**Cluster-generated keys (#896).** A key that no one outside the cluster needs is generated in the
+cluster. It has no GitHub secret. The deploy keeps the live value, else uses a workflow value, else
+makes a new random value. The list is the `GENERATED_KEYS_LIST` block in
+`.github/actions/deploy-k8s-resources/action.yml`. Add a key with one line there and one placeholder
+in the manifest. A rebuilt cluster gets new keys, so rebuild prod only on purpose. Only `dev`,
+`test` and `main` generate keys. A local cluster stays fail-closed unless `.env` sets them.
+
 **CRITICAL**: All 3 deployment jobs (dev/test/prod) must use **identical secret field names** and
 **identical temp file naming** (`/tmp/postgres.secret.processed.yaml`). This was a source of bugs -
 always verify consistency across all environments.

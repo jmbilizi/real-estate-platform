@@ -88,6 +88,16 @@ spec:
                 secretKeyRef:
                   name: account-service-secret
                   key: ACCOUNT_SERVICE_EMAIL_CODE_HMAC_KEY
+            - name: ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_UNSUBSCRIBE_HMAC_KEY
+            - name: ACCOUNT_SERVICE_INTERNAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_INTERNAL_KEY
             - name: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_PASSWORD
               valueFrom:
                 secretKeyRef:
