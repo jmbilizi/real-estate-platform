@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import type { SavedHome } from '@cribstop/property-contracts';
 import { aListingCardRow, aListingDetail } from '@/test/fixtures';
 import { getListing, ListingsApiError, toListingDetailView } from '@/lib/api/listings';
@@ -105,7 +106,7 @@ describe('FavoritesPage, signed in', () => {
       savedHome({ propertyId: OFF_MARKET_HOME }),
     ]);
 
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByText(/^9 Still Listed Ln,/)).toBeInTheDocument());
     expect(screen.getByText('Not currently listed')).toBeInTheDocument();
@@ -118,7 +119,7 @@ describe('FavoritesPage, signed in', () => {
   it('lets every grid cell shrink, so a long address cannot scroll the page sideways', async () => {
     mockedListAll.mockResolvedValue([savedHome({ propertyId: OFF_MARKET_HOME })]);
     setSaved(OFF_MARKET_HOME);
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await screen.findByText('Not currently listed');
     const cells = document.querySelectorAll('[data-favorite-cell]');
@@ -135,7 +136,7 @@ describe('FavoritesPage, signed in', () => {
     ]);
     setSaved(OFF_MARKET_HOME);
 
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     expect(await screen.findByText('Frederick, MD')).toBeInTheDocument();
     expect(screen.queryByText(/21701/)).not.toBeInTheDocument();
@@ -144,7 +145,7 @@ describe('FavoritesPage, signed in', () => {
   it('unsaves from the off-market card, and the card leaves the list', async () => {
     mockedListAll.mockResolvedValue([savedHome({ propertyId: OFF_MARKET_HOME })]);
     setSaved(OFF_MARKET_HOME);
-    const { rerender } = render(<FavoritesPage />);
+    const { rerender } = renderWithClient(<FavoritesPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Unsave' }));
     expect(mockRemoveSaved).toHaveBeenCalledWith(OFF_MARKET_HOME);
@@ -157,7 +158,7 @@ describe('FavoritesPage, signed in', () => {
 
   it('adopts the server list into the store', async () => {
     mockedListAll.mockResolvedValue([savedHome({ propertyId: OFF_MARKET_HOME })]);
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await screen.findByText('Not currently listed');
     expect(mockAdoptSaved).toHaveBeenCalledWith([{ propertyId: OFF_MARKET_HOME, listingId: null }]);
@@ -165,7 +166,7 @@ describe('FavoritesPage, signed in', () => {
 
   it('renders a retryable error state when the list fails', async () => {
     mockedListAll.mockRejectedValue(new SavedHomesApiError('Saved homes are down.', 503));
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
@@ -174,7 +175,7 @@ describe('FavoritesPage, signed in', () => {
   it('shows the empty state when the account has no saved homes', async () => {
     mockedListAll.mockResolvedValue([]);
     setSaved();
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     expect(await screen.findByText('No saved homes yet')).toBeInTheDocument();
   });
@@ -206,7 +207,7 @@ describe('FavoritesPage, signed out', () => {
           ),
     );
 
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByText(/^9 Still Listed Ln,/)).toBeInTheDocument());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -218,7 +219,7 @@ describe('FavoritesPage, signed out', () => {
     mockedGetListing.mockRejectedValue(
       new ListingsApiError('We could not load listings just now.', 'internal_error', 503),
     );
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
@@ -227,7 +228,7 @@ describe('FavoritesPage, signed out', () => {
     mockedGetListing.mockRejectedValue(
       new ListingsApiError('This listing is no longer available.', 'not_found', 404),
     );
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByText('No saved homes yet')).toBeInTheDocument());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -236,7 +237,7 @@ describe('FavoritesPage, signed out', () => {
   it('shows the empty state when nothing is saved', () => {
     mockSavedPropertyIds = new Set();
     mockSavedHomes = [];
-    render(<FavoritesPage />);
+    renderWithClient(<FavoritesPage />);
 
     expect(screen.getByText('No saved homes yet')).toBeInTheDocument();
   });

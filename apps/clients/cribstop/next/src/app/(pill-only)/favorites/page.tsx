@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { savedKeys } from '@/lib/query/saved-homes';
 import { useApp } from '@/lib/context';
 import { openAuthModal } from '@/lib/auth-modal';
 import ListingCard from '@/components/ListingCard';
@@ -40,85 +42,59 @@ type FavoriteItem =
 export default function FavoritesPage() {
   const { user, savedHomes, savedPropertyIds, removeSaved, adoptSaved } = useApp();
 
-  const [items, setItems] = useState<FavoriteItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  // Distinguished from "loaded zero results" (a legitimate empty state): only a real failure is
-  // retryable.
-  const [failed, setFailed] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
-
-  // A signed-out visitor's list is the local store. Keyed on its content so the effect runs when
+  // A signed-out visitor's list is the local cache. Keyed on its content so the query runs when
   // the saved set changes, not on every new array identity.
   const localListingIds = savedHomes.flatMap((h) => (h.listingId ? [h.listingId] : []));
   const localKey = [...localListingIds].sort().join(',');
   const signedIn = user !== null;
+  // A signed-out visitor with nothing saved has nothing to fetch, so the empty state shows at once.
+  const idle = !signedIn && localListingIds.length === 0;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setFailed(false);
-
-    if (signedIn) {
-      setLoading(true);
-      listAllSavedHomes(controller.signal)
-        .then((homes) => {
-          if (controller.signal.aborted) return;
-          // The list is the server's truth. Adopt it, so the list is not filtered out by a store
-          // that the sign-in sync has not filled yet.
-          adoptSaved(
-            homes.map((h) => ({ propertyId: h.propertyId, listingId: h.savedFromListingId })),
-          );
-          setItems(
-            homes.map((home) =>
-              home.listing
-                ? { kind: 'listed', propertyId: home.propertyId, card: home.listing }
-                : { kind: 'off-market', propertyId: home.propertyId, home },
-            ),
-          );
-          setLoading(false);
-        })
-        .catch((err: unknown) => {
-          if (controller.signal.aborted) return;
-          setItems([]);
-          setFailed(true);
-          setErrorMessage(err instanceof Error ? err.message : null);
-          setLoading(false);
-        });
-      return () => controller.abort();
-    }
-
-    if (localListingIds.length === 0) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    Promise.allSettled(localListingIds.map((id) => getListing(id, controller.signal))).then(
-      (results) => {
-        if (controller.signal.aborted) return;
-        const next: FavoriteItem[] = [];
-        let sawRealFailure = false;
-        let firstMessage: string | null = null;
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            const card = toFavoriteCardRow(result.value);
-            next.push({ kind: 'listed', propertyId: card.propertyId, card });
-            continue;
-          }
-          const err = result.reason;
-          // A withdrawn listing is skipped quietly. Any other rejection is a real failure.
-          if (err instanceof ListingsApiError && err.isNotFound) continue;
-          sawRealFailure = true;
-          firstMessage ??= err instanceof Error ? err.message : null;
+  const {
+    data: items = [],
+    isPending,
+    isError: failed,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: savedKeys.page(signedIn, localKey),
+    enabled: !idle,
+    queryFn: async ({ signal }): Promise<FavoriteItem[]> => {
+      if (signedIn) {
+        const homes = await listAllSavedHomes(signal);
+        // The list is the server's truth. Adopt it, so the list is not filtered out by a cache
+        // that the sign-in sync has not filled yet.
+        adoptSaved(
+          homes.map((h) => ({ propertyId: h.propertyId, listingId: h.savedFromListingId })),
+        );
+        return homes.map((home) =>
+          home.listing
+            ? { kind: 'listed', propertyId: home.propertyId, card: home.listing }
+            : { kind: 'off-market', propertyId: home.propertyId, home },
+        );
+      }
+      const results = await Promise.allSettled(localListingIds.map((id) => getListing(id, signal)));
+      const next: FavoriteItem[] = [];
+      let realFailure: unknown = null;
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const card = toFavoriteCardRow(result.value);
+          next.push({ kind: 'listed', propertyId: card.propertyId, card });
+          continue;
         }
-        setItems(next);
-        setFailed(next.length === 0 && sawRealFailure);
-        setErrorMessage(firstMessage);
-        setLoading(false);
-      },
-    );
-    return () => controller.abort();
-  }, [signedIn, localKey, retryKey]);
+        // A withdrawn listing is skipped quietly. Any other rejection is a real failure.
+        const err = result.reason;
+        if (err instanceof ListingsApiError && err.isNotFound) continue;
+        realFailure ??= err;
+      }
+      // Distinguished from "loaded zero results" (a legitimate empty state): only a real failure
+      // with nothing to show is retryable.
+      if (next.length === 0 && realFailure !== null) throw realFailure;
+      return next;
+    },
+  });
+  const loading = isPending && !idle;
+  const errorMessage = error instanceof Error ? error.message : null;
 
   // An unsave drops the card at once and a rollback brings it back, because the store is the truth.
   const visible = useMemo(
@@ -175,7 +151,7 @@ export default function FavoritesPage() {
         <ListingErrorState
           className="mt-10"
           message={errorMessage ?? DEFAULT_ERROR_MESSAGE}
-          onRetry={() => setRetryKey((k) => k + 1)}
+          onRetry={() => void refetch()}
         />
       ) : visible.length === 0 ? (
         <div className="mt-10 rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 px-6 py-16 text-center">
