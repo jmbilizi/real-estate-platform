@@ -3,7 +3,6 @@ import { RootState } from '@/lib/store/store';
 export const selectUser = (state: RootState) => state.auth.user;
 export const selectSessionChecked = (state: RootState) => state.auth.sessionChecked;
 export const selectShowOnboarding = (state: RootState) => state.auth.showOnboarding;
-export const selectSavedHomes = (state: RootState) => state.favorites.homes;
 
 export const selectListingTab = (state: RootState) => state.ui.listingTab;
 export const selectActiveTab = (state: RootState) => state.ui.activeTab;
