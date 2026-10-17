@@ -8,7 +8,7 @@ spec:
   selector:
     matchLabels:
       app: postgres
-  replicas: 2 # HA for realistic testing
+  replicas: 1 # The base has no replication. Each extra pod is an independent database.
   template:
     metadata:
       labels:
