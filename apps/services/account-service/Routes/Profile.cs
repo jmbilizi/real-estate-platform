@@ -65,9 +65,6 @@ internal static class Profile
                 user.PushNotificationsEnabled,
                 user.MarketingOptIn,
 
-                // Intents
-                user.Intents,
-
                 // Audit
                 user.CreatedAt,
                 user.UpdatedAt,
@@ -90,19 +87,6 @@ internal static class Profile
             if (user.DeletedAt.HasValue)
             {
                 return Results.NotFound();
-            }
-
-            // Validate the fixed intent vocabulary before mutating any state
-            if (request.Intents is not null)
-            {
-                var invalidIntents = OnboardingIntents.FindInvalid(request.Intents);
-                if (invalidIntents.Count > 0)
-                {
-                    return Results.ValidationProblem(new Dictionary<string, string[]>
-                    {
-                        ["intents"] = new[] { $"Unknown intent value(s): {string.Join(", ", invalidIntents)}." },
-                    });
-                }
             }
 
             // Deserialise previous chain so it nests as a real JSON object (not an escaped string)
@@ -133,9 +117,6 @@ internal static class Profile
                 user.SmsNotificationsEnabled,
                 user.PushNotificationsEnabled,
                 user.MarketingOptIn,
-
-                // Intents
-                user.Intents,
                 changedAt = user.UpdatedAt,
                 changedBy = user.UpdatedByUserId,
                 previous = previousChain,
@@ -218,20 +199,6 @@ internal static class Profile
             if (request.MarketingOptIn.HasValue)
             {
                 user.MarketingOptIn = request.MarketingOptIn.Value;
-            }
-
-            // Intents — replace-whole-set update (changeable at any time, not additive-only).
-            // An explicit empty list clears all intents; the null check already handles that
-            // correctly since [] is not null.
-            //
-            // Copied and de-duplicated rather than assigned straight through: intents are
-            // semantically a set, so a request repeating a value must not produce a stored
-            // duplicate that then shows up in every GET and audit snapshot. Distinct() keeps
-            // first-occurrence order, so the stored value stays deterministic. Copying also
-            // avoids retaining the request-scoped list instance on the entity.
-            if (request.Intents is not null)
-            {
-                user.Intents = request.Intents.Distinct(StringComparer.Ordinal).ToList();
             }
 
             user.UpdatedAt = DateTime.UtcNow;
