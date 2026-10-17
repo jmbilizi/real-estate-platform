@@ -132,8 +132,8 @@ export class AuthError extends Error {
   }
 }
 
-export async function getProfile(): Promise<ProfileResponse> {
-  const res = await fetch('/api/account/profile');
+export async function getProfile(signal?: AbortSignal): Promise<ProfileResponse> {
+  const res = await fetch('/api/account/profile', { signal });
   if (res.status === 401) throw new AuthError(401);
   if (!res.ok) throw new Error('Failed to fetch profile');
   return res.json();
