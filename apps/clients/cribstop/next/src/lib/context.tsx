@@ -2,7 +2,7 @@
 
 import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Provider } from 'react-redux';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { accountKeys } from '@/lib/query/account';
 import { useAppDispatch, useAppSelector } from '@/lib/store/hooks';
 import {
@@ -23,7 +23,6 @@ import {
   selectListingTab,
   selectListingType,
   selectMobileSearchOpen,
-  selectSavedHomes,
   selectSearchListingType,
   selectSearchLocation,
   selectSearchPriceIdx,
@@ -39,8 +38,15 @@ import {
   setShowOnboarding,
   updateProfile,
 } from '@/lib/store/slices/authSlice';
-import { clearSaved, type SavedEntry, saveEntry } from '@/lib/store/slices/favoritesSlice';
-import { removeHome, syncSavedHomes, toggleHome } from '@/lib/saved-sync';
+import {
+  addEntry,
+  getSavedEntries,
+  type SavedEntry,
+  savedHomesOptions,
+  savedKeys,
+} from '@/lib/query/saved-homes';
+import { useToggleSaved } from '@/lib/query/useToggleSaved';
+import { syncSavedHomes } from '@/lib/saved-sync';
 import { trackEvent } from '@/lib/analytics';
 import { recordFeedItem } from '@/lib/feed-profile';
 import { addToast } from '@/lib/store/slices/toastSlice';
@@ -146,13 +152,14 @@ function AccountQuerySync() {
         if (event.query.queryKey[0] !== accountKeys.all[0]) return;
         if (!(event.action.error instanceof AuthError)) return;
         dispatch(logout());
-        dispatch(clearSaved());
       }),
     [queryClient, dispatch],
   );
 
   return null;
 }
+
+const EMPTY_SAVED: SavedEntry[] = [];
 
 function notifyError(dispatch: (action: ReturnType<typeof addToast>) => unknown) {
   return (message: string) =>
@@ -166,6 +173,7 @@ function notifyError(dispatch: (action: ReturnType<typeof addToast>) => unknown)
  */
 function SessionVerifier() {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
 
   // The store is already initialized from localStorage via preloadedState in store.ts.
   // This effect only handles the edge case where preloadedState didn't find a cached user.
@@ -191,7 +199,7 @@ function SessionVerifier() {
         } else {
           dispatch(setSessionChecked());
         }
-        void syncSavedHomes(store, notifyError(dispatch));
+        void syncSavedHomes(queryClient, notifyError(dispatch));
         // Only fetch profile from API if we don't already have it cached
         const needsProfile = !currentUser?.profileComplete;
         if (needsProfile) {
@@ -227,23 +235,24 @@ function SessionVerifier() {
         if (currentUser) {
           // Session expired — clear local state
           dispatch(logout());
-          dispatch(clearSaved());
         } else {
           dispatch(setSessionChecked());
         }
       }
     });
-  }, [dispatch]);
+  }, [dispatch, queryClient]);
 
   return null;
 }
 
 export function useApp(): AppContextValue {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
+  const { mutate: toggleSaved } = useToggleSaved();
 
   const user = useAppSelector(selectUser);
   const sessionChecked = useAppSelector(selectSessionChecked);
-  const savedHomes = useAppSelector(selectSavedHomes);
+  const savedHomes = useQuery(savedHomesOptions(user !== null)).data ?? EMPTY_SAVED;
   const listingTab = useAppSelector(selectListingTab);
   const activeTab = useAppSelector(selectActiveTab);
   const listingType = useAppSelector(selectListingType);
@@ -264,7 +273,8 @@ export function useApp(): AppContextValue {
     async (email: string, res: { email?: string; accessToken?: string }) => {
       dispatch(login({ email: res.email ?? email, accessToken: res.accessToken }));
       // The server resolves homes saved while signed out, then its list replaces the local one.
-      void syncSavedHomes(store, notifyError(dispatch));
+      void syncSavedHomes(queryClient, notifyError(dispatch));
+      void queryClient.invalidateQueries({ queryKey: accountKeys.all });
 
       // Check if profile is complete — show onboarding if not
       try {
@@ -291,7 +301,7 @@ export function useApp(): AppContextValue {
         // Non-blocking — user can still use the app
       }
     },
-    [dispatch],
+    [dispatch, queryClient],
   );
 
   const loginUser = useCallback(
@@ -324,7 +334,6 @@ export function useApp(): AppContextValue {
   const logoutUser = useCallback(async () => {
     await logoutAccount().catch(() => {}); // clear server cookies
     dispatch(logout());
-    dispatch(clearSaved());
     dispatch(
       addToast({
         id: `signout-${Date.now()}`,
@@ -344,9 +353,9 @@ export function useApp(): AppContextValue {
       state?: string;
     }) => {
       const signedIn = store.getState().auth.user !== null;
-      const alreadySaved = store
-        .getState()
-        .favorites.homes.some((h) => h.propertyId === listing.propertyId);
+      const alreadySaved = getSavedEntries(queryClient).some(
+        (h) => h.propertyId === listing.propertyId,
+      );
       if (!alreadySaved) {
         trackEvent('listing_save', { listingId: listing.id });
         recordFeedItem(
@@ -359,24 +368,30 @@ export function useApp(): AppContextValue {
       } else {
         trackEvent('listing_unsave', { listingId: listing.id });
       }
-      void toggleHome(store, listing, signedIn, notifyError(dispatch));
+      toggleSaved({
+        entry: { propertyId: listing.propertyId, listingId: listing.id },
+        save: !alreadySaved,
+        signedIn,
+      });
     },
-    [dispatch],
+    [queryClient, toggleSaved],
   );
 
   const removeSaved = useCallback(
     (propertyId: string) => {
       const signedIn = store.getState().auth.user !== null;
-      void removeHome(store, propertyId, signedIn, notifyError(dispatch));
+      toggleSaved({ entry: { propertyId, listingId: null }, save: false, signedIn });
     },
-    [dispatch],
+    [toggleSaved],
   );
 
   const adoptSaved = useCallback(
     (entries: SavedEntry[]) => {
-      for (const entry of entries) dispatch(saveEntry(entry));
+      queryClient.setQueryData<SavedEntry[]>(savedKeys.ids, (old) =>
+        entries.reduce(addEntry, old ?? []),
+      );
     },
-    [dispatch],
+    [queryClient],
   );
 
   const isSaved = useCallback(

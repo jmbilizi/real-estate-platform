@@ -805,6 +805,26 @@ describe('HomePageContent', () => {
       expect(stateCall).toBeGreaterThan(cityCall);
       expect(firstLicensedState).toBeGreaterThan(stateCall);
     });
+
+    // #915. An unmounted page must not start its next neighborhood requests. Before the fix, the
+    // stale run kept going and its calls landed in whichever test ran next, which broke the
+    // call-order check above under load.
+    it('stops the neighborhoods requests when the page unmounts mid-load', async () => {
+      mockRegionFetch({ city: 'Rockville', state: 'MD' });
+      let release: (value: { results: never[]; total: number }) => void = () => undefined;
+      const held = new Promise<{ results: never[]; total: number }>((resolve) => {
+        release = resolve;
+      });
+      mockedGetNeighborhoods.mockReturnValue(held);
+
+      const { unmount } = render(<HomePageContent />);
+      await waitFor(() => expect(mockedGetNeighborhoods).toHaveBeenCalledTimes(2));
+      unmount();
+      release({ results: [], total: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockedGetNeighborhoods).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('explore neighborhoods (#393)', () => {
