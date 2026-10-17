@@ -662,6 +662,22 @@ describe('HomePageContent', () => {
     });
   });
 
+  describe('neighborhood requests after unmount (#915)', () => {
+    it('sends no neighborhood request once the page is gone', async () => {
+      let release: (value: { results: never[]; total: number }) => void = () => undefined;
+      mockedGetNeighborhoods.mockReturnValue(new Promise((resolve) => (release = resolve)));
+      const view = renderWithClient(<HomePageContent />);
+      await waitFor(() => expect(mockedGetNeighborhoods).toHaveBeenCalled());
+
+      view.unmount();
+      const callsAtUnmount = mockedGetNeighborhoods.mock.calls.length;
+      release({ results: [], total: 0 });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockedGetNeighborhoods.mock.calls.length).toBe(callsAtUnmount);
+    });
+  });
+
   describe('near you (#363)', () => {
     it('renders no row without a resolved region', async () => {
       renderWithClient(<HomePageContent />);

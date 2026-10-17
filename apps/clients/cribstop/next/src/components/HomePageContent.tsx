@@ -308,8 +308,11 @@ type NeighborhoodsState = {
  */
 function useNeighborhoods(region: Region | null, regionLoading: boolean): NeighborhoodsState {
   const client = useQueryClient();
+  // Primitives, never the `region` object: the caller rebuilds it on every render (#915).
+  const city = region?.city;
+  const state = region?.state;
   const { data, isPending } = useQuery({
-    queryKey: [...searchKeys.neighborhoods('home'), region],
+    queryKey: [...searchKeys.neighborhoods('home'), city ?? '', state ?? ''],
     enabled: !regionLoading,
     queryFn: async ({ signal }) => {
       const seen = new Set<string>();
@@ -322,16 +325,16 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
       // The visitor's own region, city+state then state alone, ahead of every licensed-state
       // request — so a visitor's own city and state render first even when their state isn't a
       // licensed one.
-      if (region) {
+      if (city && state) {
         const settledRegion = await Promise.allSettled([
           read({
-            city: region.city,
-            state: region.state,
+            city,
+            state,
             limit: NEIGHBORHOODS_PAGE_SIZE,
             minCount: NEIGHBORHOODS_MIN_COUNT,
           }),
           read({
-            state: region.state,
+            state,
             limit: NEIGHBORHOODS_PAGE_SIZE,
             minCount: NEIGHBORHOODS_MIN_COUNT,
           }),
@@ -340,6 +343,8 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
           if (result.status === 'fulfilled' && result.value) add(result.value.results);
         }
       }
+
+      if (signal.aborted) return merged;
 
       // `allSettled`, not `all`: one licensed state's request failing must not blank the others'
       // already-good results. Order is the input order regardless of which settles first.
@@ -352,7 +357,9 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
         if (result.status === 'fulfilled' && result.value) add(result.value.results);
       }
 
-      if (merged.length < NEIGHBORHOODS_TARGET && !signal.aborted) {
+      if (signal.aborted) return merged;
+
+      if (merged.length < NEIGHBORHOODS_TARGET) {
         const licensed = new Set<string>(BRAND.licensedStateCodes);
         try {
           const rest = await read({
