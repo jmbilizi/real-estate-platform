@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { renderWithClient as render } from '@/test/renderWithClient';
 import type { MarketStatus } from '@cribstop/property-contracts';
 import { aListingCardRow, aPropertyPage } from '@/test/fixtures';
 import { searchListings } from '@/lib/api/listings';
