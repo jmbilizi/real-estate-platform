@@ -1,29 +1,4 @@
 import { z } from 'zod';
-import { idSchema } from './common';
-import { listingCardSchema, listingsEnvelopeSchema } from './listing-card';
-import { listingDetailSchema } from './listing-detail';
-import { propertyLookupResponseSchema, propertyPageSchema } from './property-page';
-import { analyticsEventBatchSchema, analyticsEventRequestSchema } from './analytics-event';
-import { homeFeedRequestSchema, homeFeedResponseSchema } from './home-feed';
-import { listingInquiryRequestSchema, listingInquiryResponseSchema } from './listing-inquiry';
-import { suggestRequestSchema, suggestResponseSchema } from './listing-suggest';
-import { listingsMetaSchema } from './listings-meta';
-import {
-  lookingForInvalidBodySchema,
-  lookingForListSchema,
-  lookingForRequestSchema,
-  lookingForSchema,
-} from './looking-for';
-import { savedHomesEnvelopeSchema, savedHomesRequestSchema, savedStateSchema } from './saved-homes';
-import {
-  brokersRequestSchema,
-  brokersResponseSchema,
-  zipsRequestSchema,
-  zipsResponseSchema,
-} from './listing-groups';
-import { neighborhoodsRequestSchema, neighborhoodsResponseSchema } from './neighborhoods';
-import { mapRequestSchema, mapResponseSchema } from './listing-map';
-import { errorBodySchema } from './errors';
 import {
   agentLeadDeclineRequestSchema,
   agentLeadDetailSchema,
@@ -31,15 +6,47 @@ import {
   agentLeadsRequestSchema,
   agentLeadStatusRequestSchema,
   agentLeadTransitionResponseSchema,
-} from './agent-leads';
-import {
   agentProfileSchema,
+  analyticsAccountLinkRequestSchema,
+  analyticsEventBatchSchema,
+  analyticsEventRequestSchema,
+  brokersRequestSchema,
+  brokersResponseSchema,
   createAgentProfileRequestSchema,
+  errorBodySchema,
+  homeFeedRequestSchema,
+  homeFeedResponseSchema,
+  idSchema,
+  listingCardSchema,
+  listingDetailSchema,
+  listingInquiryRequestSchema,
+  listingInquiryResponseSchema,
+  listingsEnvelopeSchema,
+  listingsMetaSchema,
+  lookingForInvalidBodySchema,
+  lookingForListSchema,
+  lookingForRequestSchema,
+  lookingForSchema,
+  mapRequestSchema,
+  mapResponseSchema,
+  MAX_RESULT_OFFSET,
+  maxReachablePage,
+  neighborhoodsRequestSchema,
+  neighborhoodsResponseSchema,
+  PAGE_SIZE_DEFAULT,
+  propertyLookupResponseSchema,
+  propertyPageSchema,
+  savedHomesEnvelopeSchema,
+  savedHomesRequestSchema,
+  savedStateSchema,
+  searchRequestSchema,
   staffAgentsEnvelopeSchema,
   staffAgentsRequestSchema,
   staffLeadAssignRequestSchema,
   staffLeadAssignResponseSchema,
   staffLeadDetailSchema,
+  staffLeadMetricsRequestSchema,
+  staffLeadMetricsSchema,
   staffLeadNoteRequestSchema,
   staffLeadNoteSchema,
   staffLeadsEnvelopeSchema,
@@ -48,15 +55,12 @@ import {
   staffLeadTransitionResponseSchema,
   staffLeadUnassignRequestSchema,
   staffMeSchema,
+  suggestRequestSchema,
+  suggestResponseSchema,
   updateAgentProfileRequestSchema,
-} from './staff';
-import { staffLeadMetricsRequestSchema, staffLeadMetricsSchema } from './staff-metrics';
-import {
-  MAX_RESULT_OFFSET,
-  maxReachablePage,
-  PAGE_SIZE_DEFAULT,
-  searchRequestSchema,
-} from './search-request';
+  zipsRequestSchema,
+  zipsResponseSchema,
+} from '@cribstop/property-contracts';
 
 /**
  * `unrepresentable` is deliberately left at its default (`'throw'`), not `'any'`. `'any'` would
@@ -126,6 +130,7 @@ function componentSchemas() {
   registry.add(listingInquiryRequestSchema, { id: 'ListingInquiryRequest' });
   registry.add(analyticsEventRequestSchema, { id: 'AnalyticsEventRequest' });
   registry.add(analyticsEventBatchSchema, { id: 'AnalyticsEventBatch' });
+  registry.add(analyticsAccountLinkRequestSchema, { id: 'AnalyticsAccountLinkRequest' });
   registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
   registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
@@ -253,7 +258,7 @@ export function toOpenApiDocument() {
     openapi: '3.0.3',
     info: {
       // `<Domain> Service`, matching every other entry the gateway aggregates (`Account Service`,
-      // `Inference Service`). Deliberately NOT named for a client: `cribstop-next` is one consumer
+      // `Inference Service`). Deliberately NOT named for a client: `cribstop-web` is one consumer
       // of this document, not its owner, and a document named for one client is wrong the moment a
       // second one (an agent tool, a partner feed) reads it. Deliberately not "Listings API"
       // either: property-service owns the whole Communities → Properties → Units → Listings
@@ -792,6 +797,36 @@ export function toOpenApiDocument() {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
             },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/analytics/account-link': {
+        post: {
+          operationId: 'linkAnalyticsAccount',
+          summary: 'Link the anonymous id to the signed-in account',
+          description:
+            'Requires a verified sign-in. The body holds the anonymous id and nothing else. The ' +
+            'service stores the account id and the anonymous id in its own table. With ' +
+            'Sec-GPC: 1 or ANALYTICS_ENABLED=false it stores nothing and still answers 204.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AnalyticsAccountLinkRequest' },
+              },
+            },
+          },
+          responses: {
+            '204': { description: 'The link is stored, or analytics is off.' },
+            '400': {
+              description: 'Unknown field or malformed anonymous id.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '401': unauthenticatedResponse,
+            '503': unavailableResponse,
             '500': serverErrorResponse,
           },
         },

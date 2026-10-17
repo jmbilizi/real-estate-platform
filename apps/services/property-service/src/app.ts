@@ -3,8 +3,8 @@ import {
   INTERNAL_ERROR_BODY,
   MAP_PIN_CAP_DEFAULT,
   STAFF_LEAD_AGING_HOURS_DEFAULT,
-  toOpenApiDocument,
 } from '@cribstop/property-contracts';
+import { toOpenApiDocument } from './openapi/openapi';
 import { createAnalyticsPool, getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
 import { createListingsRouter } from './listings/routes';
@@ -35,7 +35,7 @@ import { type ContactsClient, createHttpContactsClient } from './inquiries/accou
 import { createRateLimiter, type RateLimiter } from './inquiries/rate-limit';
 
 /**
- * The published OpenAPI document, generated ONCE at module load from `@cribstop/property-contracts`.
+ * The published OpenAPI document, generated ONCE at module load from the `@cribstop/property-contracts` schemas (`./openapi/openapi.ts`).
  * It is a pure function of the schemas, so there is nothing to recompute per request.
  *
  * Generated, never hand-written. Express emits no OpenAPI of its own, and the tempting fix — an
@@ -254,6 +254,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,
       enabled: options.analyticsEnabled,
       sinks: options.analyticsSinks,
+      introspection,
     }),
   );
   app.use(createInquiriesRouter({ pool, introspection, rateLimiter }));

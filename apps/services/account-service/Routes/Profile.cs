@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AccountService.Dtos;
+using AccountService.Helpers;
 using AccountService.Models;
 using Microsoft.AspNetCore.Identity;
 
@@ -77,7 +78,8 @@ internal static class Profile
         app.MapPut("/account/profile", async (
             UpdateProfileRequest request,
             ClaimsPrincipal principal,
-            UserManager<ApplicationUser> userManager) =>
+            UserManager<ApplicationUser> userManager,
+            NotificationPreferenceService notificationPreferences) =>
         {
             var user = await userManager.GetUserAsync(principal).ConfigureAwait(false);
             if (user is null)
@@ -189,9 +191,18 @@ internal static class Profile
                 user.PreferredLocaleId = request.PreferredLocaleId.Value;
             }
 
-            if (request.EmailNotificationsEnabled.HasValue)
+            // The consent record is the one source of truth. An opt-out goes through the preference
+            // service, which mirrors it to the legacy flag. An opt-in needs the consent wording.
+            if (request.EmailNotificationsEnabled.HasValue
+                && !await notificationPreferences.ApplyProfileEmailToggleAsync(user.Id, request.EmailNotificationsEnabled.Value).ConfigureAwait(false))
             {
-                user.EmailNotificationsEnabled = request.EmailNotificationsEnabled.Value;
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["emailNotificationsEnabled"] =
+                    [
+                        "Opt in with PUT /account/notification-preferences. It records the consent wording.",
+                    ],
+                });
             }
 
             if (request.SmsNotificationsEnabled.HasValue)
@@ -237,7 +248,8 @@ internal static class Profile
         // DELETE /account/profile — soft-delete the current user's account
         app.MapDelete("/account/profile", async (
             ClaimsPrincipal principal,
-            UserManager<ApplicationUser> userManager) =>
+            UserManager<ApplicationUser> userManager,
+            NotificationPreferenceService notificationPreferences) =>
         {
             var user = await userManager.GetUserAsync(principal).ConfigureAwait(false);
             if (user is null)
@@ -280,6 +292,7 @@ internal static class Profile
             // Rotate the security stamp. It revokes cookie sessions, refresh tokens and bearer access
             // tokens on their next use.
             await userManager.UpdateSecurityStampAsync(user).ConfigureAwait(false);
+            await notificationPreferences.PurgeAsync(user.Id).ConfigureAwait(false);
             return Results.NoContent();
         }).RequireAuthorization();
 

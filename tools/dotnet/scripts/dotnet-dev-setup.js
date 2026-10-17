@@ -591,7 +591,7 @@ async function setupDotNetEnvironment() {
         }
       } else {
         // If auto-install failed, show manual instructions
-        const majorVersion = requiredDotNetVersion.split('.')[0];
+        const majorVersion = requiredDotNetMajor;
         console.log(`\nPlease install .NET SDK ${majorVersion}.0 or higher manually:`);
         console.log(`  - Windows: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
         console.log(
@@ -601,7 +601,7 @@ async function setupDotNetEnvironment() {
       }
     } else if (!AUTO_INSTALL_ENABLED) {
       // Auto-install is disabled, show manual instructions
-      const majorVersion = requiredDotNetVersion.split('.')[0];
+      const majorVersion = requiredDotNetMajor;
       console.log(`\nPlease install .NET SDK ${majorVersion}.0 or higher:`);
       console.log(`  - Windows: https://dotnet.microsoft.com/download/dotnet/${majorVersion}.0`);
       console.log(

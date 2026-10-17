@@ -315,7 +315,10 @@ describe('Group by neighborhood (#502)', () => {
     // The name sits in parentheses after the count. Only the name truncates.
     const group = screen.getByTestId('drilled-neighborhood');
     expect(group.textContent).toBe(`(${longName})`);
-    expect(group.previousElementSibling?.textContent).toMatch(/^[\d,]+ Homes?$/);
+    // #868. The count fills in after the search resolves, so wait for it.
+    await waitFor(() =>
+      expect(group.previousElementSibling?.textContent).toMatch(/^[\d,]+ Homes?$/),
+    );
 
     fireEvent.click(back);
     expect(mockPush).toHaveBeenCalledWith('/bethesda-md/homes-for-sale?groupBy=neighborhood');

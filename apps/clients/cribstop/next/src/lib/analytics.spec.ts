@@ -1,4 +1,10 @@
-import { getAnalyticsSessionId, SESSION_IDLE_MS, surfaceFromPath, trackEvent } from './analytics';
+import {
+  getAnalyticsSessionId,
+  linkAnonToAccount,
+  SESSION_IDLE_MS,
+  surfaceFromPath,
+  trackEvent,
+} from './analytics';
 import { ANON_ID_KEY, PERSONALISE_KEY, setPersonalisation } from './feed-profile';
 import { ANON_ID_MAX_AGE_MS, getAnonId } from './anon-id';
 
@@ -59,6 +65,46 @@ describe('analytics', () => {
     expect(surfaceFromPath('/favorites')).toBe('favorites');
     expect(surfaceFromPath('/listing/abc')).toBe('detail');
     expect(surfaceFromPath('/search')).toBe('search');
+  });
+});
+
+describe('linkAnonToAccount (#827)', () => {
+  const fetchMock = jest.fn();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({ ok: true });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    window.localStorage.clear();
+    setGpc(undefined);
+  });
+
+  it('posts the anon id and nothing else', () => {
+    const id = getAnonId();
+    linkAnonToAccount();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/analytics/account-link');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ anon_id: id });
+  });
+
+  it('sends nothing after an opt-out', () => {
+    getAnonId();
+    setPersonalisation(false);
+    linkAnonToAccount();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing under Global Privacy Control', () => {
+    getAnonId();
+    setGpc(true);
+    linkAnonToAccount();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never throws when the post fails', () => {
+    fetchMock.mockRejectedValue(new Error('offline'));
+    expect(() => linkAnonToAccount()).not.toThrow();
   });
 });
 

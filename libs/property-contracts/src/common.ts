@@ -51,7 +51,7 @@ export const listingSourceSchema = z.enum(LISTING_SOURCES);
 
 /** Every entity id in this contract, request and response alike. The database columns are
  *  `uuid` defaulting to `uuidv7()` — a single source of truth here means the hand-written
- *  `/listings/{id}` path parameter in `openapi.ts` can be derived from it instead of drifting. */
+ *  `/listings/{id}` path parameter in the service OpenAPI document can be derived from it instead of drifting. */
 export const idSchema = z.uuid();
 
 /** Media is an object, never a bare URL: alt text is an accessibility requirement and is

@@ -37,12 +37,25 @@ export const UI_CLICK_ELEMENT_IDS = [
 
 export const DWELL_BUCKETS = ['0-5', '5-30', '30-120', '120+'] as const;
 
+/** Acquisition channels derived from utm and referrer parameters (#830). */
+export const ACQUISITION_CHANNELS = [
+  'direct',
+  'organic_search',
+  'paid',
+  'email',
+  'social',
+  'referral',
+  'ai_assistant',
+] as const;
+export type AcquisitionChannel = (typeof ACQUISITION_CHANNELS)[number];
+
 const key = z.string().regex(/^[A-Za-z0-9_.:-]{1,60}$/);
 const count = z.number().int().min(0).max(1_000_000);
 const flag = z.boolean();
 const pathTemplate = z.string().regex(/^\/[A-Za-z0-9_\-/[\].]{0,119}$/);
 const hostName = z.string().regex(/^[a-z0-9]([a-z0-9.-]{0,98}[a-z0-9])?$/);
 const utmValue = z.string().regex(/^[a-z0-9_.-]{1,64}$/);
+const channel = z.enum(ACQUISITION_CHANNELS);
 /** `home:{rowId}:{position}`, set on a listing URL that a home-feed card opens. */
 const feedSource = z.string().regex(/^home:[A-Za-z0-9_.-]{1,40}:\d{1,3}$/);
 
@@ -111,17 +124,42 @@ const feedFields = {
   model_version: key,
   explore: flag,
 };
+/** Fixed `error_code` values (#827). A code names a failure class and never carries text. */
+export const LEAD_ERROR_CODES = [
+  'validation',
+  'unauthorized',
+  'unconfirmed',
+  'unavailable',
+  'invalid',
+  'rate_limited',
+  'network',
+] as const;
+export const AUTH_ERROR_CODES = [
+  'invalid_credentials',
+  'code_invalid',
+  'code_unavailable',
+  'rate_limited',
+  'undeliverable',
+  'password_rejected',
+  'proof_expired',
+  'unavailable',
+  'network',
+] as const;
+
+export type LeadErrorCode = (typeof LEAD_ERROR_CODES)[number];
+export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number];
+
 const lead = {
   ...listing,
   form_type: z.enum(['tour', 'info']).optional(),
   step: key.optional(),
-  error_code: key.optional(),
+  error_code: z.enum(LEAD_ERROR_CODES).optional(),
 };
 const auth = {
   method: key.optional(),
   entry_point: key.optional(),
   is_new_account: flag.optional(),
-  error_code: key.optional(),
+  error_code: z.enum(AUTH_ERROR_CODES).optional(),
 };
 const errorFields = {
   code: key.optional(),
@@ -138,7 +176,11 @@ export const EVENT_PROPS = {
   // Legacy #725 events keep their shape.
   listing_view: { ...listing },
   page_view: { title_key: key.optional() },
-  session_start: { landing_path: pathTemplate.optional(), is_new_anon: flag.optional() },
+  session_start: {
+    landing_path: pathTemplate.optional(),
+    is_new_anon: flag.optional(),
+    channel: channel.optional(),
+  },
   listing_impression: {
     ...listing,
     row_id: key.optional(),
@@ -245,6 +287,16 @@ export const analyticsEventBatchSchema = z
   .array(analyticsEventRequestSchema)
   .min(1)
   .max(ANALYTICS_BATCH_MAX);
+
+/**
+ * `POST /analytics/account-link` body (#827). The caller proves the account with its session. The
+ * body carries the anonymous id and nothing else. Property service writes the link only for a
+ * verified sign-in.
+ */
+export const analyticsAccountLinkRequestSchema = z.strictObject({
+  anon_id: COMMON.anon_id.unwrap(),
+});
+export type AnalyticsAccountLinkRequest = z.infer<typeof analyticsAccountLinkRequestSchema>;
 
 /** The shape every sink receives. Column properties are top-level. The rest are in `props`. */
 export interface NormalizedAnalyticsEvent {

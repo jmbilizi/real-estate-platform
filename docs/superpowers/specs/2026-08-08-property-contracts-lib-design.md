@@ -11,7 +11,7 @@ on #47 and are not restated here. Where the two disagree, the ticket wins.
 ## Problem in one line
 
 Three artefacts must never drift from each other — the runtime validation `property-service` applies
-to a search request, the TypeScript types `cribstop-next` renders against, and the OpenAPI document
+to a search request, the TypeScript types `cribstop-web` renders against, and the OpenAPI document
 the gateway aggregates. Today they would be three hand-written things. This package makes them one
 definition with three projections.
 
@@ -105,14 +105,14 @@ most-cached surface. It remains `string | null` on detail.
 
 ### The compile-error test must not drag #24 into #47
 
-The naive reading — "make `cribstop-next` import the contract's `Listing`" — pulls all of #24 into
+The naive reading — "make `cribstop-web` import the contract's `Listing`" — pulls all of #24 into
 this ticket. The contract's `sqft` is `number | null`, so `ListingCard.tsx`'s unguarded
 `sqft.toLocaleString()` stops compiling; there is no `imageUrls`; there is no `isSaved`; and
 `officeBrokerLeadMail` is renamed. Every one of those is #24's work.
 
 Instead, `apps/clients/cribstop/next/src/lib/contracts.check.ts` is a **type-only** conformance file
 using an `Equals`/`Expect` pair to assert the contract's key sets. It emits no runtime code, touches
-no component, and fails `nx type-check cribstop-next` naming the exact field when the contract
+no component, and fails `nx type-check cribstop-web` naming the exact field when the contract
 changes. It also hands #24 a literal checklist of what to reconcile.
 
 The demonstration belongs in the PR body: flip one field name in the library, paste the type-check
@@ -187,7 +187,7 @@ declaration and is tried first. If that install fails, the fallback is `devDepen
 bundles the library into `main.js`, so nothing resolves it at runtime. The verification is
 `skaffold:services:deploy`, not `nx build`.
 
-**`cribstop-next` is on Alpine**, which is the pre-existing latent musl/DNS issue recorded in the
+**`cribstop-web` is on Alpine**, which is the pre-existing latent musl/DNS issue recorded in the
 root `CLAUDE.md`. If the `next build` fails here, the cause is the missing
 `libs/property-contracts/node_modules` copy, not the base image. Do not "fix" it by switching bases.
 

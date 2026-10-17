@@ -22,6 +22,10 @@
  * equal — a manifest key stays lowercase (e.g. `auth`) while its CI variable is qualified and
  * SCREAMING_SNAKE (e.g. `INGRESS_AUTH`). A gate that compared one flat set of names would
  * report that correct wiring as drift.
+ *
+ * Cluster-generated keys (#896) have no `yq ... env()` line. The action lists them once, in the
+ * `GENERATED_KEYS_LIST` heredoc. R1 counts them as substituted. R2 requires a workflow variable
+ * only for the `shared` mode, where that variable marks a live value as shared.
  */
 
 const fs = require('fs');
@@ -85,6 +89,27 @@ function parseWorkflowEnvKeys(workflowText, actionUses = ACTION_USES) {
   return keys;
 }
 
+/**
+ * Parse the generated-key list in the action.
+ *
+ * Each line of the `GENERATED_KEYS_LIST` heredoc reads `<secret> <key> <envVar> <mode>`.
+ *
+ * @returns {Array<{ secret: string, key: string, envVar: string, mode: string }>}
+ */
+function parseGeneratedKeys(actionText) {
+  const block = actionText.match(
+    /<<'GENERATED_KEYS_LIST'\r?\n([\s\S]*?)\r?\n\s*GENERATED_KEYS_LIST\b/,
+  );
+  if (!block) {
+    return [];
+  }
+  return block[1]
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/))
+    .filter((fields) => fields.length === 4)
+    .map(([secret, key, envVar, mode]) => ({ secret, key, envVar, mode }));
+}
+
 function sortedDifference(a, b) {
   return [...a].filter((item) => !b.has(item)).sort();
 }
@@ -102,11 +127,15 @@ function repoPath(absolute) {
  */
 function findSecretDriftProblems(inputs) {
   const { records, actionPairs, workflowEnvKeys } = inputs;
+  const generatedKeys = inputs.generatedKeys ?? [];
   const problems = [];
 
   // R1 — manifest keys against the action's assignment targets.
   const manifestKeys = new Set(records.map((record) => record.key));
-  const actionKeys = new Set(actionPairs.map((pair) => pair.key));
+  const actionKeys = new Set([
+    ...actionPairs.map((pair) => pair.key),
+    ...generatedKeys.map((entry) => entry.key),
+  ]);
 
   const missingInAction = sortedDifference(manifestKeys, actionKeys);
   if (missingInAction.length > 0) {
@@ -133,7 +162,10 @@ function findSecretDriftProblems(inputs) {
   }
 
   // R2 — the action's variables against the workflow env block.
-  const actionEnvVars = new Set(actionPairs.map((pair) => pair.envVar));
+  const actionEnvVars = new Set([
+    ...actionPairs.map((pair) => pair.envVar),
+    ...generatedKeys.filter((entry) => entry.mode === 'shared').map((entry) => entry.envVar),
+  ]);
   const missingInWorkflow = sortedDifference(actionEnvVars, workflowEnvKeys);
   if (missingInWorkflow.length > 0) {
     problems.push({
@@ -170,9 +202,12 @@ function checkSecretDrift(options = {}) {
 
   const records = deriveSecretKeys(options);
 
+  const actionText = fs.readFileSync(actionPath, 'utf-8');
+
   return findSecretDriftProblems({
     records,
-    actionPairs: parseActionSubstitutions(fs.readFileSync(actionPath, 'utf-8')),
+    actionPairs: parseActionSubstitutions(actionText),
+    generatedKeys: parseGeneratedKeys(actionText),
     workflowEnvKeys: parseWorkflowEnvKeys(fs.readFileSync(workflowPath, 'utf-8')),
     envExampleActual: fs.existsSync(envExamplePath)
       ? fs.readFileSync(envExamplePath, 'utf-8')
@@ -210,6 +245,7 @@ module.exports = {
   checkSecretDrift,
   findSecretDriftProblems,
   parseActionSubstitutions,
+  parseGeneratedKeys,
   parseWorkflowEnvKeys,
   ACTION_PATH,
   WORKFLOW_PATH,

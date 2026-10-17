@@ -1,11 +1,12 @@
-import { ATTRIBUTION_KEYS } from './common';
-import { toOpenApiDocument } from './openapi';
 import {
+  ATTRIBUTION_KEYS,
   MAX_RESULT_OFFSET,
   maxReachablePage,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
-} from './search-request';
+  UNAUTHENTICATED_BODY,
+} from '@cribstop/property-contracts';
+import { toOpenApiDocument } from './openapi';
 
 describe('toOpenApiDocument', () => {
   // `any` lets these assertions inspect the raw JSON Schema shape (the published contract)
@@ -13,7 +14,7 @@ describe('toOpenApiDocument', () => {
   const doc: any = toOpenApiDocument();
 
   // `<Domain> Service`, the shape every other aggregated document already uses (`Account
-  // Service`, `Inference Service`). Not named for a client — `cribstop-next` is one consumer of
+  // Service`, `Inference Service`). Not named for a client — `cribstop-web` is one consumer of
   // this document, not its owner — and not named for a resource: property-service owns the whole
   // Communities → Properties → Units → Listings hierarchy, so `listings` is one resource within
   // it (the same inversion #47 made when `libs/listing-contracts` became
@@ -33,6 +34,7 @@ describe('toOpenApiDocument', () => {
       '/agent/leads/{id}/accept',
       '/agent/leads/{id}/decline',
       '/agent/leads/{id}/status',
+      '/analytics/account-link',
       '/analytics/events',
       '/home-feed',
       '/listings',
@@ -201,5 +203,33 @@ describe('toOpenApiDocument', () => {
 
   it('matches the committed golden document', () => {
     expect(doc).toMatchSnapshot();
+  });
+});
+
+describe('published sign-in requirements', () => {
+  const published: any = toOpenApiDocument();
+
+  it('publishes the looking-for routes with sign-in required', () => {
+    expect(published.paths['/looking-for'].get.responses['401']).toBeDefined();
+    expect(published.paths['/looking-for/{id}'].put.responses['409']).toBeDefined();
+    expect(published.paths['/looking-for/{id}'].delete.responses['401']).toBeDefined();
+  });
+
+  it('publishes the 401 code in ErrorBody', () => {
+    expect(published.components.schemas.ErrorBody.properties.error.properties.code.enum).toContain(
+      UNAUTHENTICATED_BODY.error.code,
+    );
+  });
+
+  it('requires sign-in on every saved-homes operation', () => {
+    const operations = [
+      published.paths['/listings/{id}/saved'].put,
+      published.paths['/listings/{id}/saved'].delete,
+      published.paths['/saved-homes'].get,
+      published.paths['/saved-homes/{id}'].delete,
+    ];
+    for (const operation of operations) {
+      expect(operation.responses['401']).toBeDefined();
+    }
   });
 });

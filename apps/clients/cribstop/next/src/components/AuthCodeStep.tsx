@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import type { AuthErrorCode } from '@cribstop/property-contracts';
 import {
   CodeNotSentReason,
   CodesUnavailableError,
@@ -87,6 +88,7 @@ export default function AuthCodeStep({
   unavailableMessage,
   focusOnMount = false,
   canResend = true,
+  onFunnel,
 }: {
   email: string;
   flow?: 'signup' | 'reset';
@@ -108,6 +110,10 @@ export default function AuthCodeStep({
   focusOnMount?: boolean;
   /** False hides "Send a new code", for a code that cannot be sent again alone. */
   canResend?: boolean;
+  /** Funnel hook (#827): a new code went out, or a check or send failed with a fixed code. */
+  onFunnel?: (
+    step: { event: 'auth_code_sent' } | { event: 'auth_fail'; code: AuthErrorCode },
+  ) => void;
 }) {
   const verifyCode = async (address: string, value: string) => {
     if (verify) return verify(value);
@@ -163,16 +169,20 @@ export default function AuthCodeStep({
         onVerified(result.proof);
         return;
       }
+      onFunnel?.({ event: 'auth_fail', code: 'code_invalid' });
       setError(triesLeftCopy(result.attemptsLeft));
       setCode('');
       inputRef.current?.focus();
     } catch (err) {
       if (err instanceof RateLimitError) {
+        onFunnel?.({ event: 'auth_fail', code: 'rate_limited' });
         lock.start(err.retryAfterSeconds);
         setError(`Too many tries. Try again in ${err.retryAfterSeconds} seconds.`);
       } else if (err instanceof CodesUnavailableError) {
+        onFunnel?.({ event: 'auth_fail', code: 'code_unavailable' });
         setError(unavailableCopy);
       } else {
+        onFunnel?.({ event: 'auth_fail', code: 'network' });
         setError('We could not check that code. Try again.');
       }
       setCode('');
@@ -199,9 +209,23 @@ export default function AuthCodeStep({
       lock.start(0);
       setCode('');
       setNotSent(timing.notSentReason);
-      if (!timing.notSentReason) setNotice('New code sent. The old one no longer works.');
+      if (!timing.notSentReason) {
+        onFunnel?.({ event: 'auth_code_sent' });
+        setNotice('New code sent. The old one no longer works.');
+      }
       inputRef.current?.focus();
     } catch (err) {
+      onFunnel?.({
+        event: 'auth_fail',
+        code:
+          err instanceof RateLimitError
+            ? 'rate_limited'
+            : err instanceof CodesUnavailableError
+              ? 'code_unavailable'
+              : err instanceof UndeliverableEmailError
+                ? 'undeliverable'
+                : 'network',
+      });
       if (err instanceof RateLimitError) {
         resend.start(err.retryAfterSeconds);
         setError(

@@ -46,6 +46,10 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
 
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+
+    public DbSet<NotificationPreferenceAudit> NotificationPreferenceAudits => Set<NotificationPreferenceAudit>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -121,7 +125,7 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
                 .IsRequired(false);
 
             // Notification channel toggles — stored directly on the user row
-            entity.Property(u => u.EmailNotificationsEnabled).HasDefaultValue(true);
+            entity.Property(u => u.EmailNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.SmsNotificationsEnabled).HasDefaultValue(false);
             entity.Property(u => u.PushNotificationsEnabled).HasDefaultValue(true);
             entity.Property(u => u.MarketingOptIn).HasDefaultValue(false);
@@ -218,6 +222,26 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
             // Fixed vocabulary (see WaitlistInterestKinds) is validated at the API boundary, not
             // with a DB CHECK constraint — same approach as the onboarding intents above.
+        });
+
+        // No FK to AspNetUsers, so the consent record outlives the account. The key leads with AccountId.
+        // A missing row means "not opted in". Times are set in code, so the in-memory tests need no SQL default.
+        builder.Entity<NotificationPreference>(entity =>
+        {
+            entity.ToTable("NotificationPreferences");
+            entity.HasKey(p => new { p.AccountId, p.Channel, p.Category });
+            entity.Property(p => p.Source).IsRequired();
+        });
+
+        // Append-only. No FK to AspNetUsers. Holds no email address.
+        builder.Entity<NotificationPreferenceAudit>(entity =>
+        {
+            entity.ToTable("NotificationPreferenceAudits");
+            entity.Property(a => a.AccountId).IsRequired();
+            entity.Property(a => a.Channel).IsRequired();
+            entity.Property(a => a.Category).IsRequired();
+            entity.Property(a => a.Source).IsRequired();
+            entity.HasIndex(a => new { a.AccountId, a.OccurredAt });
         });
 
         // Append-only. No FK to AspNetUsers, so the record outlives a deleted grantor or grantee.

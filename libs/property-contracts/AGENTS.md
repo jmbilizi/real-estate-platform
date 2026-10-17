@@ -10,11 +10,12 @@ it wrong here costs five times, not once.
 
 ## What this package is
 
-One schema definition with three projections derived from it:
+One schema definition with two projections derived from it:
 
 1. **Runtime validation** — the exact parsing `property-service` applies to a request.
-2. **TypeScript types** — the exact types `cribstop-next` renders against.
-3. **OpenAPI** — the document the gateway's `MMLib.SwaggerForOcelot` aggregates.
+2. **TypeScript types** — the exact types `cribstop-web` renders against.
+
+`property-service` derives the OpenAPI document from these schemas in `src/openapi/` (#63).
 
 Today these would be three hand-written things that drift. The fields most likely to drift are the
 ones carrying obligations — NAR 7.58 attribution, seller display-suppression, PRD §6.3 sample
@@ -35,8 +36,9 @@ library only if another deployable needs to read it to talk to the property serv
 
 **Never add:**
 
-- **No OpenAPI document** (moved to property-service by #63 — the service owns the document, not the
-  contract).
+- **No OpenAPI or JSON-Schema surface.** No `toOpenApiDocument()`, no `z.toJSONSchema()` call, no
+  generated document. `property-service` owns the document (#63). Nothing outside `property-service`
+  imports one.
 - **No SQL.** No `pg`, no query builders, no anything that assumes a database exists.
 - **No HTTP.** No `express`, no route handlers, no request/response objects — only the data shapes.
 - **No environment access.** No `process.env`, no config loading, no secrets.
@@ -69,7 +71,7 @@ anything else.
 anywhere else.** Resolution is pnpm `workspace:*` (declare
 `"@cribstop/property-contracts": "workspace:*"` in a consumer's `package.json`) plus TypeScript
 project references. A `paths` alias resolves for `tsc` and then fails at webpack bundle time in
-`cribstop-next` — it is a trap that looks like it works until a real build is attempted. The
+`cribstop-web` — it is a trap that looks like it works until a real build is attempted. The
 `@nx/js:lib` generator writes a `paths` entry into the root `tsconfig.json` on every run; delete it,
 don't build on it.
 
@@ -94,12 +96,11 @@ pnpm exec nx format @cribstop/property-contracts       # also: format-check
   repo-wide rule in AGENTS.md says domain-scoped libraries should use `@property/contracts` (domain,
   not brand or service name); #64 updates this package to that name. Do not pre-empt the rename from
   this ticket.
-- Only dependency: `zod` (pinned `^4.4.3`). Do not add a JSON-Schema converter package — Zod v4
-  emits `z.toJSONSchema()` natively, target `"openapi-3.0"` for legible `nullable: true` rendering
-  instead of the draft-2020-12 `anyOf` form.
-- A value with a `.transform()` cannot be represented by `z.toJSONSchema()`; author coerced numeric
-  query parameters as `z.string().regex(...).transform(Number)` rather than `z.coerce.number()`, or
-  the emitted OpenAPI document renders that field as an empty `{}`.
+- Only dependency: `zod` (pinned `^4.4.3`).
+- The service generates its OpenAPI document with `z.toJSONSchema()`. A value with a `.transform()`
+  cannot be represented. Author coerced numeric query parameters as
+  `z.string().regex(...).transform(Number)` rather than `z.coerce.number()`. The service snapshot
+  test fails on an unrepresentable schema.
 - `description` belongs on the detail shape only, never the list row — it is the field carrying the
   most Fair Housing steering risk and does not belong on the widest, most-cached surface.
 - Any consuming Dockerfile must declare this package's path in its `COPY`/`--mount=type=bind`

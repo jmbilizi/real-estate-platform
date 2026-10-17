@@ -99,6 +99,12 @@ module.exports = [
     },
   },
   {
+    // Web app only: the Query lint rules need `@tanstack/react-query` in scope.
+    files: ['apps/clients/cribstop/**/*.{ts,tsx}'],
+    plugins: { '@tanstack/query': require('@tanstack/eslint-plugin-query') },
+    rules: require('@tanstack/eslint-plugin-query').configs['flat/recommended'][0].rules,
+  },
+  {
     ignores: ['node_modules/', 'dist/', '**/.next/**', '**/*.d.ts', 'coverage/'],
   },
 ];

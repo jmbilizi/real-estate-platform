@@ -44,6 +44,25 @@ sink exists.
 The body is one event or an array of 1 to 50 events. One bad event rejects the array. Send
 impressions in arrays: the gateway allows 120 requests per minute per client.
 
+## Lead and sign-in events (#827)
+
+Each lead step (`lead_open`, `lead_start`, `lead_submit`, `lead_error`) and each sign-in step
+(`auth_identify_shown`, `auth_code_sent`, `auth_code_verified`, `auth_signup_done`, `auth_fail`)
+records one event per occurrence.
+
+`error_code` is a fixed list: `LEAD_ERROR_CODES` and `AUTH_ERROR_CODES` in
+`libs/property-contracts/src/analytics-event.ts`. Add a code there. No event carries an email, a
+phone number or a name.
+
+## Account link (#827)
+
+After a verified sign-in, the web app calls `POST /api/analytics/account-link`. The relay forwards
+it to `POST /property/analytics/account-link` with the session. The body holds `anon_id` only.
+
+Property service resolves the account from the session. It writes one row per account and anon id to
+`analytics_account_links`. A signed-out call writes nothing and answers 401. Account-service stores
+no part of the link. `Sec-GPC: 1` and `ANALYTICS_ENABLED=false` store nothing.
+
 ## Switch
 
 Set `ANALYTICS_ENABLED=false` on property-service or the web app. The route then stores nothing.
@@ -59,6 +78,31 @@ SELECT * FROM analytics_funnel_daily_v ORDER BY day DESC;
 
 Columns: `searches`, `detail_views`, `saves`, `requests`, `search_to_view_rate`,
 `view_to_request_rate`. A rate is `NULL` when its divisor is zero.
+
+## Session funnel and reach (#828)
+
+`analytics_daily_reach` holds distinct `sessions` and `visitors` per `day` and `event`. The route
+timer fills it from the raw rows every hour for the last 3 days
+(`refresh_analytics_daily_reach(from_day)`). A day older than 13 months keeps its row.
+
+```sql
+SELECT * FROM analytics_funnel_sessions_daily_v ORDER BY day DESC;
+```
+
+Columns: sessions per step (`search`, `listing_impression`, `listing_click`, `listing_view`,
+`listing_save`, `lead_start`, `lead_submit`) and four step rates. A rate is `NULL` when its divisor
+is zero.
+
+## Retention
+
+```sql
+SELECT * FROM analytics_retention_weekly_v ORDER BY first_seen_week DESC;
+```
+
+A cohort is the visitors (`anon_id`) whose first event falls in one UTC week. A visitor is retained
+at D1, D7 or D30 when the visitor has an event exactly that many days after the first-seen day. A
+rate is `NULL` until the whole week is old enough. First-seen moves forward when the purge deletes
+old raw rows.
 
 The raw rows give per-session paths for the last 13 months:
 

@@ -216,7 +216,7 @@ jobs:
 
       # Always run pnpm install to ensure workspace package node_modules are linked.
       # The root node_modules cache above speeds this up (no re-download of root deps),
-      # but workspace packages (e.g. cribstop-next) have their own node_modules that
+      # but workspace packages (e.g. cribstop-web) have their own node_modules that
       # are NOT cached. pnpm install links them using the cached pnpm store (~5-10s).
       - name: Install Node.js dependencies
         run: pnpm install --frozen-lockfile

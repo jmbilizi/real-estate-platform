@@ -76,7 +76,8 @@ that for every route and for the global fallback.
 
 | Class            | Routes                                                                                       | `Timeout` | `MinimumThroughput` | `SamplingDuration` | `BreakDuration` |
 | ---------------- | -------------------------------------------------------------------------------------------- | --------- | ------------------- | ------------------ | --------------- |
-| Fast public read | `/property/listings/meta`, `/property/listings/{id}`, `/property/listings/{id}/card` (#549)  | 3000      | 5                   | 30000              | 5000            |
+| Fast public read | `/property/listings/meta`, `/property/listings/{id}/card` (#549)                             | 3000      | 5                   | 30000              | 5000            |
+| Listing detail   | `/property/listings/{id}` (#907, same data as `/{id}/page`)                                  | 5000      | 5                   | 45000              | 5000            |
 | Public search    | `/property/listings` (exact `COUNT(*)` per search)                                           | 5000      | 5                   | 45000              | 5000            |
 | Map read         | `/property/listings/map` (capped pins, #377, #546)                                           | 5000      | 5                   | 45000              | 5000            |
 | Inquiry write    | `/property/listings/{id}/inquiries` (#131)                                                   | 5000      | 5                   | 45000              | 5000            |

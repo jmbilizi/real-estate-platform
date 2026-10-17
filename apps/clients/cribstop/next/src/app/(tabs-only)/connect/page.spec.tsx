@@ -35,14 +35,22 @@ describe('ConnectPage', () => {
     mockedLeave.mockResolvedValue(undefined);
   });
 
-  afterEach(() => jest.clearAllMocks());
+  let pushState: jest.SpyInstance;
+  beforeEach(() => {
+    pushState = jest.spyOn(window.history, 'pushState').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    pushState.mockRestore();
+    jest.clearAllMocks();
+  });
 
   it('sends an anonymous visitor to the login modal and joins after sign-in', async () => {
     const user = userEvent.setup();
     const view = render(<ConnectPage />);
 
     await user.click(await screen.findByRole('button', { name: 'Join the Waitlist' }));
-    expect(mockPush).toHaveBeenCalledWith('/connect?modal=login', { scroll: false });
+    expect(pushState).toHaveBeenCalledWith(null, '', '/?modal=login');
+    expect(mockPush).not.toHaveBeenCalled();
     expect(mockedJoin).not.toHaveBeenCalled();
 
     mockUser = { email: 'a@example.com' };

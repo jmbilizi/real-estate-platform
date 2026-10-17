@@ -10,7 +10,6 @@ export * from './listing-groups';
 export * from './neighborhoods';
 export * from './listing-map';
 export * from './errors';
-export * from './openapi';
 export * from './address-slug';
 export * from './property-page';
 export * from './looking-for';

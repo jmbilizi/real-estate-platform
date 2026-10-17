@@ -122,6 +122,10 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, { signal, headers: { Accept: 'application/json' } });
   const body = await res.json().catch(() => null);
 
+  // An abort during the body read fails `json()`, and `catch` hides it as a null body. Report the
+  // abort itself, or a superseded request reads as a failed one (#907).
+  signal?.throwIfAborted();
+
   if (!res.ok) {
     const code =
       body && typeof body === 'object' ? toKnownCode(body.error?.code) : 'internal_error';

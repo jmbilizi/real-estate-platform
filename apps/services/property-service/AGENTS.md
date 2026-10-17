@@ -45,16 +45,22 @@ detail-only. No field-selection parameter exists that could strip attribution.
 
 Consequence to budget in #22: **Express generates no OpenAPI**, while the gateway's
 `MMLib.SwaggerForOcelot` fetches a spec URL per service (account-service serves `/openapi/v1.json`,
-inference serves `/openapi.json`). Do not hand-write one — define the request/response schemas once
-in a shared `libs/` package and derive runtime validation, the client's types, and the OpenAPI
-document from it. A hand-written spec is a second source of truth that silently drifts from the
-routes.
+inference serves `/openapi.json`). Do not hand-write one. The schemas live once in
+`libs/property-contracts`. This service derives the OpenAPI document from them in
+`src/openapi/openapi.ts` (`toOpenApiDocument()`). A hand-written spec is a second source of truth
+that silently drifts from the routes.
 
 ## The wire contract lives in `libs/property-contracts`
 
 `libs/property-contracts` (`@cribstop/property-contracts`) is the **only** definition of the
 request/response shapes described above — never restate a field list here even for a single route;
 import the types and schemas instead. `#22` is where this service starts actually consuming them.
+
+**The OpenAPI document belongs to this service (#63).** `src/openapi/` holds the generator, its spec
+and the golden snapshot (`__snapshots__/openapi.spec.ts.snap`). A shape change fails the snapshot
+until a reviewer accepts it. Keep `unrepresentable: 'throw'`, so an unrepresentable schema fails the
+test run and never renders as `{}`. `zod` is a direct dependency here because the generator calls
+`z.toJSONSchema()`. Keep it on the same version as the library.
 
 The Dockerfile must keep its `libs/property-contracts` `COPY` lines (both the `package.json`-only
 copy in the `deps` stage and the full-source copy in `builder`) or the image goes stale silently the
@@ -530,7 +536,7 @@ Communities → Properties → Units → Listings hierarchy, so `listings` is on
 API rather than the name of it. **"Property API" is informal prose only — never a metadata value.**
 The published `info.title` is **`Property Service`**, matching the two entries the gateway already
 aggregates (`Account Service`, `Inference Service`), and it is deliberately named for neither a
-client (`cribstop-next` is one consumer of the document, not its owner) nor a resource. The
+client (`cribstop-web` is one consumer of the document, not its owner) nor a resource. The
 resource-level names (`listing_search_v`, the `listings` table, `ListingCardRow`,
 `ListingsEnvelope`, the `searchListings`/`getListing` operation ids) are correct as they are. Do not
 let the API-identity naming spread onto them.

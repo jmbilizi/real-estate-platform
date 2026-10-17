@@ -13,6 +13,7 @@
   "devDependencies": {
     "@eslint/js": "^9.8.0",
     "@next/eslint-plugin-next": "^16.1.6",
+    "@tanstack/eslint-plugin-query": "5.104.3",
     "@nx/dotnet": "22.0.1",
     "@nx/eslint": "22.0.1",
     "@nx/eslint-plugin": "22.0.1",

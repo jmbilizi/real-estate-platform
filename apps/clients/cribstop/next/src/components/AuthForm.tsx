@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
+import type { AuthErrorCode } from '@cribstop/property-contracts';
+import { linkAnonToAccount, trackEvent } from '@/lib/analytics';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
 import {
@@ -38,6 +40,36 @@ function entryError(err: unknown): string {
   if (err instanceof CodesUnavailableError) return UNAVAILABLE_COPY;
   if (err instanceof UndeliverableEmailError) return UNDELIVERABLE_COPY;
   return 'Something went wrong. Try again.';
+}
+
+/**
+ * Funnel events (#827). Every event carries a fixed `error_code` at most, never the email, the
+ * code or the password.
+ */
+type AuthFunnelEvent =
+  | 'auth_identify_shown'
+  | 'auth_code_sent'
+  | 'auth_code_verified'
+  | 'auth_signup_done'
+  | 'auth_fail';
+
+type AuthProps = {
+  error_code?: AuthErrorCode;
+  method?: 'password' | 'email_code';
+  entry_point?: string;
+  is_new_account?: boolean;
+};
+
+function trackAuth(event: AuthFunnelEvent, props?: AuthProps): void {
+  trackEvent(event, { surface: 'auth', ...(props && { props }) });
+}
+
+/** The fixed code for an error thrown by an account call. */
+function authErrorCode(err: unknown): AuthErrorCode {
+  if (err instanceof RateLimitError) return 'rate_limited';
+  if (err instanceof CodesUnavailableError) return 'unavailable';
+  if (err instanceof UndeliverableEmailError) return 'undeliverable';
+  return 'network';
 }
 
 const linkButton = 'inline-flex min-h-11 items-center font-medium text-brand hover:underline';
@@ -109,6 +141,15 @@ export default function AuthForm({
     (field ?? headingRef.current)?.focus();
   }, [step]);
 
+  // `auth_identify_shown` fires when the email step appears. The ref keeps StrictMode and a
+  // re-render from sending it twice. Leaving the step and coming back sends it again.
+  const shownStepRef = useRef<Step | null>(null);
+  useEffect(() => {
+    if (shownStepRef.current === step) return;
+    shownStepRef.current = step;
+    if (step === 'email') trackAuth('auth_identify_shown', { entry_point: initialMode });
+  }, [step, initialMode]);
+
   const goToStep = (next: Step) => {
     setStep(next);
     setPassword('');
@@ -144,9 +185,13 @@ export default function AuthForm({
         setCodeTiming(result);
         setCodeNotSent(result.notSentReason);
         setCodeRun((n) => n + 1);
+        if (!result.notSentReason) {
+          trackAuth('auth_code_sent', { method: 'email_code', entry_point: 'signup' });
+        }
         goToStep('code');
       }
     } catch (err) {
+      trackAuth('auth_fail', { error_code: authErrorCode(err) });
       setFormError(entryError(err));
     } finally {
       setIsSubmitting(false);
@@ -169,11 +214,13 @@ export default function AuthForm({
       } catch {
         // ignore
       }
+      linkAnonToAccount();
       toast('Welcome back!');
       if (onSuccess) onSuccess();
       else router.push('/');
     } catch (err) {
       if (err instanceof SignInFailedError) {
+        trackAuth('auth_fail', { method: 'password', error_code: 'invalid_credentials' });
         setLoginFailed(true);
       } else if (err instanceof DeviceCodeRequiredError) {
         // The password was right and the account sent a code. Keep the password in memory for the code step.
@@ -186,6 +233,7 @@ export default function AuthForm({
       } else if (err instanceof CodesUnavailableError) {
         toast('Sign-in codes are unavailable right now. Try again soon.', 'error');
       } else {
+        trackAuth('auth_fail', { method: 'password', error_code: 'network' });
         toast(err instanceof Error ? err.message : 'Authentication request failed', 'error');
       }
     } finally {
@@ -206,8 +254,10 @@ export default function AuthForm({
       setCodeTiming(timing);
       setCodeNotSent(undefined);
       setCodeRun((n) => n + 1);
+      trackAuth('auth_code_sent', { method: 'email_code', entry_point: 'reset' });
       goToStep('code');
     } catch (err) {
+      trackAuth('auth_fail', { error_code: authErrorCode(err) });
       setFormError(
         err instanceof CodesUnavailableError
           ? 'Password reset is unavailable right now. Try again soon.'
@@ -221,6 +271,7 @@ export default function AuthForm({
   };
 
   const handleVerified = (proof: string) => {
+    trackAuth('auth_code_verified', { method: 'email_code', entry_point: codeFlow });
     if (codeFlow === 'reset') {
       setResetProof(proof);
       goToStep('resetPassword');
@@ -272,6 +323,9 @@ export default function AuthForm({
   };
 
   const handleSetPasswordFailed = (reason: SetPasswordFailure) => {
+    trackAuth('auth_fail', {
+      error_code: reason === 'invalid_proof' ? 'proof_expired' : 'unavailable',
+    });
     setSignupProof(null);
     setPendingEmail(null);
     goToStep('email');
@@ -283,6 +337,8 @@ export default function AuthForm({
   };
 
   const handleSignedIn = () => {
+    trackAuth('auth_signup_done', { method: 'email_code', is_new_account: true });
+    linkAnonToAccount();
     setSignupProof(null);
     toast('Welcome to Cribstop!');
     if (onSuccess) onSuccess();
@@ -554,6 +610,11 @@ export default function AuthForm({
               resendAfterSeconds={codeTiming.resendAfterSeconds}
               expiresInSeconds={codeTiming.expiresInSeconds}
               notSentReason={codeNotSent}
+              onFunnel={(step) =>
+                step.event === 'auth_code_sent'
+                  ? trackAuth('auth_code_sent', { method: 'email_code', entry_point: codeFlow })
+                  : trackAuth('auth_fail', { error_code: step.code })
+              }
               onVerified={codeFlow === 'device' ? handleDeviceVerified : handleVerified}
               onChangeEmail={() =>
                 goToStep(
@@ -579,6 +640,7 @@ export default function AuthForm({
               proof={signupProof}
               onDone={handleSignedIn}
               onFailed={handleSetPasswordFailed}
+              onFunnelFail={(code) => trackAuth('auth_fail', { error_code: code })}
             />
           </div>
         )}

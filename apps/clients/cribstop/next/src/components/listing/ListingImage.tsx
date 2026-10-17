@@ -14,6 +14,8 @@ export default function ListingImage({
   className = '',
   sizeHint,
   backdrop = true,
+  priority = false,
+  fallbackAlt,
 }: {
   media: Media | null;
   className?: string;
@@ -24,7 +26,17 @@ export default function ListingImage({
    * the photo sizes itself inside a centring container (the lightbox), which the wrapper would break.
    */
   backdrop?: boolean;
+  /** The likely Largest Contentful Paint image: eager, high fetch priority. */
+  priority?: boolean;
+  /** Alt used when the media has none. Built from facts, never from the street line. */
+  fallbackAlt?: string;
 }) {
+  const alt = media?.altText?.trim() || fallbackAlt || '';
+  const loadProps = priority
+    ? ({ loading: 'eager', fetchPriority: 'high', decoding: 'async' } as const)
+    : ({ loading: 'lazy', decoding: 'async' } as const);
+  // The frame sets the rendered size. These give the browser an aspect ratio before the file loads.
+  const size = { width: 800, height: 600 };
   if (!media) {
     return (
       <div
@@ -56,7 +68,7 @@ export default function ListingImage({
   // by the data source, which next/image would require to be enumerated in next.config.js ahead of
   // time.
   if (!backdrop) {
-    return <img src={media.url} alt={media.altText ?? ''} loading="lazy" className={className} />;
+    return <img src={media.url} alt={alt} {...size} {...loadProps} className={className} />;
   }
 
   // The photo is never cropped: MLS photos carry the MLS trademark in a corner, and cropping can
@@ -71,14 +83,10 @@ export default function ListingImage({
         alt=""
         aria-hidden="true"
         loading="lazy"
+        decoding="async"
         className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-xl"
       />
-      <img
-        src={media.url}
-        alt={media.altText ?? ''}
-        loading="lazy"
-        className={`relative ${className}`}
-      />
+      <img src={media.url} alt={alt} {...size} {...loadProps} className={`relative ${className}`} />
     </span>
   );
 }

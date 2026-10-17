@@ -263,3 +263,70 @@ describe('POST /analytics/events (#725)', () => {
     ]);
   });
 });
+
+describe('reach aggregate, funnel and retention views (#828)', () => {
+  beforeEach(async () => {
+    await pool().query('DELETE FROM analytics_events');
+    await pool().query('DELETE FROM analytics_daily');
+    await pool().query('DELETE FROM analytics_daily_reach');
+  });
+
+  it('fills the reach table from raw rows and feeds the session funnel', async () => {
+    const [a, b] = [session(), session()];
+    await post([
+      { event: 'listing_view', surface: 'detail', session_id: a, anon_id: a },
+      { event: 'listing_view', surface: 'detail', session_id: a, anon_id: a },
+      { event: 'listing_view', surface: 'detail', session_id: b, anon_id: b },
+      { event: 'listing_save', surface: 'detail', session_id: a, anon_id: a },
+    ]);
+    const first = await pool().query<{ refreshed: boolean }>(
+      'SELECT refresh_analytics_daily_reach(current_date - 1) AS refreshed',
+    );
+    expect(first.rows[0]?.refreshed).toBe(true);
+    const reach = await pool().query(
+      'SELECT event, sessions::int AS sessions, visitors::int AS visitors FROM analytics_daily_reach ORDER BY event',
+    );
+    expect(reach.rows).toEqual([
+      { event: 'listing_save', sessions: 1, visitors: 1 },
+      { event: 'listing_view', sessions: 2, visitors: 2 },
+    ]);
+    // A second run recounts the same days and adds nothing.
+    await pool().query('SELECT refresh_analytics_daily_reach(current_date - 1)');
+    const funnel = await pool().query(
+      'SELECT view_sessions::int AS views, save_sessions::int AS saves, view_to_save_rate::float AS rate FROM analytics_funnel_sessions_daily_v',
+    );
+    expect(funnel.rows).toEqual([{ views: 2, saves: 1, rate: 0.5 }]);
+  });
+
+  it('groups visitors by first-seen week and counts D1, D7 and D30', async () => {
+    const [a, b] = [session(), session()];
+    const insert = (anon: string, daysAgo: number) =>
+      pool().query(
+        `INSERT INTO analytics_events (occurred_at, event, surface, session_id, anon_id)
+         VALUES (now() - make_interval(days => $2::int), 'page_view', 'home', $1, $1)`,
+        [anon, daysAgo],
+      );
+    // Visitor a: first seen 60 days ago, back on day 1, day 7 and day 30.
+    for (const offset of [60, 59, 53, 30]) await insert(a, offset);
+    // Visitor b: first seen 60 days ago, never back.
+    await insert(b, 60);
+    const rows = await pool().query(
+      `SELECT cohort_size::int AS cohort, d1_retained::int AS d1, d7_retained::int AS d7,
+              d30_retained::int AS d30, d1_rate::float AS d1_rate, d30_rate::float AS d30_rate
+       FROM analytics_retention_weekly_v`,
+    );
+    expect(rows.rows).toEqual([{ cohort: 2, d1: 1, d7: 1, d30: 1, d1_rate: 0.5, d30_rate: 0.5 }]);
+  });
+
+  it('leaves a rate NULL while the cohort week is too young', async () => {
+    const a = session();
+    await pool().query(
+      "INSERT INTO analytics_events (event, surface, session_id, anon_id) VALUES ('page_view', 'home', $1, $1)",
+      [a],
+    );
+    const rows = await pool().query(
+      'SELECT cohort_size::int AS cohort, d30_rate FROM analytics_retention_weekly_v',
+    );
+    expect(rows.rows).toEqual([{ cohort: 1, d30_rate: null }]);
+  });
+});

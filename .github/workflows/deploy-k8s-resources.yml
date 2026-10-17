@@ -94,10 +94,8 @@ jobs:
           ACCOUNT_SERVICE_DB_USER_PASSWORD: ${{ secrets.ACCOUNT_SERVICE_DB_USER_PASSWORD }}
           MESSAGING_SERVICE_DB_USER_PASSWORD: ${{ secrets.MESSAGING_SERVICE_DB_USER_PASSWORD }}
           PROPERTY_SERVICE_DB_USER_PASSWORD: ${{ secrets.PROPERTY_SERVICE_DB_USER_PASSWORD }}
-          # Bright MLS ingestion (#91). Environment-scoped by `environment: ${{ matrix.environment }}`.
-          # BRIGHT_MLS_ENV (`test` or `production`) states which tier the client credential belongs
-          # to; any environment may hold either. Unset keeps the committed placeholder.
-          BRIGHT_MLS_ENV: ${{ secrets.BRIGHT_MLS_ENV }}
+          # Bright MLS ingestion (#91): read BRIGHT_MLS_ENV from environment variable (test/prod), fallback to secret (dev).
+          BRIGHT_MLS_ENV: ${{ vars.BRIGHT_MLS_ENV || secrets.BRIGHT_MLS_ENV }}
           BRIGHT_MLS_CLIENT_ID: ${{ secrets.BRIGHT_MLS_CLIENT_ID }}
           BRIGHT_MLS_CLIENT_SECRET: ${{ secrets.BRIGHT_MLS_CLIENT_SECRET }}
           # Bearer token for property-service's admin sync endpoint (#338). Independent of the

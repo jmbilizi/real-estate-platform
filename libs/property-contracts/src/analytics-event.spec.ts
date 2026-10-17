@@ -1,6 +1,7 @@
 import {
   ANALYTICS_BATCH_MAX,
   ANALYTICS_EVENT_NAMES,
+  analyticsAccountLinkRequestSchema,
   analyticsEventBatchSchema,
   normalizeAnalyticsEvent,
   analyticsEventRequestSchema as schema,
@@ -183,5 +184,26 @@ describe('analytics event contract v2 (#824)', () => {
 
   it('scrubs digits and addresses', () => {
     expect(scrubQueryText('call me 2025550142 at a@b.co')).toBe('call me at');
+  });
+});
+
+describe('funnel error codes and account link (#827)', () => {
+  const base = { surface: 'detail', session_id: SESSION, anon_id: ANON };
+
+  it('accepts only fixed error codes on lead and auth events', () => {
+    const lead = { ...base, event: 'lead_error' };
+    const fail = { ...base, event: 'auth_fail' };
+    expect(schema.safeParse({ ...lead, error_code: 'rate_limited' }).success).toBe(true);
+    expect(schema.safeParse({ ...fail, error_code: 'code_invalid' }).success).toBe(true);
+    expect(schema.safeParse({ ...lead, error_code: 'me@example.com' }).success).toBe(false);
+    expect(schema.safeParse({ ...fail, error_code: 'free_text' }).success).toBe(false);
+  });
+
+  it('accepts a link request with the anon id only', () => {
+    expect(analyticsAccountLinkRequestSchema.safeParse({ anon_id: ANON }).success).toBe(true);
+    expect(
+      analyticsAccountLinkRequestSchema.safeParse({ anon_id: ANON, email: 'a@b.co' }).success,
+    ).toBe(false);
+    expect(analyticsAccountLinkRequestSchema.safeParse({}).success).toBe(false);
   });
 });
