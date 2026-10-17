@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Heart, Home, Users, User, Wrench } from 'lucide-react';
+import { Heart, Home, User, Users, Wrench } from 'lucide-react';
 
 /**
  * The phone tab bar (#923). Every href is an existing route. A tab for a page the app does not
