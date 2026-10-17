@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import { getNeighborhoodGroups, getZipGroups, searchListings } from '@/lib/api/listings';
 import SearchExperience from './SearchExperience';
 
@@ -87,7 +88,7 @@ afterEach(() => {
 
 describe('Group by ZIP code (#722)', () => {
   it('reads the ZIP count with a one-group request and offers the option for several ZIPs', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
 
     expect(lastZipQuery()).toMatchObject({ limit: 1, minCount: 1, offset: 0 });
@@ -96,7 +97,7 @@ describe('Group by ZIP code (#722)', () => {
 
   it('hides the option when the search spans one ZIP code', async () => {
     mockedZips.mockResolvedValue(zipsResponse(['20814']));
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
@@ -104,7 +105,7 @@ describe('Group by ZIP code (#722)', () => {
   });
 
   it('hides the option with no request when the search has a zip filter', async () => {
-    render(<SearchExperience initialQuery="zip=20814" />);
+    renderWithClient(<SearchExperience initialQuery="zip=20814" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(mockedZips).not.toHaveBeenCalled();
@@ -113,7 +114,7 @@ describe('Group by ZIP code (#722)', () => {
 
   it('hides the option when the ZIP request fails', async () => {
     mockedZips.mockRejectedValue(new Error('not found'));
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
 
     expect(openGroupOptions()).toEqual(['None', 'Neighborhood', 'Broker']);
@@ -121,14 +122,14 @@ describe('Group by ZIP code (#722)', () => {
 
   it('reads groupBy=zip on a single-ZIP search as no grouping', async () => {
     mockedZips.mockResolvedValue(zipsResponse(['20814']));
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
 
     await waitFor(() => expect(screen.getByText('Homes')).toBeTruthy());
     expect(screen.queryByTestId('zip-group-grid')).toBeNull();
   });
 
   it('reads groupBy=zip on a zip-filtered search as no grouping, with no ZIP request', async () => {
-    render(<SearchExperience initialQuery="zip=20814&groupBy=zip" />);
+    renderWithClient(<SearchExperience initialQuery="zip=20814&groupBy=zip" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(mockedZips).not.toHaveBeenCalled();
@@ -136,7 +137,7 @@ describe('Group by ZIP code (#722)', () => {
   });
 
   it('shows ZIP cards, writes groupBy to the URL and never groups by default', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda" />);
     await waitFor(() => expect(mockedZips).toHaveBeenCalled());
     expect(screen.queryByTestId('zip-group-grid')).toBeNull();
     expect(currentParams().get('groupBy')).toBeNull();
@@ -169,7 +170,7 @@ describe('Group by ZIP code (#722)', () => {
         listingTotal: 7,
       }),
     );
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
     const grid = await screen.findByTestId('zip-group-grid');
 
     expect(grid.querySelectorAll('img')).toHaveLength(1);
@@ -177,7 +178,7 @@ describe('Group by ZIP code (#722)', () => {
   });
 
   it('opens a ZIP with a removable chip, and removing it returns to the ZIP groups', async () => {
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
     const card = await screen.findByRole('link', { name: 'ZIP code 20815, 9 homes' });
 
     fireEvent.click(card);
@@ -201,7 +202,7 @@ describe('Group by ZIP code (#722)', () => {
         ? Promise.resolve(zipsResponse(['20814', '20815']))
         : new Promise((r) => (resolve = r)),
     );
-    render(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
+    renderWithClient(<SearchExperience initialQuery="q=Bethesda&groupBy=zip" />);
     expect(await screen.findByTestId('zip-group-skeleton')).toBeTruthy();
 
     resolve({ groups: [], total: 0, listingTotal: 0 });

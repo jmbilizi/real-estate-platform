@@ -1,4 +1,5 @@
-import { cleanup, configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, configure, fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import { aListingCardRow } from '@/test/fixtures';
 import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
 import { listRecentSavedHomes } from '@/lib/api/saved-homes';
@@ -143,7 +144,7 @@ describe('HomePageContent', () => {
 
   describe('cheap requests (#755)', () => {
     it('asks every row for its cards without the exact match count', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
 
@@ -161,7 +162,7 @@ describe('HomePageContent', () => {
           : Promise.resolve(envelope([aListingCardRow()])),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       expect(await screen.findByText('Price drops on homes for sale')).toBeInTheDocument();
@@ -172,7 +173,7 @@ describe('HomePageContent', () => {
   describe('titles (#394, #419)', () => {
     it('renders every row title, and no subtitle text under any of them', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       expect(screen.getByText('Be first to see homes coming for sale')).toBeInTheDocument();
@@ -191,7 +192,7 @@ describe('HomePageContent', () => {
 
   describe('row queries (#394)', () => {
     it('queries "just listed" by the newly-listed sort, one row per side, with no date cutoff', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
@@ -210,7 +211,7 @@ describe('HomePageContent', () => {
     });
 
     it('queries "price drops" by priceReduced and the newly-listed sort, sale only', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
@@ -234,7 +235,7 @@ describe('HomePageContent', () => {
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Newest homes for sale');
       await waitFor(() =>
@@ -246,7 +247,7 @@ describe('HomePageContent', () => {
   describe('row order (#394)', () => {
     it('orders Just listed, Coming soon (sale), Price drops, then the rentals cluster by default', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
-      const { container } = render(<HomePageContent />);
+      const { container } = renderWithClient(<HomePageContent />);
       await screen.findByText('Newest homes for sale');
       // No region resolved (default mock): waits out the near-you row's settling to empty,
       // so this list of headings reflects the final layout, not a mid-settle snapshot.
@@ -275,7 +276,7 @@ describe('HomePageContent', () => {
         JSON.stringify([{ display_name: 'Baltimore, MD', listingType: 'rent' }]),
       );
 
-      const { container } = render(<HomePageContent />);
+      const { container } = renderWithClient(<HomePageContent />);
       await screen.findByText('Newest homes for sale');
       await waitFor(() => expect(screen.queryByText('Rentals near you')).not.toBeInTheDocument());
 
@@ -299,7 +300,7 @@ describe('HomePageContent', () => {
         JSON.stringify([{ display_name: 'Baltimore, MD', listingType: 'rent' }]),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       const [firstHeading] = await screen.findAllByText(/^Cheapest /);
       expect(firstHeading.textContent).toBe('Cheapest rentals');
@@ -319,7 +320,7 @@ describe('HomePageContent', () => {
         ]),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
@@ -344,7 +345,7 @@ describe('HomePageContent', () => {
       mockRegionFetch({ city: 'Ashburn', state: 'VA' });
       storeSearch({ ...rockville, listingType: 'sale', searchedAt: Date.now() });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Homes for sale near you');
       expect(screen.getByText('Homes for sale near you').closest('section')).toHaveAttribute(
@@ -365,7 +366,7 @@ describe('HomePageContent', () => {
       mockRegionFetch({ city: 'Ashburn', state: 'VA' });
       storeSearch({ ...rockville, searchedAt: Date.now() - 31 * 24 * 60 * 60 * 1000 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Homes for sale near you');
       expect(screen.getByText('Homes for sale near you').closest('section')).toHaveAttribute(
@@ -386,7 +387,7 @@ describe('HomePageContent', () => {
     it('sends no platform-wide query from a place-scoped row while the target resolves', async () => {
       mockRegionFetch({ city: 'Ashburn', state: 'VA' });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Homes for sale near you');
 
       const scopedKinds = ['coming-soon', 'price-sort', 'just-listed', 'price-drops'];
@@ -423,7 +424,7 @@ describe('HomePageContent', () => {
       );
 
       try {
-        render(<HomePageContent />);
+        renderWithClient(<HomePageContent />);
 
         await screen.findByText('Homes for sale near you');
         expect(screen.getByText('Homes for sale near you').closest('section')).toHaveAttribute(
@@ -462,7 +463,7 @@ describe('HomePageContent', () => {
     it('queries city and state for each row', async () => {
       mockRegionFetch({ city: 'Baltimore', state: 'MD' });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await waitFor(() => expect(targeted()).toHaveLength(3));
 
       for (const q of targeted()) expect(q).toMatchObject({ city: 'Baltimore', state: 'MD' });
@@ -473,14 +474,14 @@ describe('HomePageContent', () => {
     it('sends no query while the target resolves', async () => {
       (global.fetch as jest.Mock).mockReturnValue(new Promise(() => undefined));
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(targeted()).toHaveLength(0);
     });
 
     it('queries platform-wide when there is no target', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await waitFor(() => expect(targeted()).toHaveLength(3));
 
       for (const q of targeted()) expect(q.city).toBeUndefined();
@@ -489,7 +490,7 @@ describe('HomePageContent', () => {
     it('keeps the titles place-free and links "View all" with the same city and state', async () => {
       mockRegionFetch({ city: 'Richmond', state: 'VA' });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       const title = await screen.findByText('Newest homes for sale');
 
       expect(title.textContent).not.toMatch(/Richmond/);
@@ -518,7 +519,7 @@ describe('HomePageContent', () => {
         ),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await waitFor(() =>
         expect(priceDrops().map((q) => [q.city, q.state])).toEqual([
           ['Baltimore', 'MD'],
@@ -537,7 +538,7 @@ describe('HomePageContent', () => {
         ),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await waitFor(() =>
         expect(priceDrops().map((q) => [q.city, q.state])).toEqual([
           ['Baltimore', 'MD'],
@@ -556,7 +557,7 @@ describe('HomePageContent', () => {
         ),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Newest homes for sale');
 
       await waitFor(() => expect(priceDrops()).toHaveLength(3));
@@ -600,7 +601,7 @@ describe('HomePageContent', () => {
       mockRegionFetch({ city: 'Baltimore', state: 'MD' });
       mockSaleRows({ nearYou: cards(1, 15), justListed: cards(1, 15) });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(8))).toBe(true));
       const near = linksIn('Homes for sale near you');
@@ -615,7 +616,7 @@ describe('HomePageContent', () => {
       mockRegionFetch({ city: 'Baltimore', state: 'MD' });
       mockSaleRows({ nearYou: cards(1, 15), justListed: cards(1, 9) });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(linksIn('Newest homes for sale').size).toBeGreaterThan(0));
       await screen.findByText('Homes for sale near you');
@@ -632,7 +633,7 @@ describe('HomePageContent', () => {
         priceDrops: cards(1, 30),
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(linksIn('Price drops on homes for sale').has(pid(15))).toBe(true));
       const near = linksIn('Homes for sale near you');
@@ -652,7 +653,7 @@ describe('HomePageContent', () => {
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(true));
       resolveNear(envelope(cards(1, 15)));
@@ -663,7 +664,7 @@ describe('HomePageContent', () => {
 
   describe('near you (#363)', () => {
     it('renders no row without a resolved region', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       await waitFor(() => {
@@ -675,7 +676,7 @@ describe('HomePageContent', () => {
     it('falls to the licensed market with a neutral title when there is no signal (#834)', async () => {
       mockMarkets.push({ city: 'Arlington', state: 'VA' });
       try {
-        render(<HomePageContent />);
+        renderWithClient(<HomePageContent />);
 
         await waitFor(() =>
           expect(mockedSearchListings).toHaveBeenCalledWith(
@@ -693,7 +694,7 @@ describe('HomePageContent', () => {
     it('renders "Homes for sale near you" first, scoped to the resolved region', async () => {
       mockRegionFetch({ city: 'Rockville', state: 'MD' });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(screen.getByText('Homes for sale near you')).toBeInTheDocument());
       await waitFor(() =>
@@ -720,7 +721,7 @@ describe('HomePageContent', () => {
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       await waitFor(() => {
@@ -734,7 +735,7 @@ describe('HomePageContent', () => {
     // shape of that case at this layer.
     it('renders no row when the region resolves to null (a non-US country, at the route)', async () => {
       mockRegionFetch(null);
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       await waitFor(() =>
@@ -750,7 +751,7 @@ describe('HomePageContent', () => {
       );
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
-      const { container } = render(<HomePageContent />);
+      const { container } = renderWithClient(<HomePageContent />);
       await screen.findByText('Newest homes for sale');
       await screen.findByText('Rentals near you');
 
@@ -761,7 +762,7 @@ describe('HomePageContent', () => {
     it("adds the region to a price-sort row's query when no place has been searched", async () => {
       mockRegionFetch({ city: 'Rockville', state: 'MD' });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() =>
         expect(mockedSearchListings).toHaveBeenCalledWith(
@@ -775,7 +776,7 @@ describe('HomePageContent', () => {
       mockRegionFetch({ city: 'Rockville', state: 'MD' });
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Columbia Heights');
 
       const calls = mockedGetNeighborhoods.mock.calls.map(
@@ -800,7 +801,7 @@ describe('HomePageContent', () => {
       });
       mockedGetNeighborhoods.mockReturnValue(held);
 
-      const { unmount } = render(<HomePageContent />);
+      const { unmount } = renderWithClient(<HomePageContent />);
       await waitFor(() => expect(mockedGetNeighborhoods).toHaveBeenCalledTimes(2));
       unmount();
       release({ results: [], total: 0 });
@@ -814,7 +815,7 @@ describe('HomePageContent', () => {
     it('renders tiles from the mocked response', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Columbia Heights')).toBeInTheDocument();
       expect(screen.getByText('Washington, DC')).toBeInTheDocument();
@@ -834,7 +835,7 @@ describe('HomePageContent', () => {
         ),
       );
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Place-MD');
       // First occurrence of each state: a repeated run must not change the order under test.
@@ -845,7 +846,7 @@ describe('HomePageContent', () => {
     it('links a tile to the all-types neighborhood search (#492)', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       const link = (await screen.findByText('Columbia Heights')).closest('a');
       expect(link).toHaveAttribute(
@@ -857,7 +858,7 @@ describe('HomePageContent', () => {
     it('links the chip and trailing tile to the grouped search with no region (#504)', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Columbia Heights');
       expect(screen.getAllByLabelText('Explore neighborhoods — see all')[0]).toHaveAttribute(
@@ -874,7 +875,7 @@ describe('HomePageContent', () => {
       mockRegionFetch({ city: 'Rockville', state: 'MD' });
       mockedGetNeighborhoods.mockResolvedValue({ results: [neighborhoodRow()], total: 1 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Columbia Heights');
       const href = '/rockville-md/homes-for-sale?type=all&groupBy=neighborhood';
@@ -888,7 +889,7 @@ describe('HomePageContent', () => {
     it('hides the section when the response is empty', async () => {
       mockedGetNeighborhoods.mockResolvedValue({ results: [], total: 0 });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Cheapest homes for sale');
       await waitFor(() =>
@@ -905,7 +906,7 @@ describe('HomePageContent', () => {
         .filter((q) => rowKind(q) === 'price-sort' && q.listingType === listingType);
 
     it('titles each row by its sort, defaulting to lowest first', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Cheapest homes for sale')).toBeInTheDocument();
       expect(screen.getByText('Cheapest rentals')).toBeInTheDocument();
@@ -915,7 +916,7 @@ describe('HomePageContent', () => {
     });
 
     it('flips one row to the high-to-low sort and title, and leaves the other row alone', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       const [saleGroup] = screen.getAllByRole('group', { name: 'Sort by price' });
@@ -937,7 +938,7 @@ describe('HomePageContent', () => {
     });
 
     it('labels each toggle as a group with two pressed-state buttons', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest rentals');
 
       const groups = screen.getAllByRole('group', { name: 'Sort by price' });
@@ -951,7 +952,7 @@ describe('HomePageContent', () => {
     });
 
     it('uses the canonical selected-pill style, not a brand color', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest rentals');
 
       const [group] = screen.getAllByRole('group', { name: 'Sort by price' });
@@ -961,7 +962,7 @@ describe('HomePageContent', () => {
     });
 
     it('sends no price cap, only a data-quality floor that also drops a withheld price', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest rentals');
 
       for (const side of ['sale', 'rent']) {
@@ -973,7 +974,7 @@ describe('HomePageContent', () => {
     });
 
     it('links "See all" with the row sort, floor and home types', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       const link = (await screen.findByText('Cheapest homes for sale')).closest('a')!;
       const href = link.getAttribute('href')!;
@@ -985,7 +986,7 @@ describe('HomePageContent', () => {
     });
 
     it('excludes land from the homes row only', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest rentals');
 
       await waitFor(() => expect(priceCalls('sale').length).toBeGreaterThan(0));
@@ -996,7 +997,7 @@ describe('HomePageContent', () => {
     });
 
     it('shows the row skeleton cards while a toggle refetches', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       mockedSearchListings.mockImplementation(() => new Promise(() => {}));
@@ -1015,7 +1016,7 @@ describe('HomePageContent', () => {
           rowKind(q) === 'price-sort' ? envelope([], 0) : envelope([aListingCardRow()]),
         ),
       );
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await screen.findByText('Newest homes for sale');
       await waitFor(() => expect(screen.queryByText('Cheapest rentals')).not.toBeInTheDocument());
@@ -1025,7 +1026,7 @@ describe('HomePageContent', () => {
   describe('resilience', () => {
     it('fires every row query in parallel rather than one after another', async () => {
       mockedSearchListings.mockReturnValue(new Promise(() => {})); // never resolves
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       // Just listed (x2 sides), coming soon (x2 sides), price drops, and two price-sort rows.
       await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(6));
@@ -1038,7 +1039,7 @@ describe('HomePageContent', () => {
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(screen.getAllByText('Failed to load').length).toBeGreaterThan(0));
       expect(screen.getAllByRole('button', { name: 'Tap to retry' }).length).toBeGreaterThan(0);
@@ -1048,7 +1049,7 @@ describe('HomePageContent', () => {
 
   describe('removed rows', () => {
     it('renders none of the retired carousels', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       for (const title of [
@@ -1066,7 +1067,7 @@ describe('HomePageContent', () => {
 
   describe('compliance', () => {
     it('uses no banned Fair-Housing-adjacent word anywhere in the rendered body', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       const banned =
@@ -1075,20 +1076,20 @@ describe('HomePageContent', () => {
     });
 
     it('makes no savings or deal claim on the price-drops row', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Price drops on homes for sale');
 
       expect(document.body.textContent).not.toMatch(/\bsave\b|\bsaved\b|% off|\bdeal\b/i);
     });
 
     it('never names "MLS" or "IDX" anywhere on the page', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
       expect(document.body.textContent).not.toMatch(/\bMLS\b|\bIDX\b/);
     });
 
     it('removes the unsourced brokerage claims and keeps the trust block fact-only', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       expect(
@@ -1097,7 +1098,7 @@ describe('HomePageContent', () => {
     });
 
     it('titles the trust block with the one fact it can back — freshness', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
@@ -1110,14 +1111,14 @@ describe('HomePageContent', () => {
         listingCount: 13,
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText('Real, licensed listings')).toBeInTheDocument();
     });
 
     it('shows an "Updated" freshness tile from dataUpdatedAt', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await waitFor(() => expect(screen.getByText('Updated')).toBeInTheDocument());
     });
 
@@ -1128,7 +1129,7 @@ describe('HomePageContent', () => {
         listingCount: 13,
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
       expect(screen.queryByText('Updated')).not.toBeInTheDocument();
     });
@@ -1142,7 +1143,7 @@ describe('HomePageContent', () => {
         listingCount: 13,
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       // Both are months old at test time, but lastSyncedAt is the newer of the two, so it must be
@@ -1157,7 +1158,7 @@ describe('HomePageContent', () => {
         listingCount: 13,
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
@@ -1171,7 +1172,7 @@ describe('HomePageContent', () => {
         listingCount: 13,
       });
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
 
       expect(screen.getByText(/^Real listings, updated /)).toBeInTheDocument();
@@ -1200,7 +1201,7 @@ describe('HomePageContent', () => {
         savedHome(aListingCardRow({ city: 'Older', state: 'VA' })),
       ]);
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       await waitFor(() => expect(mockedRecentSaved).toHaveBeenCalled());
       expect(await screen.findByText(TITLE)).toBeInTheDocument();
@@ -1216,7 +1217,7 @@ describe('HomePageContent', () => {
     });
 
     it('is absent and makes no saved call when signed out', async () => {
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
@@ -1227,7 +1228,7 @@ describe('HomePageContent', () => {
       mockUser = { email: 'a@b.co' };
       mockedRecentSaved.mockResolvedValue([]);
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       await waitFor(() => expect(mockedRecentSaved).toHaveBeenCalled());
@@ -1239,7 +1240,7 @@ describe('HomePageContent', () => {
       mockUser = { email: 'a@b.co' };
       mockedRecentSaved.mockRejectedValue(new Error('503'));
 
-      render(<HomePageContent />);
+      renderWithClient(<HomePageContent />);
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());

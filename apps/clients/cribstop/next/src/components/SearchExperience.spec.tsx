@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { makeTestQueryClient, renderWithClient } from '@/test/renderWithClient';
 import { renderToString } from 'react-dom/server';
 import { maxReachablePage, PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import { ListingsApiError, searchListings } from '@/lib/api/listings';
@@ -134,17 +136,19 @@ describe('SearchExperience server HTML (#841)', () => {
       }),
     );
     const html = renderToString(
-      <SearchExperience
-        initialQuery=""
-        initialResults={{ ...envelope(), results: rows, total: 20 } as never}
-      />,
+      <QueryClientProvider client={makeTestQueryClient()}>
+        <SearchExperience
+          initialQuery=""
+          initialResults={{ ...envelope(), results: rows, total: 20 } as never}
+        />
+      </QueryClientProvider>,
     );
     const links = new Set(html.match(/href="\/property\/[^"]+"/g));
     expect(links.size).toBe(20);
     expect(html).not.toContain('animate-pulse');
     expect(html).toContain(rows[0].officeName);
 
-    render(
+    renderWithClient(
       <SearchExperience
         initialQuery=""
         initialResults={{ ...envelope(), results: rows, total: 20 } as never}
@@ -157,7 +161,7 @@ describe('SearchExperience server HTML (#841)', () => {
 
 describe('SearchExperience follows the URL it is given', () => {
   it('searches the new city when handed a different query', async () => {
-    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria" />);
+    const { rerender } = renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(requestedQueries()).toContain('Alexandria'));
 
     rerender(<SearchExperience initialQuery="q=Washington%2C+DC" />);
@@ -166,7 +170,7 @@ describe('SearchExperience follows the URL it is given', () => {
   });
 
   it('returns to page 1 when the new query carries no page', async () => {
-    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria&page=3" />);
+    const { rerender } = renderWithClient(<SearchExperience initialQuery="q=Alexandria&page=3" />);
     await waitFor(() => expect(lastRequestedPage()).toBe(3));
 
     rerender(<SearchExperience initialQuery="q=Washington%2C+DC" />);
@@ -175,7 +179,7 @@ describe('SearchExperience follows the URL it is given', () => {
   });
 
   it('does not re-request when the same query is handed back', async () => {
-    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria" />);
+    const { rerender } = renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalledTimes(1));
 
     rerender(<SearchExperience initialQuery="q=Alexandria" />);
@@ -192,7 +196,9 @@ describe('SearchExperience follows the URL it is given', () => {
    */
   it('seeds the search bar listing type from the URL, including on a later re-seed', async () => {
     mockAppContext.setSearchListingType.mockClear();
-    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria&type=rent" />);
+    const { rerender } = renderWithClient(
+      <SearchExperience initialQuery="q=Alexandria&type=rent" />,
+    );
 
     await waitFor(() => expect(mockAppContext.setSearchListingType).toHaveBeenCalledWith('rent'));
 
@@ -234,7 +240,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
   it('caps the highest offered page at the deepest reachable one, not at pageCount', async () => {
     mockedSearchListings.mockResolvedValue(hugeEnvelope);
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
     expect(pageButtonLabels()).not.toContain('10000');
@@ -246,10 +252,10 @@ describe('SearchExperience never offers a page the API will refuse', () => {
   it('disables Next on the deepest reachable page rather than stepping past the window', async () => {
     mockedSearchListings.mockResolvedValue(hugeEnvelope);
 
-    render(<SearchExperience initialQuery={`q=Alexandria&page=${LAST_REACHABLE}`} />);
+    renderWithClient(<SearchExperience initialQuery={`q=Alexandria&page=${LAST_REACHABLE}`} />);
 
     await waitFor(() => expect(lastRequestedPage()).toBe(LAST_REACHABLE));
-    expect(screen.getByLabelText('Next page')).toBeDisabled();
+    expect(await screen.findByLabelText('Next page')).toBeDisabled();
   });
 
   /**
@@ -262,7 +268,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
   it('shows no capped-results note when the pager is not clamped', async () => {
     mockedSearchListings.mockResolvedValue(withResults(300, 15));
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain('15'));
     expect(screen.queryByText(/Narrow your filters or zoom the map/)).not.toBeInTheDocument();
@@ -273,7 +279,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
     // window (#368).
     mockedSearchListings.mockResolvedValue(withResults(50_000, 2500));
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
     expect(
@@ -291,7 +297,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
       pageSize: 15,
     });
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain(String(maxReachablePage(15))));
     expect(
@@ -303,7 +309,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
 
   it('updates the pager and the note together once a filter narrows the result set', async () => {
     mockedSearchListings.mockResolvedValue(withResults(50_000, 2500));
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(pageButtonLabels()).toContain(String(LAST_REACHABLE)));
     expect(screen.getByText(/Narrow your filters or zoom the map/)).toBeInTheDocument();
 
@@ -322,7 +328,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
     // default happens to be.
     mockedSearchListings.mockResolvedValue({ ...withResults(200_000, 2_000), pageSize: 100 });
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain(String(maxReachablePage(100))));
     for (const label of pageButtonLabels()) {
@@ -342,7 +348,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
       ),
     );
 
-    render(<SearchExperience initialQuery="q=Alexandria&page=200" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&page=200" />);
 
     const action = await screen.findByRole('button', { name: 'Back to the first page' });
     expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
@@ -358,7 +364,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
       new ListingsApiError('We could not load listings just now.', 'internal_error', 500),
     );
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
@@ -368,7 +374,7 @@ describe('SearchExperience never offers a page the API will refuse', () => {
     // a shortening of ordinary result sets.
     mockedSearchListings.mockResolvedValue(withResults(60, 3));
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     await waitFor(() => expect(pageButtonLabels()).toContain('3'));
     expect(pageButtonLabels()).toEqual(['1', '2', '3']);
@@ -399,7 +405,7 @@ describe('the filter modal actually filters', () => {
   const currentParams = () => new URLSearchParams(window.location.search);
 
   it('puts an applied filter in the URL and in the request', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
     openFilters();
@@ -417,7 +423,7 @@ describe('the filter modal actually filters', () => {
   });
 
   it('survives a reload of the URL it wrote', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
     openFilters();
@@ -428,13 +434,13 @@ describe('the filter modal actually filters', () => {
     mockedSearchListings.mockClear();
 
     // Exactly what a refresh, a bookmark or a pasted link does: the page is built from the URL.
-    render(<SearchExperience initialQuery={shared.replace(/^\?/, '')} />);
+    renderWithClient(<SearchExperience initialQuery={shared.replace(/^\?/, '')} />);
 
     await waitFor(() => expect(lastRequest()).toMatchObject({ beds: 1 }));
   });
 
   it('returns to page 1, because a filtered result set has no page 3 of the old one', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria&page=3" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&page=3" />);
     await waitFor(() => expect(lastRequestedPage()).toBe(3));
 
     openFilters();
@@ -450,7 +456,7 @@ describe('the filter modal actually filters', () => {
   it('shows what is applied when it is reopened', async () => {
     // The modal used to keep its own state and was never handed the applied filters, so reopening
     // it showed defaults while the badge beside the button said three filters were active.
-    render(
+    renderWithClient(
       <SearchExperience initialQuery="q=Alexandria&beds=3&propertyType=Condo&maxPrice=500000" />,
     );
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
@@ -472,7 +478,7 @@ describe('the filter modal actually filters', () => {
     const stepDown = () => fireEvent.click(screen.getByLabelText('Decrease maximum price'));
 
     it('steps up from no max by the 25,000 rung', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -482,7 +488,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('steps down by 25,000 from an applied value', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=100000" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria&maxPrice=100000" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -492,7 +498,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('never steps below zero, and treats zero as no max rather than a filter', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=10000" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria&maxPrice=10000" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -508,7 +514,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('clears to no max when the field is emptied and committed', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=500000" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria&maxPrice=500000" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -521,7 +527,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('accepts a typed value, stripping currency formatting, and commits on blur', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -534,7 +540,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('flags junk input with an error and never applies it', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -550,7 +556,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('steps from a typed, uncommitted value rather than the last applied one', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria&maxPrice=100000" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria&maxPrice=100000" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -564,7 +570,7 @@ describe('the filter modal actually filters', () => {
   });
 
   it('clears a filter it no longer wants instead of leaving it in the URL', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria&beds=3" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&beds=3" />);
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
     openFilters();
@@ -582,7 +588,7 @@ describe('the filter modal actually filters', () => {
     // `if (!isOpen) return null` does not unmount a fiber, so a draft seeded by a `useState`
     // initialiser behind such a flag is seeded once and never re-synced. Abandoned edits then
     // survive in the dialog and get applied on the next Show — a filter the user cancelled.
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
     openFilters();
@@ -599,7 +605,7 @@ describe('the filter modal actually filters', () => {
   it('steps down from a half-step bath count without skipping a whole bathroom', async () => {
     // `?baths=2.5` is a legitimate contract value — `baths_display` is `full + 0.5 * half`. A
     // stepper keyed on an index into a rung list truncated it to 2 and then stepped to 1.
-    render(<SearchExperience initialQuery="q=Alexandria&baths=2.5" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&baths=2.5" />);
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
     openFilters();
@@ -612,7 +618,7 @@ describe('the filter modal actually filters', () => {
   it('never leaves a zero-valued filter narrowing the results invisibly', async () => {
     // `minSqft=0` is not a no-op: `v.sqft >= 0` excludes every parcel, whose `sqft` is NULL. Read
     // as absent it can neither narrow the results nor hide from the badge and the Clear control.
-    render(<SearchExperience initialQuery="q=Alexandria&minSqft=0&beds=0" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&minSqft=0&beds=0" />);
 
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
     expect(lastRequest()?.minSqft).toBeUndefined();
@@ -627,7 +633,9 @@ describe('the filter modal actually filters', () => {
 
   it('keeps the result count on the button when a draft is re-ticked back to what is applied', async () => {
     mockedSearchListings.mockResolvedValue({ ...envelope(), total: 12 });
-    render(<SearchExperience initialQuery="q=Alexandria&amenities=Pool&amenities=Garage" />);
+    renderWithClient(
+      <SearchExperience initialQuery="q=Alexandria&amenities=Pool&amenities=Garage" />,
+    );
     await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
     openFilters();
@@ -642,7 +650,7 @@ describe('the filter modal actually filters', () => {
 
   describe('the Lot/Land interlock', () => {
     it('clears and disables the dwelling controls when land is the only home type', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria&beds=3&minSqft=2000" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria&beds=3&minSqft=2000" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -663,7 +671,7 @@ describe('the filter modal actually filters', () => {
     });
 
     it('leaves the dwelling controls alone for a home type that has bedrooms', async () => {
-      render(<SearchExperience initialQuery="q=Alexandria&beds=3" />);
+      renderWithClient(<SearchExperience initialQuery="q=Alexandria&beds=3" />);
       await waitFor(() => expect(mockedSearchListings).toHaveBeenCalled());
 
       openFilters();
@@ -687,7 +695,7 @@ describe('an empty result set is not a failure and not a load', () => {
   it('says so plainly, and offers the action that widens the search', async () => {
     mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
 
-    render(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
 
     const empty = await screen.findByTestId('search-empty-state');
     expect(empty).toHaveTextContent('No homes match your filters');
@@ -706,7 +714,7 @@ describe('an empty result set is not a failure and not a load', () => {
   it('does not offer to clear filters when there are none to clear', async () => {
     mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
 
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
 
     const empty = await screen.findByTestId('search-empty-state');
     expect(empty).toHaveTextContent('No homes to show here');
@@ -725,7 +733,7 @@ describe('search analytics (#826)', () => {
       results: [aListingCardRow()],
       total: 1,
     });
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(searchCalls()).toHaveLength(1));
     expect(searchCalls()[0][1]).toEqual({
       surface: 'search',
@@ -735,7 +743,7 @@ describe('search analytics (#826)', () => {
 
   it('flags a zero-result search and carries no query text', async () => {
     mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
-    render(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
     await waitFor(() => expect(searchCalls()).toHaveLength(1));
     expect(searchCalls()[0][1].props).toEqual({ result_count: 0, is_zero_result: true });
     expect(JSON.stringify(mockTrackEvent.mock.calls)).not.toContain('Alexandria');
@@ -747,7 +755,7 @@ describe('search analytics (#826)', () => {
       results: [aListingCardRow(), aListingCardRow({ id: 'second' })],
       total: 2,
     });
-    const { rerender } = render(<SearchExperience initialQuery="q=Alexandria" />);
+    const { rerender } = renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     await waitFor(() => expect(searchCalls()).toHaveLength(1));
     mockedSearchListings.mockResolvedValue({ ...envelope(), results: [], total: 0 });
     rerender(<SearchExperience initialQuery="q=Alexandria&beds=5" />);
@@ -757,7 +765,7 @@ describe('search analytics (#826)', () => {
 
   it('sends nothing while the request is still loading', () => {
     mockedSearchListings.mockReturnValue(new Promise(() => undefined));
-    render(<SearchExperience initialQuery="q=Alexandria" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria" />);
     expect(searchCalls()).toHaveLength(0);
   });
 });

@@ -3,6 +3,7 @@ import type { MapBounds } from '@cribstop/property-contracts';
 import { getListingCard, getListingsMap, type ListingSearchQuery } from '@/lib/api/listings';
 import { formatBounds, roundBounds } from '@/lib/map-bounds';
 import { mapKeys } from './keys';
+import { requestKey } from './search';
 
 /** The old card cache kept a card for 5 minutes (#549). */
 export const MAP_CARD_STALE_MS = 5 * 60_000;
@@ -14,7 +15,7 @@ export const MAP_CARD_STALE_MS = 5 * 60_000;
 export function viewportPinsOptions(filters: ListingSearchQuery, bounds: MapBounds) {
   const rounded = roundBounds(bounds);
   return queryOptions({
-    queryKey: mapKeys.viewport(JSON.stringify(filters), formatBounds(rounded, 4)),
+    queryKey: mapKeys.viewport(requestKey(filters), formatBounds(rounded, 4)),
     queryFn: ({ signal }) => getListingsMap(filters, rounded, signal),
     placeholderData: keepPreviousData,
   });

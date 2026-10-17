@@ -1,17 +1,19 @@
 'use client';
 
-import type { NeighborhoodRow } from '@cribstop/property-contracts';
-import { getNeighborhoodGroups } from '@/lib/api/listings';
+import type { NeighborhoodRow, NeighborhoodsResponse } from '@cribstop/property-contracts';
+import { neighborhoodGroupsOptions } from '@/lib/query/search';
 import type { GroupOrder } from '@/lib/group-by';
-import { type GroupPageResult, useGroupPage } from '@/lib/useGroupPage';
+import { type GroupPageResult, type GroupSource, useGroupPage } from '@/lib/useGroupPage';
 import type { SearchFilters } from '@/lib/types';
 
 export type NeighborhoodGroupsResult = GroupPageResult<NeighborhoodRow>;
 
 const FAILURE = 'We could not load neighborhoods just now. Please try again.';
 
-const fetchPage = (query: Parameters<typeof getNeighborhoodGroups>[0], signal: AbortSignal) =>
-  getNeighborhoodGroups(query, signal).then((res) => ({ rows: res.results, total: res.total }));
+const source: GroupSource<NeighborhoodRow, NeighborhoodsResponse> = {
+  options: neighborhoodGroupsOptions,
+  toPage: (res) => ({ rows: res.results, total: res.total }),
+};
 
 /** Fetches one page of neighborhood groups for the search. Held while `enabled` is false. */
 export function useNeighborhoodGroups(
@@ -20,5 +22,5 @@ export function useNeighborhoodGroups(
   order: GroupOrder,
   enabled: boolean,
 ): NeighborhoodGroupsResult {
-  return useGroupPage(fetchPage, FAILURE, filters, page, order, enabled);
+  return useGroupPage(source, FAILURE, filters, page, order, enabled);
 }

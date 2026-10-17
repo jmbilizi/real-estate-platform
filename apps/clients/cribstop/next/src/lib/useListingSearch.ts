@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { PAGE_SIZE_DEFAULT } from '@cribstop/property-contracts';
 import type { ListingsEnvelope } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import type { SearchFilters } from '@/lib/types';
-import { ListingsApiError, type ListingsErrorCode, searchListings } from '@/lib/api/listings';
+import { ListingsApiError, type ListingsErrorCode } from '@/lib/api/listings';
+import { requestKey, searchResultsOptions } from '@/lib/query/search';
 import { useToast } from '@/lib/useToast';
 
 export interface ListingSearchResult {
@@ -46,25 +48,6 @@ export interface ListingSearchResult {
 }
 
 /**
- * What the hook stores, as opposed to what it reports.
- *
- * The difference is `page`. State only ever learns a page when a request *resolves*, so storing the
- * reported page here is what made it stale: a new search spread the previous state while it flipped
- * to `loading`, and a failed one spread it forever, so a paging UI highlighted the last page that
- * succeeded rather than the one being fetched — permanently, after an error. The requested page is
- * an argument this hook already has on every render, so it is reported from there and the response's
- * page is kept only as an `echo` of the request it answered.
- */
-interface SearchState extends Omit<ListingSearchResult, 'retry' | 'page'> {
-  /**
-   * The page a resolved response reported, paired with the page that request asked for — so a
-   * server-clamped page can win without outliving the request it belongs to. `null` until the first
-   * response settles.
-   */
-  echo: { requested: number; applied: number } | null;
-}
-
-/**
  * Runs a server-side listing search.
  *
  * The mock array resolved synchronously, so the search page had no loading or error states at all.
@@ -83,105 +66,61 @@ export function useListingSearch(
   enabled = true,
   initial?: ListingsEnvelope,
 ): ListingSearchResult {
-  // #841. The server's first page seeds the first render, so the HTML holds the cards. The first
-  // effect run then skips its fetch. Any later change of filters or page fetches as usual.
-  const seeded = useRef(initial !== undefined);
-  const [state, setState] = useState<SearchState>(() =>
-    initial
-      ? {
-          results: initial.results,
-          total: initial.total,
-          echo: { requested: page, applied: initial.page },
-          pageCount: initial.pageCount,
-          pageSize: initial.pageSize,
-          appliedFilters: initial.appliedFilters,
-          status: 'ready',
-          error: null,
-          errorCode: null,
-        }
-      : {
-          results: [],
-          total: 0,
-          echo: null,
-          pageCount: 1,
-          pageSize: PAGE_SIZE_DEFAULT,
-          appliedFilters: {},
-          status: 'loading',
-          error: null,
-          errorCode: null,
-        },
-  );
-
   const { toast } = useToast();
-  const [attempt, setAttempt] = useState(0);
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  const request = { ...filters, page, pageSize: PAGE_SIZE_DEFAULT };
 
-  // The effect keys on the filter *values*, not on the object identity a parent re-render produces,
-  // so an unchanged filter set does not re-fire the search. The current object is read through a
-  // ref so the effect does not need it as a dependency.
-  const filterKey = JSON.stringify(filters);
+  // #841. The server's first page seeds the cache for the first request only. A later filter or
+  // page change has a new key and fetches. The first paint holds the cards.
+  const seedKey = useRef<string | null>(requestKey(request));
+  const seeded = initial !== undefined && seedKey.current === requestKey(request);
+  useEffect(() => {
+    seedKey.current = null;
+  }, []);
 
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  const query = useQuery({
+    ...searchResultsOptions(request, { initialData: seeded ? initial : undefined }),
+    enabled,
+  });
+
+  // A failed search keeps the last good page on screen, as the hook did before Query.
+  const last = useRef<ListingsEnvelope | undefined>(undefined);
+  if (query.data) last.current = query.data;
+  const envelope = query.data ?? last.current;
+
+  const { error, errorUpdatedAt, refetch } = query;
   const toastRef = useRef(toast);
   toastRef.current = toast;
-
   useEffect(() => {
-    if (!enabled) return;
-    if (seeded.current) {
-      seeded.current = false;
-      return;
-    }
+    if (error) toastRef.current(messageOf(error), 'error');
+    // Only a new failure shows a toast.
+  }, [error, errorUpdatedAt]);
 
-    const controller = new AbortController();
-    let active = true;
+  const retry = useCallback(() => void refetch(), [refetch]);
 
-    setState((prev) => ({ ...prev, status: 'loading', error: null, errorCode: null }));
+  const status = query.isError
+    ? 'error'
+    : query.data && !query.isPlaceholderData
+      ? 'ready'
+      : 'loading';
+  // The server clamps an out-of-range page. Its answer counts only for the request it answers.
+  const appliedPage = status === 'ready' && query.data ? query.data.page : page;
 
-    searchListings({ ...filtersRef.current, page, pageSize: PAGE_SIZE_DEFAULT }, controller.signal)
-      .then((envelope) => {
-        if (!active) return;
-        setState({
-          results: envelope.results,
-          total: envelope.total,
-          echo: { requested: page, applied: envelope.page },
-          pageCount: envelope.pageCount,
-          pageSize: envelope.pageSize,
-          appliedFilters: envelope.appliedFilters,
-          status: 'ready',
-          error: null,
-          errorCode: null,
-        });
-      })
-      .catch((err: unknown) => {
-        // An aborted request is a superseded search, not a failure the user should hear about.
-        if (!active || (err instanceof DOMException && err.name === 'AbortError')) return;
+  return {
+    results: envelope?.results ?? [],
+    total: envelope?.total ?? 0,
+    page: appliedPage,
+    pageCount: envelope?.pageCount ?? 1,
+    pageSize: envelope?.pageSize ?? PAGE_SIZE_DEFAULT,
+    appliedFilters: envelope?.appliedFilters ?? {},
+    status,
+    error: query.isError ? messageOf(error) : null,
+    errorCode: error instanceof ListingsApiError ? error.code : null,
+    retry,
+  };
+}
 
-        const message =
-          err instanceof ListingsApiError
-            ? err.message
-            : 'We could not load listings just now. Please try again.';
-        const errorCode = err instanceof ListingsApiError ? err.code : null;
-
-        setState((prev) => ({ ...prev, status: 'error', error: message, errorCode }));
-        toastRef.current(message, 'error');
-      });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [filterKey, page, attempt, enabled]);
-
-  const { echo, ...rest } = state;
-
-  /*
-   * The requested page is the answer except in the one case the server knows better: it resolved
-   * *this* request and clamped the page (an out-of-range page comes back as the last real one).
-   * Anything else — in flight, held, failed, or an echo left over from a page no longer being
-   * asked for — reports what is being searched for now.
-   */
-  const appliedPage = rest.status === 'ready' && echo?.requested === page ? echo.applied : page;
-
-  return { ...rest, page: appliedPage, retry };
+function messageOf(error: unknown): string {
+  return error instanceof ListingsApiError
+    ? error.message
+    : 'We could not load listings just now. Please try again.';
 }

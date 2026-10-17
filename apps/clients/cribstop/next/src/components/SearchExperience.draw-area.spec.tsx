@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { renderWithClient } from '@/test/renderWithClient';
 import type { MapBounds } from '@cribstop/property-contracts';
 import {
   getBrokerGroups,
@@ -136,7 +137,7 @@ afterEach(() => {
 describe('a drawn area narrows the search', () => {
   it('sends the shape with the place and every filter, from page 1, with the new count', async () => {
     window.history.replaceState(null, '', '/search?q=Alexandria%2C+VA&beds=2&page=3');
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&beds=2&page=3" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&beds=2&page=3" />);
     await waitFor(() => expect(lastQuery().page).toBe(3));
     expect(lastQuery().area).toBeUndefined();
     expect(screen.queryByTestId('clear-drawn-area')).toBeNull();
@@ -151,7 +152,7 @@ describe('a drawn area narrows the search', () => {
   });
 
   it('sends the shape to the map pins, which add their own view', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
 
@@ -162,7 +163,7 @@ describe('a drawn area narrows the search', () => {
 
 describe('a drawn area wins over the viewport', () => {
   it('removes the viewport filter and its URL parameter when a shape applies', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     moveMap(OLD_TOWN);
     await waitFor(() => expect(lastQuery().bounds).toEqual(OLD_TOWN));
@@ -178,7 +179,7 @@ describe('a drawn area wins over the viewport', () => {
   });
 
   it('never sets a viewport on pan or zoom while the shape is active', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
     await waitFor(() => expect(lastQuery().area).toBe(AREA));
@@ -195,7 +196,7 @@ describe('a drawn area wins over the viewport', () => {
   it('reads a link that carries both as the area alone', async () => {
     const search = `?q=Alexandria%2C+VA&viewport=-77.0602,38.7977,-77.0301,38.8189&area=${AREA_PARAM_VALUE}`;
     window.history.replaceState(null, '', `/search${search}`);
-    render(<SearchExperience initialQuery={search.slice(1)} />);
+    renderWithClient(<SearchExperience initialQuery={search.slice(1)} />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(lastQuery().area).toBe(AREA);
@@ -206,7 +207,7 @@ describe('a drawn area wins over the viewport', () => {
 
 describe('the URL carries the drawn area', () => {
   it('pushes a history entry on apply and writes lng,lat pairs with five decimals', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&page=2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&page=2" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     const push = jest.spyOn(window.history, 'pushState');
     const replace = jest.spyOn(window.history, 'replaceState');
@@ -227,7 +228,7 @@ describe('the URL carries the drawn area', () => {
   it('restores the shape from a shared link with one request and no wider one first', async () => {
     const search = `?q=Alexandria%2C+VA&area=${AREA_PARAM_VALUE}`;
     window.history.replaceState(null, '', `/search${search}`);
-    render(<SearchExperience initialQuery={search.slice(1)} />);
+    renderWithClient(<SearchExperience initialQuery={search.slice(1)} />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(mockedSearch.mock.calls).toHaveLength(1);
@@ -237,7 +238,7 @@ describe('the URL carries the drawn area', () => {
   });
 
   it('drops a shape the service would refuse instead of sending a request it rejects', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA&area=0,0;2,2;2,0;0,2" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA&area=0,0;2,2;2,0;0,2" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
 
     expect(lastQuery().area).toBeUndefined();
@@ -245,7 +246,7 @@ describe('the URL carries the drawn area', () => {
   });
 
   it('removes the shape on Back and restores it on Forward', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
     await waitFor(() => expect(lastQuery().area).toBe(AREA));
@@ -264,7 +265,7 @@ describe('the URL carries the drawn area', () => {
 
 describe('clear and redraw', () => {
   it('clears from the chip: full results, URL without the shape, one history entry', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
     await waitFor(() => expect(lastQuery().area).toBe(AREA));
@@ -282,7 +283,7 @@ describe('clear and redraw', () => {
   });
 
   it('clears from the map control', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
     await waitFor(() => expect(lastQuery().area).toBe(AREA));
@@ -294,7 +295,7 @@ describe('clear and redraw', () => {
   });
 
   it('replaces the old shape with a new one', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
     await waitFor(() => expect(lastQuery().area).toBe(AREA));
@@ -307,7 +308,7 @@ describe('clear and redraw', () => {
   });
 
   it('keeps the shape when the filter modal applies a draft', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
     await waitFor(() => expect(lastQuery().area).toBe(AREA));
@@ -320,7 +321,7 @@ describe('clear and redraw', () => {
   });
 
   it('explains an empty shape and clears it', async () => {
-    render(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
+    renderWithClient(<SearchExperience initialQuery="q=Alexandria%2C+VA" />);
     await waitFor(() => expect(mockedSearch).toHaveBeenCalled());
     draw(AREA);
 
@@ -337,7 +338,7 @@ describe('every group-by uses the shape', () => {
   it('applies to neighborhood groups', async () => {
     const search = `?q=Alexandria%2C+VA&groupBy=neighborhood&area=${AREA_PARAM_VALUE}`;
     window.history.replaceState(null, '', `/search${search}`);
-    render(<SearchExperience initialQuery={search.slice(1)} />);
+    renderWithClient(<SearchExperience initialQuery={search.slice(1)} />);
 
     await waitFor(() => expect(mockedGroups).toHaveBeenCalled());
     expect(lastArg(mockedGroups).area).toBe(AREA);
@@ -351,7 +352,7 @@ describe('every group-by uses the shape', () => {
     });
     const search = `?q=Alexandria%2C+VA&groupBy=zip&area=${AREA_PARAM_VALUE}`;
     window.history.replaceState(null, '', `/search${search}`);
-    render(<SearchExperience initialQuery={search.slice(1)} />);
+    renderWithClient(<SearchExperience initialQuery={search.slice(1)} />);
 
     await waitFor(() => expect(mockedZips.mock.calls.length).toBeGreaterThan(1));
     for (const call of mockedZips.mock.calls) expect((call[0] as Query).area).toBe(AREA);
@@ -360,7 +361,7 @@ describe('every group-by uses the shape', () => {
   it('applies to broker groups', async () => {
     const search = `?q=Alexandria%2C+VA&groupBy=broker&area=${AREA_PARAM_VALUE}`;
     window.history.replaceState(null, '', `/search${search}`);
-    render(<SearchExperience initialQuery={search.slice(1)} />);
+    renderWithClient(<SearchExperience initialQuery={search.slice(1)} />);
 
     await waitFor(() => expect(mockedBrokers).toHaveBeenCalled());
     expect(lastArg(mockedBrokers).area).toBe(AREA);
@@ -369,7 +370,7 @@ describe('every group-by uses the shape', () => {
   it('sends a newly drawn shape to the group request too', async () => {
     const search = '?q=Alexandria%2C+VA&groupBy=broker';
     window.history.replaceState(null, '', `/search${search}`);
-    render(<SearchExperience initialQuery={search.slice(1)} />);
+    renderWithClient(<SearchExperience initialQuery={search.slice(1)} />);
     await waitFor(() => expect(mockedBrokers).toHaveBeenCalled());
     expect(lastArg(mockedBrokers).area).toBeUndefined();
 
