@@ -206,4 +206,22 @@ describe('getJson error branching (#177)', () => {
     expect(error).toBeInstanceOf(ListingsApiError);
     expect((error as ListingsApiError).message).toMatch(/too quickly/i);
   });
+
+  // #907: an abort during the body read must stay an abort, not become a failed load.
+  it('rejects with the abort, not a ListingsApiError, when the body read is aborted', async () => {
+    const controller = new AbortController();
+    global.fetch = jest.fn().mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      },
+    })) as unknown as typeof fetch;
+
+    const error = await getListingsMeta(controller.signal).catch((e: unknown) => e);
+
+    expect(error).not.toBeInstanceOf(ListingsApiError);
+    expect((error as DOMException).name).toBe('AbortError');
+  });
 });

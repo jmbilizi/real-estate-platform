@@ -79,6 +79,22 @@ describe('ListingDetailModal', () => {
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
+  it('puts the error state in the modal layout, under a header with back (#907)', async () => {
+    mockedGetListing.mockRejectedValue(
+      new ListingsApiError(
+        'The listings service is temporarily unavailable.',
+        'upstream_unavailable',
+        503,
+      ),
+    );
+
+    render(<ListingDetailModal id="11111111-1111-4111-8111-111111111111" />);
+
+    const alert = await screen.findByRole('alert');
+    expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
+    expect(alert.closest('[data-error-body]')).not.toBeNull();
+  });
+
   it('aborts the in-flight fetch on unmount without setting state', async () => {
     let capturedSignal: AbortSignal | undefined;
     mockedGetListing.mockImplementation((_id: string, signal?: AbortSignal) => {

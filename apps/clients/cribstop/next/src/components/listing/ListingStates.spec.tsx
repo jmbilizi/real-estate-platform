@@ -1,6 +1,31 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
-import { ListingDetailSkeleton } from './ListingStates';
+import { ListingDetailSkeleton, ListingErrorPanel } from './ListingStates';
+
+/** #907: the error state fills the modal's header + body layout, with no band above it. */
+describe('ListingErrorPanel', () => {
+  it('renders a header bar with back, then the error in the scroll body', () => {
+    const onClose = jest.fn();
+    const onRetry = jest.fn();
+    const { container } = render(
+      <ListingErrorPanel message="Try later." onRetry={onRetry} onClose={onClose} />,
+    );
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveClass('flex', 'h-full', 'min-h-0', 'flex-col');
+    expect(root.children).toHaveLength(2);
+    expect(root.children[0]).toContainElement(screen.getByRole('button', { name: /go back/i }));
+    expect(root.children[1]).toHaveAttribute('data-error-body');
+    expect(root.children[1]).toContainElement(screen.getByRole('alert'));
+    // A vertical margin on the box was the empty band.
+    expect(screen.getByRole('alert').className).not.toMatch(/\bmy-|\bmt-/);
+
+    fireEvent.click(screen.getByRole('button', { name: /go back/i }));
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
 
 /**
  * The detail skeleton: a uniformly skeletal loading state, however the panel was opened.

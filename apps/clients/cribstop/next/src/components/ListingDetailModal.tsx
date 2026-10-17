@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ListingDetailContent from './ListingDetailContent';
 import ListingModalFrame from '@/components/listing/ListingModalFrame';
-import { ListingDetailSkeleton, ListingErrorState } from '@/components/listing/ListingStates';
+import { ListingDetailSkeleton, ListingErrorPanel } from '@/components/listing/ListingStates';
 import { getListing, ListingsApiError } from '@/lib/api/listings';
 import type { ListingDetailState } from '@/lib/api/listings';
 import { cacheListing, readCachedListing } from '@/lib/api/listings-cache';
@@ -99,11 +99,13 @@ export default function ListingDetailModal({
     getListing(id, controller.signal)
       .then((listing) => {
         cacheListing(listing);
+        if (controller.signal.aborted) return;
         setState({ status: 'ready', listing });
       })
       .catch((err) => {
         // A fast modal close aborts the in-flight fetch — never set state on an unmounted /
         // superseded component for that case.
+        if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
 
         if (err instanceof ListingsApiError && err.isNotFound) {
@@ -186,7 +188,7 @@ export default function ListingDetailModal({
       )}
 
       {state.status === 'error' && (
-        <ListingErrorState message={state.message} onRetry={handleRetry} className="my-16" />
+        <ListingErrorPanel message={state.message} onRetry={handleRetry} onClose={handleClose} />
       )}
     </ListingModalFrame>
   );

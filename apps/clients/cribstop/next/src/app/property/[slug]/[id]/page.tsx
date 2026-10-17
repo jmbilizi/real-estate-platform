@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { idSchema, type PropertyPage } from '@cribstop/property-contracts';
 import JsonLd from '@/components/JsonLd';
-import { ListingErrorState } from '@/components/listing/ListingStates';
+import ListingLoadError from '@/components/listing/ListingLoadError';
 import PropertyPageView, { PropertyHistory } from '@/components/listing/PropertyPageView';
 import StandaloneListingView from '@/components/listing/StandaloneListingView';
 import { toListingDetailView } from '@/lib/api/listings';
@@ -76,7 +76,7 @@ export default async function PropertyRoute({ params }: RouteProps) {
 
   if (state.status === 'not-found') notFound();
   if (state.status === 'error') {
-    return <ListingErrorState message={state.message} className="mx-auto my-16 max-w-lg" />;
+    return <ListingLoadError message={state.message} />;
   }
   if (state.viaHomeId || safeDecode(slug) !== state.page.slug) {
     permanentRedirect(state.page.canonicalPath);
