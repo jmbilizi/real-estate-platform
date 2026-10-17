@@ -239,9 +239,10 @@ export default function Modal({
   // Card shape & size per mobileStyle
   const cardMobile =
     mobileStyle === 'full-screen'
-      ? 'h-screen h-dvh rounded-none sm:h-auto sm:rounded-2xl'
+      ? /* Pads the notch, status bar and landscape insets so the header is never under them (#918). */
+        'h-screen h-dvh rounded-none sm:h-auto sm:rounded-2xl pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] sm:p-0'
       : mobileStyle === 'bottom-sheet'
-        ? 'rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85vh] sm:max-h-none'
+        ? 'rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85dvh] sm:max-h-none'
         : 'rounded-2xl';
 
   // Slide-in animation per mobileStyle (desktop always fades in via backdrop)
@@ -284,11 +285,15 @@ export default function Modal({
           ${cardMobile}
           ${squareBottom ? 'sm:rounded-b-none' : ''}
           ${widthClass ?? 'max-w-md sm:max-w-lg'}
-          ${mobileStyle !== 'full-screen' && mobileStyle !== 'bottom-sheet' ? (heightClass ?? 'max-h-[90vh]') : (heightClass ?? '')}
+          ${mobileStyle !== 'full-screen' && mobileStyle !== 'bottom-sheet' ? (heightClass ?? 'max-h-[90dvh]') : (heightClass ?? '')}
           ${visible ? slideTo : slideFrom}`}
       >
         {!title && showCloseButton && (
-          <div className="absolute right-4 top-4 z-20">
+          <div
+            className={`absolute right-4 z-20 sm:top-4 ${
+              mobileStyle === 'full-screen' ? 'top-[calc(env(safe-area-inset-top)+1rem)]' : 'top-4'
+            }`}
+          >
             <DismissButton onClick={onClose} />
           </div>
         )}
@@ -303,14 +308,14 @@ export default function Modal({
         <div
           className={
             noScroll
-              ? `flex-1 min-h-0 flex flex-col overflow-hidden${noPadding ? '' : ' px-6 py-4'}`
-              : `flex-1 overflow-y-auto ${mobileStyle === 'full-screen' ? 'scrollbar-invisible' : ''} ${noPadding ? '' : 'px-6 py-4'}`
+              ? `flex-1 min-h-0 flex flex-col overflow-hidden overscroll-contain${noPadding ? '' : ' px-6 py-4'}`
+              : `flex-1 overflow-y-auto overscroll-contain ${mobileStyle === 'full-screen' ? 'scrollbar-invisible' : ''} ${noPadding ? '' : 'px-6 py-4'}`
           }
         >
           {children}
         </div>
         {footer && (
-          <div className="sticky bottom-0 left-0 right-0 px-6 py-4 bg-white border-t border-surface-border flex items-center justify-between gap-3 rounded-b-2xl flex-shrink-0">
+          <div className="sticky bottom-0 left-0 right-0 px-6 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white border-t border-surface-border flex items-center justify-between gap-3 rounded-b-2xl flex-shrink-0">
             {footer}
           </div>
         )}

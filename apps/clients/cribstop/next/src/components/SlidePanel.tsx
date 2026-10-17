@@ -81,7 +81,9 @@ export default function SlidePanel({
             <DismissButton onClick={onClose} />
           </div>
         )}
-        <div className="overflow-y-auto max-h-[calc(100vh-84px)]">{children}</div>
+        <div className="overflow-y-auto max-h-[calc(100dvh-84px)] overscroll-contain">
+          {children}
+        </div>
       </div>
 
       <style>{`
