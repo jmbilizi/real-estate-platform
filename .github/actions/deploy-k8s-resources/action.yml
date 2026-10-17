@@ -190,6 +190,20 @@ runs:
         GENERATED_KEYS_LIST
         )
 
+        # Only the branch that owns an environment generates its keys. A skip here would apply
+        # the committed placeholder over the live keys, so a mismatch fails the deploy.
+        ENV_NAME=$(basename "${{ inputs.kustomizePath }}")
+        case "$ENV_NAME" in
+          dev) EXPECTED_BRANCH=dev ;;
+          test) EXPECTED_BRANCH=test ;;
+          prod) EXPECTED_BRANCH=main ;;
+          *) EXPECTED_BRANCH="" ;;
+        esac
+        if [ "$EXPECTED_BRANCH" != "${{ github.ref_name }}" ]; then
+          echo "::error::Ref ${{ github.ref_name }} cannot generate keys for environment $ENV_NAME. Deploy it from branch ${EXPECTED_BRANCH:-none}."
+          exit 1
+        fi
+
         is_missing() {
           [ -z "$1" ] || [ "$1" = "StrongBase64Password" ] || [ "${#1}" -lt 32 ]
         }
