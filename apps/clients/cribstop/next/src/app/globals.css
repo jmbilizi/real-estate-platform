@@ -835,7 +835,8 @@ html[data-map-expanded] {
   container-type: inline-size;
 }
 [role='dialog'] .listing-header {
-  top: env(safe-area-inset-top, 0px);
+  /* The full-screen modal card already pads the top inset (`Modal.tsx`, #918). */
+  top: 0;
 }
 /* The section links hide before the price or the address squeeze. */
 @container (max-width: 900px) {

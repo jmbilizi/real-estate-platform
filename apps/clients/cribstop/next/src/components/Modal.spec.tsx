@@ -150,4 +150,52 @@ describe('Modal', () => {
     expect(last).toHaveFocus();
     expect(outside).not.toHaveFocus();
   });
+
+  describe('phone viewport contract (#918)', () => {
+    it('pads the safe-area top on a full-screen card and drops it from sm up', () => {
+      renderWithOutsideButton({ mobileStyle: 'full-screen' });
+      const cls = screen.getByRole('dialog').className;
+      expect(cls).toContain('pt-[env(safe-area-inset-top)]');
+      expect(cls).toContain('sm:p-0');
+      expect(cls).toContain('h-dvh');
+    });
+
+    it('moves the floating close button below the top inset on a full-screen card', () => {
+      renderWithOutsideButton({ mobileStyle: 'full-screen', showCloseButton: true });
+      const wrap = screen.getByRole('dialog').querySelector('.absolute');
+      expect(wrap?.className).toContain('top-[calc(env(safe-area-inset-top)+1rem)]');
+      expect(wrap?.className).toContain('sm:top-4');
+    });
+
+    it('sizes center and bottom-sheet cards by dvh, never vh', () => {
+      const { unmount } = render(
+        <Modal open onClose={jest.fn()} ariaLabel="A">
+          x
+        </Modal>,
+      );
+      expect(screen.getByRole('dialog').className).toContain('max-h-[90dvh]');
+      expect(screen.getByRole('dialog').className).not.toMatch(/\dvh/);
+      unmount();
+      render(
+        <Modal open onClose={jest.fn()} ariaLabel="B" mobileStyle="bottom-sheet">
+          x
+        </Modal>,
+      );
+      expect(screen.getByRole('dialog').className).toContain('max-h-[85dvh]');
+    });
+
+    it('keeps the title header outside the scrolling body, and contains overscroll', () => {
+      render(
+        <Modal open onClose={jest.fn()} title="Sign in" mobileStyle="full-screen">
+          <p>body</p>
+        </Modal>,
+      );
+      const body = screen.getByText('body').parentElement as HTMLElement;
+      expect(body.className).toContain('overflow-y-auto');
+      expect(body.className).toContain('overscroll-contain');
+      const header = screen.getByRole('heading', { name: 'Sign in' }).parentElement as HTMLElement;
+      expect(header.className).toContain('flex-shrink-0');
+      expect(header.contains(body)).toBe(false);
+    });
+  });
 });
