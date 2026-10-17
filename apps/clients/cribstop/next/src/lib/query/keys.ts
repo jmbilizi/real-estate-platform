@@ -16,3 +16,8 @@ export const mapKeys = {
     [...mapKeys.all, 'viewport', filters, bounds] as const,
   card: (id: string) => [...mapKeys.all, 'card', id] as const,
 };
+
+/** Homes near one listing. Separate from `listingKeys` so parallel tickets do not collide. */
+export const nearbyKeys = {
+  forListing: (id: string) => [...listingKeys.all, 'nearby', id] as const,
+};

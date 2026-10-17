@@ -39,7 +39,8 @@ import {
 import { copyToClipboard } from '@/lib/clipboard';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import { shareOrigin } from '@/lib/site-origin';
-import { searchListings } from '@/lib/api/listings';
+import { useQuery } from '@tanstack/react-query';
+import { nearbyListingsOptions } from '@/lib/query/listings';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
@@ -85,15 +86,6 @@ const PHONE_ICON =
 const EMAIL_ICON =
   'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z';
 const PANEL = 'rounded-2xl border border-surface-border bg-white';
-
-/** "Nearby homes" fetch lifecycle. A failed nice-to-have must not break the page, so a failure
- *  renders the same as "no results" — nothing — rather than an error banner. */
-type NearbyState =
-  | { status: 'loading'; results: [] }
-  | { status: 'ready' | 'error'; results: ListingCardRow[] };
-
-/** Half the side of the nearby search square, in degrees. Matches the property page API (~2 km). */
-const NEARBY_HALF_SIDE = 0.02;
 
 export default function ListingDetailContent({
   listing,
@@ -161,8 +153,6 @@ export default function ListingDetailContent({
     } else toast('We could not copy the link.', 'error');
   }
 
-  const [fetched, setFetched] = useState<NearbyState>({ status: 'loading', results: [] });
-
   const serverNearby = nearby !== undefined;
 
   useEffect(() => {
@@ -176,67 +166,10 @@ export default function ListingDetailContent({
     );
   }, [listing.id]);
 
-  useEffect(() => {
-    if (serverNearby) return;
-    const controller = new AbortController();
-    setFetched({ status: 'loading', results: [] });
+  // A failed nice-to-have must not break the page, so a failure renders as no results.
+  const nearbyQuery = useQuery({ ...nearbyListingsOptions(listing), enabled: !serverNearby });
 
-    /**
-     * Same query as the property page API: active homes of the same offer (sale or rent) in a
-     * square around this one, else in its city. A sold listing compares against live inventory.
-     */
-    const { latitude: lat, longitude: lng } = listing;
-    const d = NEARBY_HALF_SIDE;
-    const place =
-      lat !== null && lng !== null
-        ? {
-            boundary: JSON.stringify({
-              type: 'Polygon',
-              coordinates: [
-                [
-                  [lng - d, lat - d],
-                  [lng + d, lat - d],
-                  [lng + d, lat + d],
-                  [lng - d, lat + d],
-                  [lng - d, lat - d],
-                ],
-              ],
-            }),
-          }
-        : { city: listing.city, state: listing.state };
-    searchListings(
-      {
-        ...place,
-        listingType: listing.listingType === 'rent' ? 'rent' : 'sale',
-        status: ['Active'],
-        sort: 'newest',
-        pageSize: 9,
-      },
-      controller.signal,
-    )
-      .then((envelope) => {
-        setFetched({
-          status: 'ready',
-          results: envelope.results.filter((row) => row.id !== listing.id),
-        });
-      })
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setFetched({ status: 'error', results: [] });
-      });
-
-    return () => controller.abort();
-  }, [
-    serverNearby,
-    listing.id,
-    listing.latitude,
-    listing.longitude,
-    listing.city,
-    listing.state,
-    listing.listingType,
-  ]);
-
-  const nearbyRows = serverNearby ? nearby : fetched.results;
+  const nearbyRows = serverNearby ? nearby : (nearbyQuery.data ?? []);
 
   const nearbyHref = searchTargetUrl(
     { kind: 'place', place: { kind: 'city', city: listing.city, state: listing.state } },
@@ -656,7 +589,7 @@ export default function ListingDetailContent({
         )}
 
         {/* Nearby homes. A carousel, like the home page rows, so it has no panel around it. */}
-        {!serverNearby && fetched.status === 'loading' && (
+        {!serverNearby && nearbyQuery.isPending && (
           <div id="nearby" className="mt-4">
             <NearbyHomesSkeleton />
           </div>

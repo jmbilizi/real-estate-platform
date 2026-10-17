@@ -1,6 +1,6 @@
 import type { MapBounds } from '@cribstop/property-contracts';
 import { getListingCard, getListingsMap } from '@/lib/api/listings';
-import { mapCardOptions, MAP_CARD_STALE_MS, viewportPinsOptions } from './map';
+import { MAP_CARD_STALE_MS, mapCardOptions, viewportPinsOptions } from './map';
 
 jest.mock('@/lib/api/listings', () => ({
   getListingCard: jest.fn(),

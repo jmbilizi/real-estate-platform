@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { renderWithClient as render } from '@/test/renderWithClient';
 import userEvent from '@testing-library/user-event';
 import { aListingCardRow, aListingDetail } from '@/test/fixtures';
 import { searchListings, toListingDetailView } from '@/lib/api/listings';
