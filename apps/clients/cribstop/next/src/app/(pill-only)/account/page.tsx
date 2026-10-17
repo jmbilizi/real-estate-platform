@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { useApp } from '@/lib/context';
+import { openAuthModal } from '@/lib/auth-modal';
 import { useRouter } from 'next/navigation';
 import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 import { getProfile, ProfileResponse, updateProfile as updateProfileApi } from '@/lib/api/account';
@@ -20,9 +21,7 @@ export default function AccountPage() {
   const router = useRouter();
 
   const openModal = (mode: 'login' | 'signup') => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('modal', mode);
-    router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+    openAuthModal(mode);
   };
 
   if (!user) {

@@ -232,7 +232,12 @@ describe('NavBar after hydration', () => {
 });
 
 describe('NavBar right side', () => {
-  beforeEach(() => mockPush.mockClear());
+  let pushState: jest.SpyInstance;
+  beforeEach(() => {
+    mockPush.mockClear();
+    pushState = jest.spyOn(window.history, 'pushState').mockImplementation(() => undefined);
+  });
+  afterEach(() => pushState.mockRestore());
 
   it('gives every icon button a label and a tooltip', () => {
     mockUseApp.mockReturnValue(appValue(null));
@@ -249,9 +254,8 @@ describe('NavBar right side', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign in or sign up' }));
 
-    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=login'), {
-      scroll: false,
-    });
+    expect(pushState).toHaveBeenCalledWith(null, '', expect.stringContaining('modal=login'));
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('opens the auth modal from the More menu', () => {
@@ -261,9 +265,8 @@ describe('NavBar right side', () => {
     fireEvent.click(screen.getByRole('button', { name: 'More options' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Sign in or sign up' }));
 
-    expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('modal=login'), {
-      scroll: false,
-    });
+    expect(pushState).toHaveBeenCalledWith(null, '', expect.stringContaining('modal=login'));
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('keeps the profile panel behind the account button when signed in', () => {

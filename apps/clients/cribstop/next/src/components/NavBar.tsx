@@ -13,6 +13,7 @@ import AppsDropdown from './AppsDropdown';
 import SlidePanel from './SlidePanel';
 import DismissButton from './DismissButton';
 import { BRAND } from '@/lib/brand';
+import { openAuthModal } from '@/lib/auth-modal';
 import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 import { NAV_TABS } from './NavTabIcons';
 import { SkeletonBar, SkeletonBlock } from './Skeleton';
@@ -134,9 +135,7 @@ export default function NavBar() {
   }, [headerExpanded, setHeaderExpanded]);
 
   const openModal = () => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('modal', 'login');
-    router.push(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+    openAuthModal('login');
   };
 
   return (

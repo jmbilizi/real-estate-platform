@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AuthForm from './AuthForm';
 import Modal from './Modal';
+import { closeAuthModal } from '@/lib/auth-modal';
 
 export default function AuthModalWrapper() {
   const router = useRouter();
@@ -16,38 +17,24 @@ export default function AuthModalWrapper() {
       ? 'forgot'
       : 'login';
 
-  // Modal's open state — set to false to play exit animation, then route away
+  // Modal's open state — set to false to play exit animation, then close
   const [open, setOpen] = useState(true);
 
-  const buildUrl = (params: URLSearchParams) => {
-    const qs = params.toString();
-    return qs ? `${pathname}?${qs}` : pathname;
-  };
-
-  // Animate out first (Modal takes 300ms), then route
-  const navigate = (url: string) => {
+  // Animate out first (Modal takes 300ms). The close is a History call, not a router navigation, so
+  // the page behind the modal does not re-render or refetch (#908). The intercepted `/login` and
+  // `/signup` routes sit on their own history entry, so they step back through the router.
+  const close = () => {
     setOpen(false);
-    setTimeout(() => router.replace(url, { scroll: false }), 310);
-  };
-
-  const handleClose = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('modal');
-    params.delete('mode');
-    navigate(buildUrl(params));
-  };
-
-  const handleSuccess = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('modal');
-    params.delete('mode');
-    navigate(buildUrl(params));
+    setTimeout(() => {
+      if (pathname === '/login' || pathname === '/signup') router.back();
+      else closeAuthModal();
+    }, 310);
   };
 
   return (
     <Modal
       open={open}
-      onClose={handleClose}
+      onClose={close}
       mobileStyle="full-screen"
       widthClass="sm:max-w-md"
       cardClassName="bg-white sm:bg-transparent sm:shadow-none"
@@ -55,7 +42,7 @@ export default function AuthModalWrapper() {
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">
-        <AuthForm variant="modal" initialMode={initialMode} onSuccess={handleSuccess} />
+        <AuthForm variant="modal" initialMode={initialMode} onSuccess={close} />
       </div>
     </Modal>
   );
