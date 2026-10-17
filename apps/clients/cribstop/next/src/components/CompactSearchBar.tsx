@@ -17,6 +17,7 @@ import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
 import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
 import { LISTING_TYPE_SUMMARY_LABELS } from '@/lib/listing-type-labels';
+import { useDebouncer } from '@tanstack/react-pacer';
 import { Z_LAYERS } from '@/lib/z-layers';
 import { SkeletonBlock, SkeletonText } from './Skeleton';
 import { LISTING_TYPES } from '@cribstop/property-contracts';
@@ -751,7 +752,19 @@ export default function CompactSearchBar({
   const [recentSearches, setRecentSearches] = useState<any[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const suggestionDebouncer = useDebouncer(
+    async (val: string) => {
+      try {
+        const result = await fetchWhereSuggestions(val);
+        setSuggestionsUnavailable(result.status === 'unavailable');
+        setSuggestions(result.status === 'ok' ? searchableSuggestions(result.suggestions) : []);
+      } finally {
+        setLoadingSuggestions(false);
+        setIsDropdownOpen(true);
+      }
+    },
+    { wait: 300 },
+  );
   const [isCommittedSelection, setIsCommittedSelection] = useState(false);
   const isCommittedSelectionRef = useRef(false);
   const [activePanel, setActivePanel] = useState<SearchPanel | null>(
@@ -1085,7 +1098,7 @@ export default function CompactSearchBar({
                 setLocationNotFound(false);
                 if (typeof setLocation === 'function') setLocation(val);
                 setSelectedSuggestion(null);
-                if (debounceRef.current) clearTimeout(debounceRef.current);
+                suggestionDebouncer.cancel();
                 setSuggestionsUnavailable(false);
                 if (!val.trim() || val.trim().length < 2) {
                   setSuggestions([]);
@@ -1093,18 +1106,7 @@ export default function CompactSearchBar({
                   return;
                 }
                 setLoadingSuggestions(true);
-                debounceRef.current = setTimeout(async () => {
-                  try {
-                    const result = await fetchWhereSuggestions(val);
-                    setSuggestionsUnavailable(result.status === 'unavailable');
-                    setSuggestions(
-                      result.status === 'ok' ? searchableSuggestions(result.suggestions) : [],
-                    );
-                  } finally {
-                    setLoadingSuggestions(false);
-                    setIsDropdownOpen(true);
-                  }
-                }, 300);
+                suggestionDebouncer.maybeExecute(val);
               }}
               onFocus={async () => {
                 setIsDropdownOpen(true);
@@ -1656,7 +1658,7 @@ export default function CompactSearchBar({
                         setLocationNotFound(false);
                         if (typeof setLocation === 'function') setLocation(val);
                         setSelectedSuggestion(null);
-                        if (debounceRef.current) clearTimeout(debounceRef.current);
+                        suggestionDebouncer.cancel();
                         setSuggestionsUnavailable(false);
                         if (!val.trim() || val.trim().length < 2) {
                           setSuggestions([]);
@@ -1664,20 +1666,7 @@ export default function CompactSearchBar({
                           return;
                         }
                         setLoadingSuggestions(true);
-                        debounceRef.current = setTimeout(async () => {
-                          try {
-                            const result = await fetchWhereSuggestions(val);
-                            setSuggestionsUnavailable(result.status === 'unavailable');
-                            setSuggestions(
-                              result.status === 'ok'
-                                ? searchableSuggestions(result.suggestions)
-                                : [],
-                            );
-                          } finally {
-                            setLoadingSuggestions(false);
-                            setIsDropdownOpen(true);
-                          }
-                        }, 300);
+                        suggestionDebouncer.maybeExecute(val);
                       }}
                       onFocus={async () => {
                         setIsDropdownOpen(true);
