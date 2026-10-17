@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
+import { getQueryClient } from '@/lib/query/query-client';
 import type { MapPin } from '@cribstop/property-contracts';
 import MapPinCard from '@/components/MapPinCard';
 import { store } from '@/lib/store/store';
@@ -285,15 +287,18 @@ export default function PricePinLayer({
       // A card that loads after the popup opens changes its size. The popup measures again, so it
       // stays anchored and on screen.
       const onLayout = () => popup?.update();
-      // The popup is its own React root, so it gets the store that `AppProvider` gives the page.
+      // The popup is its own React root, so it gets the store that `AppProvider` gives the page
+      // and the page's query client (#930).
       // A pin off the results page has no row here, so the popup shows a loading state, then the
       // same card the grid shows.
       root.render(
-        <Provider store={store}>
-          <div className="w-[232px] bg-surface p-2 sm:w-[280px]">
-            <MapPinCard key={id} id={id} row={cb.current.rowsById.get(id)} onLayout={onLayout} />
-          </div>
-        </Provider>,
+        <QueryClientProvider client={getQueryClient()}>
+          <Provider store={store}>
+            <div className="w-[232px] bg-surface p-2 sm:w-[280px]">
+              <MapPinCard key={id} id={id} row={cb.current.rowsById.get(id)} onLayout={onLayout} />
+            </div>
+          </Provider>
+        </QueryClientProvider>,
       );
       popup = L.popup({
         closeButton: false,

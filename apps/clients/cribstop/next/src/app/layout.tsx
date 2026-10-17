@@ -6,6 +6,7 @@ import { AppProvider } from '@/lib/context';
 import QueryProvider from '@/components/QueryProvider';
 import SiteHeader from '@/components/SiteHeader';
 import Footer from '@/components/Footer';
+import MobileTabBar from '@/components/MobileTabBar';
 import AuthModalListener from '@/components/AuthModalListener';
 import ListingPanelHost from '@/components/listing/ListingPanelHost';
 import OnboardingListener from '@/components/OnboardingListener';
@@ -17,6 +18,8 @@ import SiteOriginWarmer from '@/components/SiteOriginWarmer';
 export const metadata: Metadata = {
   title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`,
   description: BRAND.metaDescription,
+  // "Add to Home Screen" on iOS opens full screen (#923). Android reads `app/manifest.ts`.
+  appleWebApp: { capable: true, title: BRAND.siteName, statusBarStyle: 'default' },
 };
 
 // `viewportFit: 'cover'` lets full-screen overlays (the mobile search sheet, bottom
@@ -26,6 +29,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({
@@ -46,6 +50,7 @@ export default function RootLayout({
             <SiteHeader />
             <main className="flex-1">{children}</main>
             <Footer />
+            <MobileTabBar />
             <Suspense fallback={null}>
               <AuthModalListener />
             </Suspense>
