@@ -342,6 +342,8 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
   // started, even past an incidental cleanup — only a run that a later one has actually
   // superseded skips its `setState`.
   const generation = useRef(0);
+  const regionCity = region?.city;
+  const regionState = region?.state;
 
   useEffect(() => {
     // Resets to loading on every entry into this branch, matching `useCarouselListings`'s skip
@@ -364,12 +366,12 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
       // The visitor's own region, city+state then state alone, ahead of every licensed-state
       // request — so a visitor's own city and state render first even when their state isn't a
       // licensed one.
-      if (region) {
+      if (regionCity && regionState) {
         const settledRegion = await Promise.allSettled([
           getNeighborhoods(
             {
-              city: region.city,
-              state: region.state,
+              city: regionCity,
+              state: regionState,
               limit: NEIGHBORHOODS_PAGE_SIZE,
               minCount: NEIGHBORHOODS_MIN_COUNT,
             },
@@ -377,7 +379,7 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
           ),
           getNeighborhoods(
             {
-              state: region.state,
+              state: regionState,
               limit: NEIGHBORHOODS_PAGE_SIZE,
               minCount: NEIGHBORHOODS_MIN_COUNT,
             },
@@ -388,6 +390,10 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
           if (result.status === 'fulfilled' && result.value) add(result.value.results);
         }
       }
+
+      // #915. The mocked and real requests ignore a late abort. Stop here so an unmounted or
+      // superseded run starts no more requests.
+      if (controller.signal.aborted) return;
 
       // `allSettled`, not `all`: one licensed state's request failing must not blank the others'
       // already-good results. Order is the input order regardless of which settles first.
@@ -402,6 +408,8 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
       for (const result of settled) {
         if (result.status === 'fulfilled' && result.value) add(result.value.results);
       }
+
+      if (controller.signal.aborted) return;
 
       if (merged.length < NEIGHBORHOODS_TARGET) {
         const licensed = new Set<string>(BRAND.licensedStateCodes);
@@ -421,7 +429,8 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
 
     load();
     return () => controller.abort();
-  }, [region, regionLoading]);
+    // Keyed by value. `region` is a new object on every render of the page (#915).
+  }, [regionCity, regionState, regionLoading]);
 
   return state;
 }
