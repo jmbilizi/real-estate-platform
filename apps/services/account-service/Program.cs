@@ -198,6 +198,13 @@ internal static class Program
         builder.Services.AddSingleton<AccountRecoveryRateLimiter>();
         builder.Services.AddSingleton<IdentityEmailComposer>();
         builder.Services.AddScoped<EmailCodeService>();
+        builder.Services
+            .AddOptions<DeviceTrustOptions>()
+            .Bind(builder.Configuration.GetSection(DeviceTrustOptions.SectionName))
+            .Validate(options => options.Lifetime > TimeSpan.Zero && options.MaxDevices >= 1, "DeviceTrust configuration is invalid.")
+            .ValidateOnStart();
+        builder.Services.AddScoped<DeviceTrustService>();
+        builder.Services.AddScoped<DeviceSignInService>();
         builder.Services.AddHostedService<EmailCodePurgeService>();
         builder.Services
             .AddOptions<SignUpOptions>()
@@ -321,6 +328,9 @@ internal static class Program
 
         // Email change: POST /account/email/change/{start,verify}. See Routes/EmailChange.cs.
         app.MapEmailChangeRoutes();
+
+        // Email code on a new device: POST /account/login/device{,/resend}, /account/security/new-device. See Routes/DeviceSignIn.cs.
+        app.MapDeviceSignInRoutes();
 
         // "This wasn't me" link: POST /account/secure. See Routes/SecureAccount.cs.
         app.MapSecureAccountRoutes();

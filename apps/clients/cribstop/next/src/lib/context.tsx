@@ -7,10 +7,12 @@ import {
   AuthError,
   completeSignup,
   CompleteSignupOutcome,
+  type DeviceSignInResult,
   getProfile,
   getSession,
   loginAccount,
   logoutAccount,
+  verifyDeviceSignIn,
 } from '@/lib/api/account';
 import { store } from '@/lib/store/store';
 import {
@@ -72,6 +74,13 @@ interface AppContextValue {
     signupProof: string,
     password: string,
   ) => Promise<CompleteSignupOutcome>;
+  /** Finishes a sign-in that asked for an emailed code on a new device (#818). */
+  completeDeviceLogin: (
+    email: string,
+    password: string,
+    code: string,
+    remember?: boolean,
+  ) => Promise<DeviceSignInResult>;
   logout: () => void;
   /** Flips the home of a listing, so every listing of that home flips together. */
   toggleSave: (listing: { id: string; propertyId: string; city?: string; state?: string }) => void;
@@ -259,6 +268,15 @@ export function useApp(): AppContextValue {
     [startSession],
   );
 
+  const completeDeviceLoginUser = useCallback(
+    async (email: string, password: string, code: string, remember?: boolean) => {
+      const outcome = await verifyDeviceSignIn({ email, password, code, remember });
+      if (outcome.ok) await startSession(email, outcome.session);
+      return outcome;
+    },
+    [startSession],
+  );
+
   // Completing sign-up signs the consumer in: the email code already proved the address.
   const completeSignupUser = useCallback(
     async (email: string, signupProof: string, password: string) => {
@@ -409,6 +427,7 @@ export function useApp(): AppContextValue {
     savedPropertyIds,
     login: loginUser,
     completeSignup: completeSignupUser,
+    completeDeviceLogin: completeDeviceLoginUser,
     logout: logoutUser,
     toggleSave: toggleSavedListing,
     removeSaved,

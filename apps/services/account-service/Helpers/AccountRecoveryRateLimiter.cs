@@ -65,6 +65,9 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <summary>The counter scope of the "This wasn't me" link (#662).</summary>
     internal const string SecureAccountScope = "secure";
 
+    /// <summary>The counter scope of the new-device sign-in code (#818).</summary>
+    internal const string DeviceCodeScope = "devicecode";
+
     /// <summary>The share of the counter cache dropped when it is full.</summary>
     private const double CompactionShare = 0.1;
 

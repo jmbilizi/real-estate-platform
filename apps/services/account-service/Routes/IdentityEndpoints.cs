@@ -49,6 +49,7 @@ internal static class IdentityEndpoints
         group.AddEndpointFilter<IdentityResponseShapingFilter>();
         group.AddEndpointFilter<EmailChangeRetiredFilter>();
         group.AddEndpointFilter<PasswordChangeFilter>();
+        group.AddEndpointFilter<DeviceSignInFilter>();
 
         ((IEndpointRouteBuilder)app).DataSources.Add(
             new RetainedEndpointDataSource(detached.DataSources));

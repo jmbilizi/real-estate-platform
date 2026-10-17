@@ -58,6 +58,25 @@ export function authCookies(
   return cookies;
 }
 
+/** The cookie that marks this browser as an approved device (#818). It holds a signed token. */
+export const DEVICE_COOKIE = 'device_token';
+
+const DEVICE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{20,128}\.[A-Za-z0-9_-]{20,128}$/;
+
+/**
+ * Builds the device cookie from the headers account-service answers with. Returns null when the
+ * answer carries no valid token. The life comes from the service, so one setting rules both ends.
+ */
+export function deviceCookie(
+  upstream: Response,
+): { name: string; value: string; opts: Partial<ResponseCookie> } | null {
+  const token = upstream.headers.get('x-device-token-issued');
+  const maxAge = Number(upstream.headers.get('x-device-max-age'));
+  if (!token || !DEVICE_TOKEN_PATTERN.test(token)) return null;
+  if (!Number.isFinite(maxAge) || maxAge <= 0) return null;
+  return { name: DEVICE_COOKIE, value: token, opts: baseCookieOpts(Math.floor(maxAge)) };
+}
+
 /** Build Set-Cookie headers that expire (clear) all auth cookies. */
 export function clearAuthCookies(): Array<{
   name: string;

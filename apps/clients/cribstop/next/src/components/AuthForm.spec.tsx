@@ -5,8 +5,10 @@ import {
   type CodeNotSentReason,
   CodesUnavailableError,
   completePasswordReset,
+  DeviceCodeRequiredError,
   identifyEmail,
   RateLimitError,
+  resendDeviceCode,
   resendSignupCode,
   SignInFailedError,
   startPasswordReset,
@@ -17,8 +19,9 @@ import {
 
 const login = jest.fn();
 const completeSignup = jest.fn();
+const completeDeviceLogin = jest.fn();
 jest.mock('@/lib/context', () => ({
-  useApp: () => ({ login, completeSignup }),
+  useApp: () => ({ login, completeSignup, completeDeviceLogin }),
 }));
 const toast = jest.fn();
 jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast }) }));
@@ -33,6 +36,7 @@ jest.mock('@/lib/api/account', () => ({
   startPasswordReset: jest.fn(),
   verifyResetCode: jest.fn(),
   completePasswordReset: jest.fn(),
+  resendDeviceCode: jest.fn(),
   getPasswordPolicy: jest.fn().mockResolvedValue({
     minLength: 8,
     passphraseLength: 15,
@@ -960,6 +964,98 @@ describe('AuthForm', () => {
       expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toMatch(
         /proof-1|passphrase/,
       );
+    });
+  });
+
+  describe('new device code (#818)', () => {
+    async function reachDeviceCode(notSentReason?: CodeNotSentReason) {
+      login.mockRejectedValue(
+        new DeviceCodeRequiredError({
+          resendAfterSeconds: 45,
+          expiresInSeconds: 600,
+          notSentReason,
+        }),
+      );
+      render(<AuthForm onSuccess={onSuccessMock} />);
+      await continueWith('password');
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: GOOD_PASSWORD } });
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      await screen.findByLabelText('6-digit code');
+    }
+    const onSuccessMock = jest.fn();
+
+    it('moves to the code step when the account asks for a code', async () => {
+      await reachDeviceCode();
+
+      expect(screen.getByText(/You are signing in on a new device/)).toBeInTheDocument();
+      expect(screen.getByLabelText('6-digit code')).toHaveFocus();
+      expect(screen.getByRole('button', { name: /Send a new code in \d+s/ })).toBeDisabled();
+      expect(toast).not.toHaveBeenCalled();
+    });
+
+    it('signs in with the typed code and the kept password', async () => {
+      completeDeviceLogin.mockResolvedValue({ ok: true, session: { email: EMAIL } });
+      await reachDeviceCode();
+
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '123456' } });
+
+      await waitFor(() =>
+        expect(completeDeviceLogin).toHaveBeenCalledWith(EMAIL, GOOD_PASSWORD, '123456', false),
+      );
+      await waitFor(() => expect(onSuccessMock).toHaveBeenCalled());
+    });
+
+    it('shows the tries left for a wrong code and stays on the step', async () => {
+      completeDeviceLogin.mockResolvedValue({ ok: false, reason: 'invalid_code', attemptsLeft: 3 });
+      await reachDeviceCode();
+
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '000000' } });
+
+      expect(await screen.findByText(/That code did not work. 3 tries left./)).toBeInTheDocument();
+      expect(onSuccessMock).not.toHaveBeenCalled();
+    });
+
+    it('shows the cooldown reason when no code was sent', async () => {
+      await reachDeviceCode('hourly_cap');
+
+      expect(screen.getByText(/You reached the hourly limit for codes/)).toBeInTheDocument();
+    });
+
+    it('sends a new code with the kept password', async () => {
+      jest.useFakeTimers();
+      try {
+        (resendDeviceCode as jest.Mock).mockResolvedValue({
+          resendAfterSeconds: 60,
+          expiresInSeconds: 600,
+        });
+        await reachDeviceCode();
+        act(() => {
+          jest.advanceTimersByTime(46_000);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send a new code' }));
+
+        await waitFor(() => expect(resendDeviceCode).toHaveBeenCalledWith(EMAIL, GOOD_PASSWORD));
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('returns to the password step when the password no longer works', async () => {
+      completeDeviceLogin.mockRejectedValue(new SignInFailedError());
+      await reachDeviceCode();
+
+      fireEvent.change(screen.getByLabelText('6-digit code'), { target: { value: '123456' } });
+
+      expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/could not sign you in/);
+    });
+
+    it('never puts the password in the URL or in storage', async () => {
+      await reachDeviceCode();
+
+      expect(window.location.href).not.toContain('passphrase');
+      expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toMatch(/passphrase/);
     });
   });
 });

@@ -49,6 +49,7 @@ internal sealed partial class PendingRegistrationPurgeService(
         await this.PurgeAsync("password reset proofs", sp => sp.GetRequiredService<PasswordResetService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
         await this.PurgeAsync("security notice tokens", sp => sp.GetRequiredService<SecurityNoticeService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
         await this.PurgeAsync("email changes", sp => sp.GetRequiredService<EmailChangeService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
+        await this.PurgeAsync("trusted devices", sp => sp.GetRequiredService<DeviceTrustService>().PurgeAsync(stoppingToken)).ConfigureAwait(false);
     }
 
     private async Task PurgeAsync(string kind, Func<IServiceProvider, Task<int>> purge)

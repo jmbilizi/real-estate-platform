@@ -75,6 +75,12 @@ internal class ApplicationUser : IdentityUser
     /// <summary>Gets or sets a value indicating whether the user has opted in to marketing communications.</summary>
     public bool MarketingOptIn { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a password sign-in from an unrecognized device needs an
+    /// emailed code (#818). Off by default. The user turns it on after step-up.
+    /// </summary>
+    public bool RequireDeviceCode { get; set; }
+
     // Audit
 
     /// <summary>Gets or sets the UTC timestamp when this record was created.</summary>
