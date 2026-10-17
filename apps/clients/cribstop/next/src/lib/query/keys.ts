@@ -16,3 +16,16 @@ export const mapKeys = {
     [...mapKeys.all, 'viewport', filters, bounds] as const,
   card: (id: string) => [...mapKeys.all, 'card', id] as const,
 };
+
+/**
+ * Search keys (#900). The home page and the search page read the same endpoints. A key holds the
+ * endpoint and the serialized request (`requestKey`), so equal requests share one entry.
+ */
+export const searchKeys = {
+  all: ['listings', 'search'] as const,
+  results: (request: string) => [...searchKeys.all, 'results', request] as const,
+  neighborhoods: (request: string) => [...searchKeys.all, 'neighborhoods', request] as const,
+  zips: (request: string) => [...searchKeys.all, 'zips', request] as const,
+  brokers: (request: string) => [...searchKeys.all, 'brokers', request] as const,
+  meta: () => [...searchKeys.all, 'meta'] as const,
+};

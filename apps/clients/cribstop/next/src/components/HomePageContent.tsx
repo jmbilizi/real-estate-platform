@@ -5,7 +5,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
@@ -18,7 +17,13 @@ import { useApp } from '@/lib/context';
 import { listRecentSavedHomes } from '@/lib/api/saved-homes';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
-import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { searchKeys } from '@/lib/query/keys';
+import {
+  listingsMetaOptions,
+  neighborhoodsOptions,
+  searchResultsOptions,
+} from '@/lib/query/search';
 import type { ListingSearchQuery } from '@/lib/api/listings';
 import type { ListingCardRow, ListingsMeta } from '@/lib/types';
 import { searchTargetUrl } from '@/lib/search-place';
@@ -197,65 +202,37 @@ type CarouselState = {
  * fired on mount / whenever `query` changes, not a chain of awaits.
  */
 function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoading = false) {
-  const [state, setState] = useState<CarouselState>({
-    listings: [],
-    total: 0,
-    loading: true,
-    failed: false,
+  // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
+  // `total` then holds the number of cards returned, which is all the rows below read.
+  // No previous data is kept: old cards never stay under a new place title.
+  const result = useQuery({
+    ...searchResultsOptions({ ...query, skipTotal: true }, { keepPrevious: false }),
+    enabled: !skip,
   });
-  const [retryKey, setRetryKey] = useState(0);
-  // Query objects are re-created on every render, so key the effect on their serialized form
-  // rather than the object identity — otherwise it would re-fetch every render.
-  const queryKey = JSON.stringify(query);
-  // A generation token, not the abort signal alone: a request this run's own cleanup aborted
-  // still lands its result if no later run has since started — only a run an actually newer one
-  // superseded skips its `setState`.
-  const generation = useRef(0);
+  const { refetch } = result;
+  const retry = useCallback(() => void refetch(), [refetch]);
 
-  const refetch = () => setRetryKey((k) => k + 1);
-
-  useEffect(() => {
-    const myGeneration = ++generation.current;
-
-    // No place to scope to (#363's near-you row, before the region resolves or once it
-    // resolves to none): never fires an unscoped, platform-wide request. `skipLoading` tells
-    // the two `skip` cases apart — still waiting on the region (show the skeleton) versus
-    // resolved with no region at all (settle empty so the row hides).
-    if (skip) {
-      setState({ listings: [], total: 0, loading: skipLoading, failed: false });
-      return undefined;
-    }
-
-    const controller = new AbortController();
-    // A moved target shows the skeleton, which has the card row's height, so the layout holds.
-    // Old cards never stay under a new place title.
-    setState({ listings: [], total: 0, loading: true, failed: false });
-
-    // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
-    // `total` then holds the number of cards returned, which is all the rows below read.
-    searchListings({ ...query, skipTotal: true }, controller.signal)
-      .then((envelope) => {
-        // A superseded request (a chip pick that moved on before this one returned) must never
-        // overwrite the newer one's state.
-        if (generation.current !== myGeneration) return;
-        setState({
-          listings: envelope.results,
-          total: envelope.total,
-          loading: false,
-          failed: false,
-          settledKey: queryKey,
-        });
-      })
-      .catch((err) => {
-        if (generation.current !== myGeneration) return;
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setState({ listings: [], total: 0, loading: false, failed: true });
-      });
-
-    return () => controller.abort();
-  }, [queryKey, retryKey, skip, skipLoading]);
-
-  return { ...state, refetch };
+  // No place to scope to (#363's near-you row, before the region resolves or once it resolves to
+  // none): never fires an unscoped, platform-wide request. `skipLoading` tells the two `skip`
+  // cases apart: still waiting on the region (show the skeleton) versus resolved with no region
+  // at all (settle empty so the row hides).
+  let state: CarouselState;
+  if (skip) {
+    state = { listings: [], total: 0, loading: skipLoading, failed: false };
+  } else if (result.isError) {
+    state = { listings: [], total: 0, loading: false, failed: true };
+  } else if (result.data) {
+    state = {
+      listings: result.data.results,
+      total: result.data.total,
+      loading: false,
+      failed: false,
+      settledKey: JSON.stringify(query),
+    };
+  } else {
+    state = { listings: [], total: 0, loading: true, failed: false };
+  }
+  return { ...state, refetch: retry };
 }
 
 /** The place a target row queries: the city, then the whole state, then nowhere (platform-wide). */
@@ -337,52 +314,34 @@ type NeighborhoodsState = {
  * a state the API's own order applies (`total` desc), so this adds no ranking of its own.
  */
 function useNeighborhoods(region: Region | null, regionLoading: boolean): NeighborhoodsState {
-  const [state, setState] = useState<NeighborhoodsState>({ neighborhoods: [], loading: true });
-  // A generation token, not a boolean: this run's result still lands if nothing newer has
-  // started, even past an incidental cleanup — only a run that a later one has actually
-  // superseded skips its `setState`.
-  const generation = useRef(0);
-
-  useEffect(() => {
-    // Resets to loading on every entry into this branch, matching `useCarouselListings`'s skip
-    // branch — never leaves a stale `neighborhoods` list showing were this to re-enter loading
-    // after already resolving once.
-    if (regionLoading) {
-      setState({ neighborhoods: [], loading: true });
-      return undefined;
-    }
-
-    const myGeneration = ++generation.current;
-    const controller = new AbortController();
-
-    async function load() {
+  const client = useQueryClient();
+  const { data, isPending } = useQuery({
+    queryKey: [...searchKeys.neighborhoods('home'), region],
+    enabled: !regionLoading,
+    queryFn: async ({ signal }) => {
       const seen = new Set<string>();
       const merged: Neighborhood[] = [];
-
       const add = (rows: NeighborhoodApiRow[]) => addNeighborhoodRows(rows, seen, merged);
+      // Each request has its own cache entry, shared with the search page's group reads.
+      const read = (query: Parameters<typeof neighborhoodsOptions>[0]) =>
+        client.fetchQuery(neighborhoodsOptions(query));
 
       // The visitor's own region, city+state then state alone, ahead of every licensed-state
       // request — so a visitor's own city and state render first even when their state isn't a
       // licensed one.
       if (region) {
         const settledRegion = await Promise.allSettled([
-          getNeighborhoods(
-            {
-              city: region.city,
-              state: region.state,
-              limit: NEIGHBORHOODS_PAGE_SIZE,
-              minCount: NEIGHBORHOODS_MIN_COUNT,
-            },
-            controller.signal,
-          ),
-          getNeighborhoods(
-            {
-              state: region.state,
-              limit: NEIGHBORHOODS_PAGE_SIZE,
-              minCount: NEIGHBORHOODS_MIN_COUNT,
-            },
-            controller.signal,
-          ),
+          read({
+            city: region.city,
+            state: region.state,
+            limit: NEIGHBORHOODS_PAGE_SIZE,
+            minCount: NEIGHBORHOODS_MIN_COUNT,
+          }),
+          read({
+            state: region.state,
+            limit: NEIGHBORHOODS_PAGE_SIZE,
+            minCount: NEIGHBORHOODS_MIN_COUNT,
+          }),
         ]);
         for (const result of settledRegion) {
           if (result.status === 'fulfilled' && result.value) add(result.value.results);
@@ -393,37 +352,30 @@ function useNeighborhoods(region: Region | null, regionLoading: boolean): Neighb
       // already-good results. Order is the input order regardless of which settles first.
       const settled = await Promise.allSettled(
         BRAND.licensedStateCodes.map((code) =>
-          getNeighborhoods(
-            { state: code, limit: NEIGHBORHOODS_PAGE_SIZE, minCount: NEIGHBORHOODS_MIN_COUNT },
-            controller.signal,
-          ),
+          read({ state: code, limit: NEIGHBORHOODS_PAGE_SIZE, minCount: NEIGHBORHOODS_MIN_COUNT }),
         ),
       );
       for (const result of settled) {
         if (result.status === 'fulfilled' && result.value) add(result.value.results);
       }
 
-      if (merged.length < NEIGHBORHOODS_TARGET) {
+      if (merged.length < NEIGHBORHOODS_TARGET && !signal.aborted) {
         const licensed = new Set<string>(BRAND.licensedStateCodes);
         try {
-          const rest = await getNeighborhoods(
-            { limit: NEIGHBORHOODS_PAGE_SIZE, minCount: NEIGHBORHOODS_MIN_COUNT },
-            controller.signal,
-          );
+          const rest = await read({
+            limit: NEIGHBORHOODS_PAGE_SIZE,
+            minCount: NEIGHBORHOODS_MIN_COUNT,
+          });
           if (rest) add(rest.results.filter((row) => !licensed.has(row.state)));
         } catch {
           // The row still shows whatever the licensed-state requests already collected.
         }
       }
+      return merged;
+    },
+  });
 
-      if (generation.current === myGeneration) setState({ neighborhoods: merged, loading: false });
-    }
-
-    load();
-    return () => controller.abort();
-  }, [region, regionLoading]);
-
-  return state;
+  return { neighborhoods: data ?? [], loading: regionLoading || isPending };
 }
 
 /**
@@ -460,19 +412,9 @@ function ExploreNeighborhoodsRow({
  * omitted — never a fallback number or today's date (PRD §6.3).
  */
 function useListingsMeta(): ListingsMeta | null {
-  const [meta, setMeta] = useState<ListingsMeta | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getListingsMeta(controller.signal)
-      .then(setMeta)
-      .catch(() => {
-        // Chrome, not a task: the affected tiles simply don't render.
-      });
-    return () => controller.abort();
-  }, []);
-
-  return meta;
+  // A failure leaves `data` empty. Chrome, not a task: the affected tiles simply don't render.
+  const { data } = useQuery(listingsMetaOptions());
+  return data ?? null;
 }
 
 /**

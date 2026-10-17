@@ -1,18 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import type { ZipGroup } from '@cribstop/property-contracts';
-import { getZipGroups } from '@/lib/api/listings';
+import { useQuery } from '@tanstack/react-query';
+import type { ZipGroup, ZipsResponse } from '@cribstop/property-contracts';
+import { zipGroupsOptions } from '@/lib/query/search';
 import { type GroupOrder, zipProbeQuery } from '@/lib/group-by';
 import type { SearchFilters } from '@/lib/types';
-import { type GroupPageResult, useGroupPage } from '@/lib/useGroupPage';
+import { type GroupPageResult, type GroupSource, useGroupPage } from '@/lib/useGroupPage';
 
 export type ZipGroupsResult = GroupPageResult<ZipGroup>;
 
 const FAILURE = 'We could not load ZIP codes just now. Please try again.';
 
-const fetchPage = (query: Parameters<typeof getZipGroups>[0], signal: AbortSignal) =>
-  getZipGroups(query, signal).then((res) => ({ rows: res.groups, total: res.total }));
+const source: GroupSource<ZipGroup, ZipsResponse> = {
+  options: zipGroupsOptions,
+  toPage: (res) => ({ rows: res.groups, total: res.total }),
+};
 
 /** Fetches one page of ZIP code groups for the search. Held while `enabled` is false. */
 export function useZipGroups(
@@ -21,7 +23,7 @@ export function useZipGroups(
   order: GroupOrder,
   enabled: boolean,
 ): ZipGroupsResult {
-  return useGroupPage(fetchPage, FAILURE, filters, page, order, enabled);
+  return useGroupPage(source, FAILURE, filters, page, order, enabled);
 }
 
 /**
@@ -30,22 +32,7 @@ export function useZipGroups(
  * `zip` filter is never asked, because it spans one ZIP code.
  */
 export function useZipTotal(filters: SearchFilters, enabled: boolean): number | null {
-  const [answer, setAnswer] = useState<{ key: string; total: number } | null>(null);
-  const key = JSON.stringify(filters);
   const active = enabled && !filters.zip;
-
-  useEffect(() => {
-    if (!active) return;
-    const controller = new AbortController();
-    getZipGroups(zipProbeQuery(JSON.parse(key) as SearchFilters), controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted) setAnswer({ key, total: res.total });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setAnswer(null);
-      });
-    return () => controller.abort();
-  }, [active, key]);
-
-  return active && answer?.key === key ? answer.total : null;
+  const { data } = useQuery({ ...zipGroupsOptions(zipProbeQuery(filters)), enabled: active });
+  return active && data ? data.total : null;
 }
