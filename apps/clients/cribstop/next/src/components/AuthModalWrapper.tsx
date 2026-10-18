@@ -39,6 +39,7 @@ export default function AuthModalWrapper() {
       widthClass="sm:max-w-md"
       cardClassName="bg-white sm:bg-transparent sm:shadow-none"
       showCloseButton
+      stacked
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">

@@ -29,7 +29,7 @@ export default function ListingModalFrame({
       onClose={onClose ?? (() => {})}
       mobileStyle="full-screen"
       widthClass="sm:max-w-7xl"
-      heightClass="sm:h-screen"
+      heightClass="sm:h-dvh"
       noPadding
       squareBottom
       noScroll

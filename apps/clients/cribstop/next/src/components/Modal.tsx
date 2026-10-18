@@ -45,8 +45,13 @@ interface ModalProps {
   mobileStyle?: MobileStyle;
   /** Replaces the default "bg-white shadow-xl" on the card — useful when the content provides its own card styling */
   cardClassName?: string;
-  /** Show a floating close button in the top-right corner even when no title is given */
+  /**
+   * Show a close button when no `title` is given. On phones it sits in its own sticky header row,
+   * so content never scrolls under it. From `sm` up it floats in the top-right corner (#945).
+   */
   showCloseButton?: boolean;
+  /** Paint above other dialogs. For a dialog summoned over another one, such as sign-in. */
+  stacked?: boolean;
   /** Remove default px-6 py-4 padding from the content area */
   noPadding?: boolean;
   /** Remove bottom border radius (useful for large modals where a flat bottom looks cleaner) */
@@ -97,6 +102,7 @@ export default function Modal({
   mobileStyle = 'center',
   cardClassName,
   showCloseButton,
+  stacked,
   noPadding,
   squareBottom,
   noScroll,
@@ -234,13 +240,20 @@ export default function Modal({
   if (!mounted) return null;
 
   // Backdrop alignment
-  const backdropAlign = mobileStyle === 'center' ? 'items-center' : 'items-end sm:items-center';
+  const backdropAlign =
+    mobileStyle === 'center'
+      ? 'items-center'
+      : mobileStyle === 'full-screen'
+        ? 'items-stretch sm:items-center'
+        : 'items-end sm:items-center';
 
   // Card shape & size per mobileStyle
   const cardMobile =
     mobileStyle === 'full-screen'
-      ? /* Pads the notch, status bar and landscape insets so the header is never under them (#918). */
-        'h-screen h-dvh rounded-none sm:h-auto sm:rounded-2xl pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] sm:p-0'
+      ? /* Pads the notch, status bar and landscape insets so the header is never under them (#918).
+           `h-full` fills the fixed overlay, which is the visible area. A viewport-unit height can
+           exceed it, and the overlay clips the top, where the header is (#945). */
+        'h-full rounded-none sm:h-auto sm:rounded-2xl pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] sm:p-0'
       : mobileStyle === 'bottom-sheet'
         ? 'rounded-t-2xl rounded-b-none sm:rounded-2xl max-h-[85dvh] sm:max-h-none'
         : 'rounded-2xl';
@@ -265,7 +278,7 @@ export default function Modal({
          *below* the docked search bar's 55, so scrolling a results page far enough to dock the pill
          and then opening a listing put the pill on top of the panel's own header row. */
       data-scroll-lock
-      className={`fixed inset-0 z-dialog flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
+      className={`fixed inset-0 ${stacked ? 'z-auth-dialog' : 'z-dialog'} flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
     >
       <div
         ref={cardRef}
@@ -290,9 +303,8 @@ export default function Modal({
       >
         {!title && showCloseButton && (
           <div
-            className={`absolute right-4 z-20 sm:top-4 ${
-              mobileStyle === 'full-screen' ? 'top-[calc(env(safe-area-inset-top)+1rem)]' : 'top-4'
-            }`}
+            data-modal-header
+            className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-end px-4 sm:absolute sm:right-0 sm:top-0 sm:h-auto sm:p-4"
           >
             <DismissButton onClick={onClose} />
           </div>
