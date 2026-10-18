@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
@@ -126,6 +126,8 @@ export interface SearchExperienceProps {
    * HTML. Used for the first render only. It answers the filters and page of the initial URL.
    */
   initialResults?: ListingsEnvelope;
+  /** Rendered next to the results count. The place page passes its "About these listings" control (#947). */
+  aboutSlot?: ReactNode;
 }
 
 export interface SearchPathPlace {
@@ -154,6 +156,7 @@ export default function SearchExperience({
   deferred = false,
   place,
   initialResults,
+  aboutSlot,
 }: SearchExperienceProps) {
   const {
     savedHomes,
@@ -1038,6 +1041,7 @@ export default function SearchExperience({
                   </>
                 )}
               </p>
+              {aboutSlot}
               {!grouped && drilledName && (
                 /* The parentheses sit outside the truncated name, so "(Promenade To…)" keeps its close. */
                 <span

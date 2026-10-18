@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { type ParsedSearchPath, searchPath } from '@cribstop/property-contracts';
+import ListingsInfoPopover from '@/components/ListingsInfoPopover';
 import SearchExperience from '@/components/SearchExperience';
 import { loadCityStats } from '@/lib/api/city-stats';
 import { initialRequestFor, loadInitialResults } from '@/lib/api/listings-initial';
@@ -18,9 +19,9 @@ import { thinPageMinListings } from '@/lib/seo-config';
  * for the right place. There is no `<Suspense>` here, for the reason in `search/page.tsx` history:
  * the results shell must be in the first HTML.
  *
- * A place page carries one visually hidden H1 and, below the results, a dated summary of the feed
- * (#842, #929). Both are plain server HTML in the first response, so neither needs a loading
- * skeleton. When the figures cannot be read, the page keeps the H1 and drops the summary.
+ * A place page carries one visually hidden H1 and a dated summary of the feed (#842, #929). The
+ * summary sits in the "About these listings" popover beside the results count (#947) and takes no
+ * row. Both are plain server HTML in the first response, so neither needs a loading skeleton. When the figures cannot be read, the page keeps the H1 and drops the summary.
  */
 export default async function SearchPathView({
   parsed,
@@ -41,7 +42,23 @@ export default async function SearchPathView({
     label ? loadCityStats(props.initialQuery, props.place) : null,
   ]);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
-  const experience = <SearchExperience initialQuery={props.initialQuery} place={props.place} />;
+  const about =
+    label && stats ? (
+      <ListingsInfoPopover>
+        <p className="text-sm text-ink-body">{citySummary(label, parsed.segment, stats)}</p>
+        <p className="mt-2 text-xs text-ink-muted">
+          <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
+          {' · '}
+          <time dateTime={stats.asOf}>{`Updated ${formatDate(stats.asOf)}`}</time>
+          {stats.sources.includes('brightMLS')
+            ? ' · Listing information provided by Bright MLS. Each listing names its listing broker. Deemed reliable but not guaranteed.'
+            : ' · Each listing names its listing broker.'}
+        </p>
+      </ListingsInfoPopover>
+    ) : null;
+  const experience = (
+    <SearchExperience initialQuery={props.initialQuery} place={props.place} aboutSlot={about} />
+  );
   return (
     <>
       {label ? <h1 className="sr-only">{`${noun} in ${label}`}</h1> : null}
@@ -55,22 +72,6 @@ export default async function SearchPathView({
       ) : (
         experience
       )}
-      {label && stats ? (
-        <section
-          aria-label="About these listings"
-          className="mx-auto w-full max-w-3xl px-4 pb-6 pt-4 sm:px-6"
-        >
-          <p className="text-sm text-ink-body">{citySummary(label, parsed.segment, stats)}</p>
-          <p className="mt-1 text-xs text-ink-muted">
-            <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
-            {' · '}
-            <time dateTime={stats.asOf}>{`Updated ${formatDate(stats.asOf)}`}</time>
-            {stats.sources.includes('brightMLS')
-              ? ' · Listing information provided by Bright MLS. Each listing names its listing broker. Deemed reliable but not guaranteed.'
-              : ' · Each listing names its listing broker.'}
-          </p>
-        </section>
-      ) : null}
     </>
   );
 }
