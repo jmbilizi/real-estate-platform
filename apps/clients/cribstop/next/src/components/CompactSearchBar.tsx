@@ -14,6 +14,7 @@ import {
 import { fetchWhereSuggestions, SUGGESTIONS_UNAVAILABLE_MESSAGE } from '@/lib/where-suggest';
 import { searchableSuggestions, searchTargetFor, searchTargetUrl } from '@/lib/search-place';
 import { useBodyScrollLock } from '@/lib/useBodyScrollLock';
+import { useOverlayOpen } from '@/lib/overlay';
 import { SearchPanel } from '@/lib/store/types';
 import type { SearchListingType } from '@/lib/store/slices/searchSlice';
 import { LISTING_TYPE_SUMMARY_LABELS } from '@/lib/listing-type-labels';
@@ -922,6 +923,7 @@ export default function CompactSearchBar({
   // mobileSheetMode is included: its full-screen overlay must not let the page behind scroll
   // either, and on iOS `overflow: hidden` alone still lets that page rubber-band.
   useBodyScrollLock(mobileSheetMode || activePanel !== null || isDropdownOpen);
+  useOverlayOpen(mobileSheetMode);
 
   // Recalculate indicator position on window resize
   const [, setResizeTick] = useState(0);
@@ -1603,6 +1605,9 @@ export default function CompactSearchBar({
 
     return (
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search homes"
         className="fixed inset-0 z-search-overlay bg-surface-alt flex flex-col"
         style={{ animation: 'mss-in 220ms ease both' }}
       >
@@ -1980,7 +1985,7 @@ export default function CompactSearchBar({
         </div>
 
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 bg-white border-t border-surface-border shadow-card">
+        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white border-t border-surface-border shadow-card">
           <button
             onClick={handleClearAll}
             className="text-[14px] font-semibold text-ink underline underline-offset-2"

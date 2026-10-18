@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import DismissButton from '@/components/DismissButton';
+import { useOverlayOpen } from '@/lib/overlay';
 
 /**
  * SlidePanel — a reusable right-anchored dropdown panel.
@@ -30,6 +31,7 @@ export default function SlidePanel({
   width = 360,
 }: SlidePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  useOverlayOpen(open);
 
   // Close on Escape
   useEffect(() => {

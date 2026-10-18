@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SearchFilters } from '@/lib/types';
 import FilterModalContent from '@/components/FilterModalContent';
 import { deferUnlockScroll, lockScroll } from '@/lib/rootScrollLock';
+import { useOverlayOpen } from '@/lib/overlay';
 import { applyLandInterlock, filtersToSearchParams } from '@/lib/listing-filters';
 
 interface Props {
@@ -112,6 +113,8 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
    * time — telling the user nothing was filtered while the badge next to the button said otherwise.
    */
   const [draft, setDraft] = useState<SearchFilters>(filters);
+
+  useOverlayOpen(true);
 
   // Same lock as `Modal`: the scrollbar gutter stays, so the page does not shift.
   useEffect(() => {
