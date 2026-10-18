@@ -81,15 +81,15 @@ spec:
             preStop:
               exec:
                 command: ["sleep", "10"]
-          # #954: ready only when the server reaches the gateway. Liveness stays static, so a
-          # gateway outage never restarts pods.
+          # #954 rule: readiness checks this pod's own ability to serve, never a downstream.
+          # A gateway check would mark every pod unready in a gateway outage and 503 the whole
+          # site, including pages that serve from cache.
           readinessProbe:
             httpGet:
-              path: /api/health/ready
+              path: /api/health
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
-            timeoutSeconds: 3
             failureThreshold: 3
           livenessProbe:
             httpGet:

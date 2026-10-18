@@ -314,7 +314,7 @@ internal static class Program
         app.MapGet("/account/health/ready", async (AccountDbContext db, CancellationToken cancellationToken) =>
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(2));
+            timeout.CancelAfter(TimeSpan.FromSeconds(1));
             try
             {
                 return await db.Database.CanConnectAsync(timeout.Token).ConfigureAwait(false)
@@ -437,7 +437,7 @@ internal static class Program
 
     private static async Task MigrateWithRetryAsync(AccountDbContext dbContext)
     {
-        var delay = TimeSpan.FromSeconds(2);
+        var delay = TimeSpan.FromSeconds(1);
         const int maxAttempts = 12;
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)

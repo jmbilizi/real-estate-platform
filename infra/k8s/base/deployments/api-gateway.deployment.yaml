@@ -89,7 +89,7 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-          # #954: ready only when Ocelot loaded its routes.
+          # #954 rule: readiness checks this pod's own route config, never a downstream service.
           readinessProbe:
             httpGet:
               path: /health/ready
