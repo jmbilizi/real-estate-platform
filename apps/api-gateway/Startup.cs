@@ -10,6 +10,7 @@ using System.Threading.RateLimiting;
 using ApiGateway.Extensions;
 using ApiGateway.Middleware;
 using ApiGateway.Services;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using MMLib.SwaggerForOcelot.Configuration;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
@@ -49,6 +50,7 @@ namespace ApiGateway
         /// <c>RequireRateLimiting</c> in <see cref="Configure"/>.
         /// </summary>
         private const string GeoRegionRateLimitPolicy = "GeoRegion";
+        private static readonly string[] ReadyTags = new[] { "ready" };
 
         /// <summary>
         /// JSON options for <c>GET /geo/region</c>. Forces camelCase field names, independent of
@@ -115,7 +117,8 @@ namespace ApiGateway
             services.AddControllers();
 
             // Add health checks
-            services.AddHealthChecks();
+            services.AddHealthChecks()
+                .AddCheck<OcelotRoutesHealthCheck>("ocelot-routes", tags: ReadyTags);
 
             services.AddEndpointsApiExplorer();
 
@@ -230,8 +233,12 @@ namespace ApiGateway
                 endpoints.MapControllers();
 
                 // Health check endpoints (must be before Ocelot middleware)
-                endpoints.MapHealthChecks("/health/live");
-                endpoints.MapHealthChecks("/health/ready");
+                // Liveness runs no check, so a downstream outage never restarts the pod (#954).
+                // Readiness proves Ocelot loaded its routes.
+                endpoints.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+                endpoints.MapHealthChecks(
+                    "/health/ready",
+                    new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 
                 // Anonymous, no-auth IP-based region lookup for home-page personalization (#362).
                 // City/region granularity only — never coordinates or postal code precision.

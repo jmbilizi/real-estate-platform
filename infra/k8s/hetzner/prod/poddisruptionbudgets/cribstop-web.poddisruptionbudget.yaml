@@ -1,0 +1,14 @@
+# #954: keeps at least one cribstop-web pod Ready through a voluntary disruption (node drain,
+# cluster upgrade). This overlay runs more than one replica. Dev runs one, where a budget would
+# block drains. Carries the `app` label that deploy-control uses to select the service.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cribstop-web
+  labels:
+    app: cribstop-web
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cribstop-web

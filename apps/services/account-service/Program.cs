@@ -309,8 +309,23 @@ internal static class Program
         // Infrastructure: liveness/startup probe for K8s — mapped first so it is always reachable
         app.MapGet("/account/health", () => Results.Ok(new { status = "healthy" }));
 
-        // Readiness probe — same response; kept separate so K8s can distinguish liveness from readiness
-        app.MapGet("/account/health/ready", () => Results.Ok(new { status = "ready" }));
+        // Readiness probe (#954): proves the database answers, so a pod without a DB leaves the
+        // Service endpoints instead of returning 5xx. Liveness stays static.
+        app.MapGet("/account/health/ready", async (AccountDbContext db, CancellationToken cancellationToken) =>
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(2));
+            try
+            {
+                return await db.Database.CanConnectAsync(timeout.Token).ConfigureAwait(false)
+                    ? Results.Ok(new { status = "ready" })
+                    : Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or Npgsql.NpgsqlException or InvalidOperationException)
+            {
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+        });
 
         // Identity: login, refresh, manage/*. The link flows (register, confirm, resend, forgot, reset) are
         // retired: only a verified code creates an account or resets a password. See Routes/IdentityEndpoints.cs.

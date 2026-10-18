@@ -23,6 +23,8 @@ spec:
       labels:
         app: cribstop-web
     spec:
+      # Longer than the preStop sleep, so the drain finishes before SIGKILL.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: nextjs
           # Image format: ghcr.io/<owner>/<repo>/cribstop-web:<tag>
@@ -79,12 +81,15 @@ spec:
             preStop:
               exec:
                 command: ["sleep", "10"]
+          # #954: ready only when the server reaches the gateway. Liveness stays static, so a
+          # gateway outage never restarts pods.
           readinessProbe:
             httpGet:
-              path: /api/health
+              path: /api/health/ready
               port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 3
             failureThreshold: 3
           livenessProbe:
             httpGet:

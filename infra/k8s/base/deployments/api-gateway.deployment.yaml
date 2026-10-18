@@ -23,6 +23,8 @@ spec:
       labels:
         app: api-gateway
     spec:
+      # Longer than the preStop sleep, so the drain finishes before SIGKILL.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: ocelot
           # Image format: ghcr.io/<owner>/<repo>/api-gateway:<tag>
@@ -81,15 +83,16 @@ spec:
                 command: ["sleep", "10"]
           livenessProbe:
             httpGet:
-              path: /
+              path: /health/live
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          # #954: ready only when Ocelot loaded its routes.
           readinessProbe:
             httpGet:
-              path: /
+              path: /health/ready
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5

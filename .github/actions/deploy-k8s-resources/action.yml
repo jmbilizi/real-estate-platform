@@ -958,13 +958,37 @@ runs:
           fi
           exit 0
         fi
+        # #954: restart only when a running pod's image digest differs from the registry digest.
+        # tools/infra/deployment-image-changed.js decides. Any failed probe means restart.
+        RESTARTED=0
         while IFS='|' read -r DEPLOY_NS DEPLOY_NAME; do
           [ -z "$DEPLOY_NAME" ] && continue
-          echo "  🔄 Restarting Deployment/$DEPLOY_NAME (namespace: $DEPLOY_NS)..."
+          DECISION="restart could not read live state"
+          if kubectl get deployment "$DEPLOY_NAME" -n "$DEPLOY_NS" -o json > /tmp/restart-deploy.json 2>/dev/null; then
+            SELECTOR=$(jq -r '.spec.selector.matchLabels // {} | to_entries | map("\(.key)=\(.value)") | join(",")' /tmp/restart-deploy.json 2>/dev/null || echo "")
+            if [ -n "$SELECTOR" ] && kubectl get pods -n "$DEPLOY_NS" -l "$SELECTOR" -o json > /tmp/restart-pods.json 2>/dev/null; then
+              DECISION=$(node tools/infra/deployment-image-changed.js \
+                --deployment-json /tmp/restart-deploy.json \
+                --pods-json /tmp/restart-pods.json \
+                --prefix "ghcr.io/${GITHUB_REPOSITORY}/" 2>&1 | tail -n 1) || DECISION="restart digest check failed"
+            fi
+          fi
+          case "$DECISION" in
+            skip*)
+              echo "  ⏭️  Deployment/$DEPLOY_NAME unchanged, not restarted: ${DECISION#skip }"
+              continue
+              ;;
+            restart*) ;;
+            *) DECISION="restart unexpected check output: $DECISION" ;;
+          esac
+          echo "  🔄 Restarting Deployment/$DEPLOY_NAME (namespace: $DEPLOY_NS): ${DECISION#restart }"
           kubectl rollout restart deployment/"$DEPLOY_NAME" -n "$DEPLOY_NS" || true
+          RESTARTED=$((RESTARTED + 1))
         done < restart-deployments.txt
-        echo "⏳ Waiting 10s for rollout restart to initiate..."
-        sleep 10
+        if [ "$RESTARTED" -gt 0 ]; then
+          echo "⏳ Waiting 10s for rollout restart to initiate..."
+          sleep 10
+        fi
 
     - name: Wait for workload rollout
       id: rollout

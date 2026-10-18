@@ -23,6 +23,8 @@ spec:
       labels:
         app: property-service
     spec:
+      # Longer than the preStop sleep, so the drain finishes before SIGKILL.
+      terminationGracePeriodSeconds: 30
       initContainers:
         - name: migrate
           # Same image as the main container — reuses the built bundle and the

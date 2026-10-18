@@ -7,6 +7,13 @@ metadata:
     app: inference
 spec:
   replicas: 1
+  # #954: same rollout rule as property-service (#388). The old pod keeps serving until the new
+  # pod is Ready.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: inference
@@ -15,6 +22,8 @@ spec:
       labels:
         app: inference
     spec:
+      # Longer than the preStop sleep, so the drain finishes before SIGKILL.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: api
           # Image format: ghcr.io/<owner>/<repo>/inference:<tag>
@@ -37,6 +46,11 @@ spec:
             - name: http
               containerPort: 8000
               protocol: TCP
+          # #954: keeps the pod serving while the Service endpoints drop it (see api-gateway).
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
           # Startup probe: gates liveness/readiness until the container is up.
           # Generous budget for first-time model download (10 + 30*10 = 310s max).
           startupProbe:

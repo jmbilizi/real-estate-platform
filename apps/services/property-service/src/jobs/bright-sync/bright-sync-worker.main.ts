@@ -7,7 +7,13 @@
  */
 
 import { getPool } from '../../db/pool';
-import { resolveActiveConfig, resolveWorkerSettings, runWorker, waitForSchema } from './worker';
+import {
+  resolveActiveConfig,
+  resolveWorkerPoolConfig,
+  resolveWorkerSettings,
+  runWorker,
+  waitForSchema,
+} from './worker';
 
 const log = (message: string): void => console.info(`[bright-sync] ${message}`);
 
@@ -29,13 +35,9 @@ async function main(): Promise<void> {
   };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
-  // +6 headroom over `applyConcurrency` (#359): the lock connection held for the worker's life, and
-  // a couple of overlapping staging/mapping connections at the moment concurrent applies hand off
-  // between them. Postgres defaults to 100 `max_connections`, so this is nowhere near the ceiling.
-  //
-  // `statement_timeout: 0` (#388) opts out of the API's default 4 s cap: a bulk page apply can
-  // legitimately run longer, and this pool is never shared with the API process.
-  getPool({ max: settings.applyConcurrency + 6, statement_timeout: 0 });
+  // At most 4 connections and a 60 s statement cap (#954), so the sync cannot starve the API on the
+  // shared role. The cap replaces the API's 4 s default (#388), which a bulk apply can exceed.
+  getPool(resolveWorkerPoolConfig(process.env));
   await waitForSchema(getPool(), log);
   await runWorker({ config, settings, log }, () => stopping);
 }
