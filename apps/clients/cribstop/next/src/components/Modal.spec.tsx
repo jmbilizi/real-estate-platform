@@ -157,14 +157,14 @@ describe('Modal', () => {
       const cls = screen.getByRole('dialog').className;
       expect(cls).toContain('pt-[env(safe-area-inset-top)]');
       expect(cls).toContain('sm:p-0');
-      expect(cls).toContain('h-dvh');
+      expect(cls).toContain('h-full');
     });
 
-    it('moves the floating close button below the top inset on a full-screen card', () => {
+    it('keeps the close button in a header row below the top inset on a full-screen card', () => {
       renderWithOutsideButton({ mobileStyle: 'full-screen', showCloseButton: true });
-      const wrap = screen.getByRole('dialog').querySelector('.absolute');
-      expect(wrap?.className).toContain('top-[calc(env(safe-area-inset-top)+1rem)]');
-      expect(wrap?.className).toContain('sm:top-4');
+      const wrap = screen.getByRole('dialog').querySelector('[data-modal-header]');
+      expect(wrap?.className).toContain('sticky');
+      expect(wrap?.className).toContain('sm:absolute');
     });
 
     it('sizes center and bottom-sheet cards by dvh, never vh', () => {

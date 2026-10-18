@@ -66,6 +66,8 @@ export const Z_LAYERS = {
   mapExpanded: 65,
   /** Modals: listing detail, auth, filters. Above all page chrome, by the rule above. */
   dialog: 70,
+  /** Sign-in. Opens over any dialog, such as the listing panel or the Settings sheet (#945). */
+  authDialog: 75,
   /** A form dialog opened over another dialog (the buyer-agent request over the listing panel). */
   requestDialog: 80,
   /** App-global slide-in panel, which may be summoned over a dialog. */
