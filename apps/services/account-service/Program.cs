@@ -321,7 +321,7 @@ internal static class Program
                     ? Results.Ok(new { status = "ready" })
                     : Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
             }
-            catch (Exception ex) when (ex is OperationCanceledException or Npgsql.NpgsqlException or InvalidOperationException)
+            catch (Exception ex) when (ex is OperationCanceledException or NpgsqlException or InvalidOperationException)
             {
                 return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
             }
