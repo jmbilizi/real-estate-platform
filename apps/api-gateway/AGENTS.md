@@ -135,5 +135,10 @@ the 429 status itself did. `Configuration/Ocelot.Settings.json` now sets that me
 envelope `Middleware/RateLimitContract.cs` documents, so it parses like every other gateway
 response. `Tests/Configuration/RateLimitOptionsTests.cs` keeps the two in sync.
 
+**Double every brace in `QuotaExceededMessage` (#955).** Ocelot 24 passes the message to
+`string.Format`. A bare `{` throws a `FormatException`, and every over-quota request then gets an
+empty 500 instead of the 429. `Tests/Qos/RateLimitBehaviourTests.cs` runs the real pipeline over
+quota and asserts the 429 body and `Retry-After`.
+
 QoS does not apply to `/swagger/docs/...`. `MMLib.SwaggerForOcelot` fetches each downstream document
 with its own `HttpClient`, outside Ocelot's request pipeline.

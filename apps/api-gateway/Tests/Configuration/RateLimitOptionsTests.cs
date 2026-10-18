@@ -31,11 +31,10 @@ namespace ApiGateway.Tests.Configuration
             // Act
             var quotaExceededMessage = (string?)rateLimit["QuotaExceededMessage"];
 
-            // Assert — the config string must be valid JSON matching the documented contract,
-            // not just human-readable text.
-            quotaExceededMessage.Should().Be(RateLimitContract.ResponseBody);
+            // Assert — once Ocelot formats it, the config string must be the documented JSON envelope.
+            quotaExceededMessage.Should().Be(RateLimitContract.QuotaExceededMessage);
 
-            var body = JObject.Parse(quotaExceededMessage!);
+            var body = JObject.Parse(string.Format(System.Globalization.CultureInfo.InvariantCulture, quotaExceededMessage!));
             ((string?)body["error"]!["code"]).Should().Be(RateLimitContract.ErrorCode);
             ((string?)body["error"]!["message"]).Should().NotBeNullOrWhiteSpace();
         }
@@ -52,6 +51,19 @@ namespace ApiGateway.Tests.Configuration
 
             // Assert
             statusCode.Should().Be(RateLimitContract.StatusCode);
+        }
+
+        /// <summary>
+        /// One home page load sends 9 to 27 listing searches (#955). 60 a minute failed rows for
+        /// one visitor who reloaded twice, and for visitors who share one NAT address.
+        /// </summary>
+        [Fact]
+        public void ListingSearchRoute_AllowsSeveralHomePageLoadsAMinute()
+        {
+            var routes = JObject.Parse(File.ReadAllText(Path.Combine(FindGatewayRoot(), "Configuration", "Routes", "property-service-routes.json")));
+            var search = routes["Routes"]!.Single(r => (string?)r["UpstreamPathTemplate"] == "/property/listings");
+
+            ((int)search["RateLimitOptions"]!["Limit"]!).Should().BeGreaterThanOrEqualTo(240);
         }
 
         private static JObject LoadSettings()

@@ -168,7 +168,7 @@
         "EnableRateLimiting": true,
         "Period": "1m",
         "PeriodTimespan": 60,
-        "Limit": 60
+        "Limit": 240
       },
       "QoSOptions": {
         "Timeout": 5000,
