@@ -27,7 +27,7 @@ export default function SiteHeader() {
           href="/"
           className="relative flex items-baseline gap-1 whitespace-nowrap font-display leading-none before:absolute before:-inset-y-2 before:-inset-x-2 before:content-['']"
         >
-          <span className="text-xs font-bold uppercase tracking-wide text-brand">
+          <span className="text-xs font-medium uppercase tracking-wide text-brand">
             {BRAND.siteName}
           </span>
           <span className="text-xs text-ink-muted">at</span>
