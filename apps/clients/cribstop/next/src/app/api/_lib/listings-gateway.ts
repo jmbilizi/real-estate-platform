@@ -171,10 +171,12 @@ async function readUpstreamOnce(
     const passthrough = isKnownErrorBody(body)
       ? body
       : errorBody('internal_error', 'The listings service returned an unexpected response.');
+    // The browser waits this long before its retry of a 429 (#955).
+    const retryAfter = upstream.headers.get('retry-after');
     return {
       status: upstream.status,
       body: passthrough,
-      headers: {},
+      headers: retryAfter ? { 'retry-after': retryAfter } : {},
       sharedSeconds: 0,
       browserSeconds: 0,
     };

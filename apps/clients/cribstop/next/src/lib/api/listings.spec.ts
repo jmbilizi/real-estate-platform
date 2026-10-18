@@ -1,5 +1,11 @@
 import { aListingDetail } from '@/test/fixtures';
-import { getListingsMeta, ListingsApiError, toListingDetailView, toSearchParams } from './listings';
+import {
+  getListingsMeta,
+  ListingsApiError,
+  retryAfterMsOf,
+  toListingDetailView,
+  toSearchParams,
+} from './listings';
 
 function mockFetchResponse(status: number, body: unknown): void {
   global.fetch = jest.fn().mockResolvedValue({
@@ -178,6 +184,17 @@ describe('getJson error branching (#177)', () => {
     });
   });
 
+  it('carries the Retry-After of a 429 as milliseconds (#955)', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ 'retry-after': '7' }),
+      json: () => Promise.resolve({ error: { code: 'rate_limited', message: 'x' } }),
+    }) as jest.Mock;
+
+    await expect(getListingsMeta()).rejects.toMatchObject({ status: 429, retryAfterMs: 7_000 });
+  });
+
   it('carries the gateway upstream_unavailable code through unchanged', async () => {
     mockFetchResponse(503, {
       error: { code: 'upstream_unavailable', message: 'The service is temporarily unavailable.' },
@@ -223,5 +240,21 @@ describe('getJson error branching (#177)', () => {
 
     expect(error).not.toBeInstanceOf(ListingsApiError);
     expect((error as DOMException).name).toBe('AbortError');
+  });
+});
+
+describe('retryAfterMsOf (#955)', () => {
+  it('reads seconds', () => {
+    expect(retryAfterMsOf('3')).toBe(3_000);
+  });
+
+  it('reads an HTTP date', () => {
+    const now = Date.parse('2026-10-18T19:00:00Z');
+    expect(retryAfterMsOf('Sun, 18 Oct 2026 19:00:05 GMT', now)).toBe(5_000);
+  });
+
+  it('ignores a missing or unreadable value', () => {
+    expect(retryAfterMsOf(null)).toBeUndefined();
+    expect(retryAfterMsOf('soon')).toBeUndefined();
   });
 });

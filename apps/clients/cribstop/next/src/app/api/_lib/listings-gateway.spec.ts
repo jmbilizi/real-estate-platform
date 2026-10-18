@@ -49,6 +49,17 @@ describe('proxyListingsRead', () => {
     expect(body).toEqual({ error: { code: 'rate_limited', message: 'Too many requests.' } });
   });
 
+  it('forwards the Retry-After of a 429 (#955)', async () => {
+    fetchGateway.mockResolvedValue({
+      ...mockUpstream(429, { error: { code: 'rate_limited', message: 'Too many requests.' } }),
+      headers: new Headers({ 'retry-after': '12' }),
+    });
+
+    const response = await proxyListingsRead('');
+
+    expect(response.headers.get('retry-after')).toBe('12');
+  });
+
   it('forwards the gateway upstream_unavailable envelope as its own status', async () => {
     fetchGateway.mockResolvedValue(
       mockUpstream(503, {

@@ -68,6 +68,8 @@ export class ListingsApiError extends Error {
     message: string,
     readonly code: ListingsErrorCode,
     readonly status: number,
+    /** The wait a 429 asked for, from `Retry-After`, in milliseconds. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'ListingsApiError';
@@ -118,6 +120,15 @@ const USER_FACING_MESSAGE: Record<ListingsErrorCode, string> = {
   conflict: 'That change is not allowed right now. Refresh and try again.',
 };
 
+/** Reads a `Retry-After` value in seconds or as an HTTP date. */
+export function retryAfterMsOf(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now);
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, { signal, headers: { Accept: 'application/json' } });
   const body = await res.json().catch(() => null);
@@ -133,6 +144,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
       USER_FACING_MESSAGE[code] ?? USER_FACING_MESSAGE.internal_error,
       code,
       res.status,
+      retryAfterMsOf(res.headers?.get('retry-after') ?? null),
     );
   }
 
