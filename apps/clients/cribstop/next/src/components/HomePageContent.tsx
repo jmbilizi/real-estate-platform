@@ -215,10 +215,7 @@ function useCarouselListings(
     enabled: !skip && batch === null,
   });
   const { refetch } = result;
-  const retry = useCallback(() => {
-    if (batch?.kind === 'failed') batch.refetch();
-    else void refetch();
-  }, [refetch, batch]);
+  const retry = useCallback(() => void refetch(), [refetch]);
 
   // No place to scope to (#363's near-you row, before the region resolves or once it resolves to
   // none): never fires an unscoped, platform-wide request. `skipLoading` tells the two `skip`
@@ -231,15 +228,13 @@ function useCarouselListings(
     state =
       batch.kind === 'pending'
         ? { listings: [], total: 0, loading: true, failed: false }
-        : batch.kind === 'failed'
-          ? { listings: [], total: 0, loading: false, failed: true }
-          : {
-              listings: batch.result.results,
-              total: batch.result.total,
-              loading: false,
-              failed: false,
-              settledKey: JSON.stringify(query),
-            };
+        : {
+            listings: batch.result.results,
+            total: batch.result.total,
+            loading: false,
+            failed: false,
+            settledKey: JSON.stringify(query),
+          };
   } else if (result.isError && !result.data) {
     // A failed refetch keeps the last good cards (#955). Only a row with nothing to show fails.
     state = { listings: [], total: 0, loading: false, failed: true };

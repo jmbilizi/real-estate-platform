@@ -1270,16 +1270,37 @@ describe('HomePageContent', () => {
       await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
     });
 
-    it('keeps the rows out of the individual path while a batch fails with a server error', async () => {
+    it('falls back to one search per row when the batch fails after its retries', async () => {
       (searchListingsBatch as jest.Mock).mockRejectedValue(
         new ListingsApiError('down', 'upstream_unavailable', 503),
       );
 
       renderWithClient(<HomePageContent />);
 
-      await waitFor(() => expect(searchListingsBatch).toHaveBeenCalled());
-      await screen.findByText('Newest homes for sale');
-      expect(mockedSearchListings).not.toHaveBeenCalled();
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
+      expect(screen.queryByText(/try again/i)).not.toBeInTheDocument();
+    });
+
+    it('runs its own search for a row the batch answered with an error', async () => {
+      (searchListingsBatch as jest.Mock).mockImplementation(async (rows: { id: string }[]) => ({
+        rows: rows.map((row) =>
+          row.id === 'just-listed-sale'
+            ? { id: row.id, error: { code: 'internal_error', message: 'x' } }
+            : { id: row.id, scope: {}, result: envelope([aListingCardRow()]) },
+        ),
+      }));
+
+      renderWithClient(<HomePageContent />);
+
+      await waitFor(() =>
+        expect(mockedSearchListings).toHaveBeenCalledWith(
+          expect.objectContaining({ sort: 'newly-listed', listingType: 'sale' }),
+          expect.anything(),
+        ),
+      );
+      expect(mockedSearchListings).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(/try again/i)).not.toBeInTheDocument();
     });
 
     it('keeps a row its last good cards when a refresh fails that row (#955)', async () => {

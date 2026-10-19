@@ -107,6 +107,40 @@ describe('POST /listings/batch (#960)', () => {
     expect(response.headers['cache-control']).toBe('no-store');
   });
 
+  it('answers a slow row with its own error and still answers the fast rows', async () => {
+    process.env.LISTINGS_BATCH_ROW_TIMEOUT_MS = '100';
+    try {
+      const fast = poolWithListingsIn(['*']);
+      const slowQuery = <T>(text: string, values?: unknown[]): Promise<{ rows: T[] }> => {
+        const slow = JSON.stringify(values ?? []).includes('rent');
+        return slow
+          ? new Promise((resolve) => setTimeout(() => resolve({ rows: [] }), 1500))
+          : fast.query<T>(text, values);
+      };
+      const pool: ReadPool = {
+        query: slowQuery,
+        connect: () => Promise.resolve({ query: slowQuery, release: () => undefined }),
+      };
+      const started = Date.now();
+      const response = await request(createApp({ pool }))
+        .post('/listings/batch')
+        .send({
+          rows: [
+            { id: 'fast', params: { listingType: 'sale', skipTotal: 'true' } },
+            { id: 'slow', params: { listingType: 'rent', skipTotal: 'true' } },
+          ],
+        });
+
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(response.status).toBe(200);
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.body.rows[0].result.results).toHaveLength(1);
+      expect(response.body.rows[1].error.code).toBe('internal_error');
+    } finally {
+      delete process.env.LISTINGS_BATCH_ROW_TIMEOUT_MS;
+    }
+  });
+
   it('rejects an unknown field, an empty batch and a batch over the limit', async () => {
     const app = createApp({ pool: poolWithListingsIn([]) });
     const rows = Array.from({ length: 13 }, (_, i) => ({ id: `r${i}`, params: {} }));

@@ -196,6 +196,32 @@ function batchScopes(row: ListingsBatchRow): Scope[] {
   return [{}];
 }
 
+/**
+ * A row gets this long, below the gateway's 8 s timeout for the whole batch. A slow row then
+ * answers with its own error and the other rows still answer. The client runs that row's own search.
+ */
+const BATCH_ROW_TIMEOUT_MS = 6_000;
+
+function batchRowTimeoutMs(): number {
+  const override = Number(process.env.LISTINGS_BATCH_ROW_TIMEOUT_MS);
+  return Number.isFinite(override) && override > 0 ? override : BATCH_ROW_TIMEOUT_MS;
+}
+
+function runBatchRowWithin(
+  row: ListingsBatchRow,
+  pool: ReadPool,
+  shared: ReturnType<typeof createSingleFlight>,
+): Promise<ListingsBatchResult> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<ListingsBatchResult>((resolve) => {
+    timer = setTimeout(
+      () => resolve({ id: row.id, error: INTERNAL_ERROR_BODY.error }),
+      batchRowTimeoutMs(),
+    );
+  });
+  return Promise.race([runBatchRow(row, pool, shared), timeout]).finally(() => clearTimeout(timer));
+}
+
 async function runBatchRow(
   row: ListingsBatchRow,
   pool: ReadPool,
@@ -323,7 +349,9 @@ export function createListingsRouter(
         res.status(400).json(invalidRequest('Invalid batch request.'));
         return;
       }
-      const rows = await Promise.all(parsed.data.rows.map((row) => runBatchRow(row, pool, shared)));
+      const rows = await Promise.all(
+        parsed.data.rows.map((row) => runBatchRowWithin(row, pool, shared)),
+      );
       const failed = rows.some((row) => 'error' in row);
       res
         .set('Cache-Control', failed ? 'no-store' : LISTINGS_CACHE_CONTROL)

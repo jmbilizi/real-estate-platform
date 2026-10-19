@@ -127,7 +127,6 @@ export function homeBatchRows(place: HomePlace): ListingsBatchQuery[] {
 /** What a row learns from the batch. `null` from the hook means the row runs its own search. */
 export type HomeBatchRow =
   | { kind: 'pending' }
-  | { kind: 'failed'; refetch: () => void }
   | {
       kind: 'ready';
       result: ListingsEnvelope;
@@ -136,19 +135,10 @@ export type HomeBatchRow =
 
 type BatchState =
   | { status: 'pending' }
-  | { status: 'unsupported' }
-  | { status: 'failed'; refetch: () => void }
+  | { status: 'unavailable' }
   | { status: 'ready'; rows: Map<string, ListingsBatchResult>; refetch: () => void };
 
 const HomeBatchContext = createContext<BatchState | null>(null);
-
-/**
- * An older gateway or service has no batch route and answers 404. The page then runs one search
- * per row, as it did before. Any other failure retries with backoff, as every row read does (#955).
- */
-function isUnsupported(error: unknown): boolean {
-  return error instanceof ListingsApiError && (error.status === 404 || error.status === 405);
-}
 
 const homeBatchKey = (city?: string, state?: string) =>
   searchKeys.homeBatch([city ?? '', '|', state ?? ''].join(''));
@@ -192,7 +182,7 @@ export function HomeBatchProvider({
     },
     enabled: enabled && !placeLoading,
   });
-  const { data, error, isError } = query;
+  const { data, isError } = query;
   const { refetch } = query;
   const retry = useCallback(() => void refetch(), [refetch]);
 
@@ -200,29 +190,26 @@ export function HomeBatchProvider({
     if (data) {
       return { status: 'ready', rows: new Map(data.rows.map((r) => [r.id, r])), refetch: retry };
     }
-    if (isError) {
-      return isUnsupported(error)
-        ? { status: 'unsupported' }
-        : { status: 'failed', refetch: retry };
-    }
+    // The retries ran out (or the route is missing). Every row runs its own search, so one failed
+    // batch never shows an error card while the row reads could still work.
+    if (isError) return { status: 'unavailable' };
     return { status: 'pending' };
-  }, [data, isError, error, retry]);
+  }, [data, isError, retry]);
 
   return <HomeBatchContext.Provider value={value}>{children}</HomeBatchContext.Provider>;
 }
 
 /**
  * The batch answer for one row. `null` when the row must run its own search: no batch around the
- * row, an unsupported batch, or a row the batch does not carry. A refetch that fails keeps the
- * last answer, so a row keeps its cards (#955).
+ * row, a batch that failed after its retries, a row the batch does not carry, or a row that
+ * errored with no earlier good answer. A refetch that fails keeps the last answer, so a row keeps
+ * its cards (#955).
  */
 export function useHomeBatchRow(id: string | undefined): HomeBatchRow | null {
   const batch = useContext(HomeBatchContext);
-  if (!id || !batch || batch.status === 'unsupported') return null;
+  if (!id || !batch || batch.status === 'unavailable') return null;
   if (batch.status === 'pending') return { kind: 'pending' };
-  if (batch.status === 'failed') return { kind: 'failed', refetch: batch.refetch };
   const row = batch.rows.get(id);
-  if (!row) return null;
-  if ('error' in row) return { kind: 'failed', refetch: batch.refetch };
+  if (!row || 'error' in row) return null;
   return { kind: 'ready', result: row.result, scope: row.scope };
 }
