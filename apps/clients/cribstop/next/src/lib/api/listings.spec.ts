@@ -3,6 +3,7 @@ import {
   getListingsMeta,
   ListingsApiError,
   retryAfterMsOf,
+  searchListingsBatch,
   toListingDetailView,
   toSearchParams,
 } from './listings';
@@ -256,5 +257,42 @@ describe('retryAfterMsOf (#955)', () => {
   it('ignores a missing or unreadable value', () => {
     expect(retryAfterMsOf(null)).toBeUndefined();
     expect(retryAfterMsOf('soon')).toBeUndefined();
+  });
+});
+
+describe('searchListingsBatch (#960)', () => {
+  it('posts each row as query-string parameters, with repeats as arrays', async () => {
+    mockFetchResponse(200, { rows: [] });
+
+    await searchListingsBatch([
+      {
+        id: 'coming-soon-sale',
+        query: { status: ['Coming Soon'], listingType: 'sale', pageSize: 8, skipTotal: true },
+      },
+      { id: 'near', query: { city: 'Rockville', state: 'MD' }, widen: true },
+    ]);
+
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/listings/batch');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      rows: [
+        {
+          id: 'coming-soon-sale',
+          params: { status: 'Coming Soon', listingType: 'sale', pageSize: '8', skipTotal: 'true' },
+          widen: false,
+        },
+        { id: 'near', params: { city: 'Rockville', state: 'MD' }, widen: true },
+      ],
+    });
+  });
+
+  it('throws the error the relay reports', async () => {
+    mockFetchResponse(429, { error: { code: 'rate_limited', message: 'slow down' } });
+
+    await expect(searchListingsBatch([{ id: 'a', query: {} }])).rejects.toMatchObject({
+      status: 429,
+      code: 'rate_limited',
+    });
   });
 });

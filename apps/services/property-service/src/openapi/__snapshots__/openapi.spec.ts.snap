@@ -4406,6 +4406,142 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
         ],
         "type": "object",
       },
+      "ListingsBatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                  "type": "string",
+                },
+                "params": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string",
+                      },
+                      {
+                        "items": {
+                          "maxLength": 200,
+                          "type": "string",
+                        },
+                        "type": "array",
+                      },
+                    ],
+                  },
+                  "type": "object",
+                },
+                "widen": {
+                  "default": false,
+                  "type": "boolean",
+                },
+              },
+              "required": [
+                "id",
+                "params",
+                "widen",
+              ],
+              "type": "object",
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "type": "array",
+          },
+        },
+        "required": [
+          "rows",
+        ],
+        "type": "object",
+      },
+      "ListingsBatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "items": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/ListingsEnvelope",
+                    },
+                    "scope": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "city": {
+                          "type": "string",
+                        },
+                        "state": {
+                          "type": "string",
+                        },
+                      },
+                      "type": "object",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "scope",
+                    "result",
+                  ],
+                  "type": "object",
+                },
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "error": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "invalid_request",
+                            "result_window_exceeded",
+                            "not_found",
+                            "internal_error",
+                            "rate_limited",
+                            "unauthenticated",
+                            "unavailable",
+                            "forbidden",
+                            "conflict",
+                          ],
+                          "type": "string",
+                        },
+                        "message": {
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "code",
+                        "message",
+                      ],
+                      "type": "object",
+                    },
+                    "id": {
+                      "type": "string",
+                    },
+                  },
+                  "required": [
+                    "id",
+                    "error",
+                  ],
+                  "type": "object",
+                },
+              ],
+            },
+            "type": "array",
+          },
+        },
+        "required": [
+          "rows",
+        ],
+        "type": "object",
+      },
       "ListingsEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -7535,6 +7671,55 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
           },
         },
         "summary": "Search listings",
+      },
+    },
+    "/listings/batch": {
+      "post": {
+        "description": "The home page rows (#960). Each row holds the query-string parameters of \`GET /listings\`, parsed by the same schema. A row with \`widen\` set and a city and state repeats an empty result with the state only, then with no place. The answer is public and non-personal: no credential is read and no row carries \`isSaved\`. A row that fails carries its own error and the other rows still answer. A batch with a failed row answers \`no-store\`.",
+        "operationId": "batchSearchListings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListingsBatchRequest",
+              },
+            },
+          },
+          "required": true,
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingsBatchResponse",
+                },
+              },
+            },
+            "description": "One result or one error per row, in request order.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unknown field, no rows or too many rows.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Run several listing searches in one request",
       },
     },
     "/listings/brokers": {

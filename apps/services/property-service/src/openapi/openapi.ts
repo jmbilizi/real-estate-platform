@@ -21,6 +21,8 @@ import {
   listingDetailSchema,
   listingInquiryRequestSchema,
   listingInquiryResponseSchema,
+  listingsBatchRequestSchema,
+  listingsBatchResponseSchema,
   listingsEnvelopeSchema,
   listingsMetaSchema,
   lookingForInvalidBodySchema,
@@ -133,6 +135,8 @@ function componentSchemas() {
   registry.add(analyticsAccountLinkRequestSchema, { id: 'AnalyticsAccountLinkRequest' });
   registry.add(homeFeedRequestSchema, { id: 'HomeFeedRequest' });
   registry.add(homeFeedResponseSchema, { id: 'HomeFeedResponse' });
+  registry.add(listingsBatchRequestSchema, { id: 'ListingsBatchRequest' });
+  registry.add(listingsBatchResponseSchema, { id: 'ListingsBatchResponse' });
   registry.add(listingInquiryResponseSchema, { id: 'ListingInquiryResponse' });
   registry.add(savedHomesEnvelopeSchema, { id: 'SavedHomesEnvelope' });
   registry.add(savedStateSchema, { id: 'SavedState' });
@@ -722,6 +726,44 @@ export function toOpenApiDocument() {
                 'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
                 'the read endpoints above — because this limit is enforced by the service ' +
                 'itself (keyed on the path parameter), not by the gateway.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/batch': {
+        post: {
+          operationId: 'batchSearchListings',
+          summary: 'Run several listing searches in one request',
+          description:
+            'The home page rows (#960). Each row holds the query-string parameters of ' +
+            '`GET /listings`, parsed by the same schema. A row with `widen` set and a city and ' +
+            'state repeats an empty result with the state only, then with no place. The answer ' +
+            'is public and non-personal: no credential is read and no row carries `isSaved`. A ' +
+            'row that fails carries its own error and the other rows still answer. A batch with ' +
+            'a failed row answers `no-store`.',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ListingsBatchRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'One result or one error per row, in request order.',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ListingsBatchResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'Unknown field, no rows or too many rows.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },

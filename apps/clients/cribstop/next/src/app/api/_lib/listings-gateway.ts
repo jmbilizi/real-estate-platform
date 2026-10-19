@@ -56,6 +56,11 @@ export interface ProxyListingsOptions {
   readonly clientIp?: string | null;
   /** #781. Use the separate suggest store instead of the shared one. */
   readonly store?: 'suggest';
+  /**
+   * #960. A JSON body makes the read a POST. The route is still a public read of non-personal
+   * rows, so the store keys on the body and no cookie or credential travels with it.
+   */
+  readonly body?: string;
 }
 
 /** One finished upstream read, as plain data: a `NextResponse` body can be read only once. */
@@ -125,9 +130,10 @@ async function readUpstream(
   path: string,
   query: string,
   clientIp: string | null,
+  body?: string,
 ): Promise<ProxiedRead> {
-  const first = await readUpstreamOnce(path, query, clientIp);
-  if (rejectsSkipTotal(first)) {
+  const first = await readUpstreamOnce(path, query, clientIp, body);
+  if (body === undefined && rejectsSkipTotal(first)) {
     return readUpstreamOnce(path, withoutSkipTotal(query), clientIp);
   }
   return first;
@@ -137,8 +143,10 @@ async function readUpstreamOnce(
   path: string,
   query: string,
   clientIp: string | null,
+  requestBody?: string,
 ): Promise<ProxiedRead> {
   const headers: Record<string, string> = { Accept: 'application/json' };
+  if (requestBody !== undefined) headers['Content-Type'] = 'application/json';
   // The gateway trusts `X-Forwarded-For` from a peer inside the pod network, and keys its rate
   // limits on the address that results.
   if (clientIp) headers['X-Forwarded-For'] = clientIp;
@@ -147,9 +155,13 @@ async function readUpstreamOnce(
   let upstream: Response | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const began = Date.now();
-    upstream = await fetchGateway(target, { method: 'GET', headers }, READ_TIMEOUT_MS).catch(
-      () => null,
-    );
+    upstream = await fetchGateway(
+      target,
+      requestBody === undefined
+        ? { method: 'GET', headers }
+        : { method: 'POST', headers, body: requestBody },
+      READ_TIMEOUT_MS,
+    ).catch(() => null);
     if (upstream && !RETRY_STATUSES.has(upstream.status)) break;
     if (Date.now() - began >= RETRY_ONLY_IF_FASTER_THAN_MS) break;
     if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
@@ -241,11 +253,11 @@ export async function proxyListingsRead(
 ): Promise<NextResponse> {
   const clientIp = options.clientIp ?? null;
   if (!options.cache) {
-    return toResponse(await readUpstream(path, query, clientIp));
+    return toResponse(await readUpstream(path, query, clientIp, options.body));
   }
 
   const store = options.store === 'suggest' ? suggestReadCache : listingsReadCache;
-  const key = `${path}?${query}`;
+  const key = `${path}?${query}${options.body === undefined ? '' : `#${options.body}`}`;
   const hit = store.get(key);
   if (hit) {
     const maxAge = Math.min(hit.read.browserMaxAgeSeconds, hit.remainingSeconds);
@@ -255,7 +267,7 @@ export async function proxyListingsRead(
   }
 
   const read = await store.load(key, async (): Promise<ProxiedRead> => {
-    const fetched = await readUpstream(path, query, clientIp);
+    const fetched = await readUpstream(path, query, clientIp, options.body);
     if (fetched.status !== 200 || fetched.sharedSeconds <= 0) return fetched;
 
     if (JSON.stringify(fetched.body).length <= READ_CACHE_MAX_BODY_CHARS) {

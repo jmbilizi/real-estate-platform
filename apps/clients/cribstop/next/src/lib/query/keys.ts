@@ -28,6 +28,8 @@ export const searchKeys = {
   zips: (request: string) => [...searchKeys.all, 'zips', request] as const,
   brokers: (request: string) => [...searchKeys.all, 'brokers', request] as const,
   meta: () => [...searchKeys.all, 'meta'] as const,
+  /** The home page rows in one request (#960). */
+  homeBatch: (request: string) => [...searchKeys.all, 'home-batch', request] as const,
 };
 
 /** Homes near one listing. Separate from `listingKeys` so parallel tickets do not collide. */
