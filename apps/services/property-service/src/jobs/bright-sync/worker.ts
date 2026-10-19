@@ -116,6 +116,24 @@ function positiveIntFrom(env: NodeJS.ProcessEnv, name: string, fallback: number)
   return parsed;
 }
 
+/**
+ * The worker's own pool limits (#954). The worker shares the dev Postgres and the
+ * `property_service_db_user` role with the API, so it holds few connections and stops a runaway
+ * statement. The lock connection takes one slot. The rest serve applies, which queue and never
+ * nest a checkout, so a pool smaller than `applyConcurrency + 1` is safe.
+ */
+export function resolveWorkerPoolConfig(env: NodeJS.ProcessEnv = process.env): {
+  max: number;
+  statement_timeout: number;
+  application_name: string;
+} {
+  return {
+    max: positiveIntFrom(env, 'BRIGHT_SYNC_DB_POOL_MAX', 4),
+    statement_timeout: positiveIntFrom(env, 'BRIGHT_SYNC_STATEMENT_TIMEOUT_MS', 60_000),
+    application_name: 'bright-sync-worker',
+  };
+}
+
 export function resolveWorkerSettings(env: NodeJS.ProcessEnv = process.env): WorkerSettings {
   const delayRaw = env.BRIGHT_SOLD_DISPLAY_DELAY_DAYS;
   const pageSize = positiveIntFrom(env, 'BRIGHT_SYNC_PAGE_SIZE', 5_000);

@@ -23,6 +23,8 @@ spec:
       labels:
         app: cribstop-web
     spec:
+      # Longer than the preStop sleep, so the drain finishes before SIGKILL.
+      terminationGracePeriodSeconds: 30
       containers:
         - name: nextjs
           # Image format: ghcr.io/<owner>/<repo>/cribstop-web:<tag>
@@ -79,6 +81,9 @@ spec:
             preStop:
               exec:
                 command: ["sleep", "10"]
+          # #954 rule: readiness checks this pod's own ability to serve, never a downstream.
+          # A gateway check would mark every pod unready in a gateway outage and 503 the whole
+          # site, including pages that serve from cache.
           readinessProbe:
             httpGet:
               path: /api/health

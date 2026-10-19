@@ -302,12 +302,15 @@ that empties `listings` while the checkpoint still reads complete still refills.
   5,000, max 10,000). Sibling slices fetch concurrently, up to `BRIGHT_SYNC_CONCURRENCY` (default 6,
   halved for the rest of the run on a 429 or a 5xx). Slices then apply concurrently too, up to
   `BRIGHT_SYNC_APPLY_CONCURRENCY` (default 4, #359) — the write path, not the fetch, is the sync's
-  actual bottleneck. Each apply stages and maps on its own pool connection; a `Sequencer`
-  (`sync.ts`) still writes `bright_sync_state` (`backfill:<status>`) in oldest-slice-first order,
-  only once a slice's own data has committed AND every earlier slice's checkpoint write already
-  landed. So a restart always resumes right after the last slice that is actually, contiguously, in
-  the database — never past one still in flight or one that failed — and the upserts make any
-  re-applied slice a no-op. The worker resumes an incomplete backfill before any other task.
+  actual bottleneck. The worker pool holds at most `BRIGHT_SYNC_DB_POOL_MAX` connections (default
+  4), caps each statement at `BRIGHT_SYNC_STATEMENT_TIMEOUT_MS` (default 60,000), and sets
+  `application_name=bright-sync-worker` (#954). The lock connection takes one slot, so applies queue
+  for the rest. Each apply stages and maps on its own pool connection; a `Sequencer` (`sync.ts`)
+  still writes `bright_sync_state` (`backfill:<status>`) in oldest-slice-first order, only once a
+  slice's own data has committed AND every earlier slice's checkpoint write already landed. So a
+  restart always resumes right after the last slice that is actually, contiguously, in the database
+  — never past one still in flight or one that failed — and the upserts make any re-applied slice a
+  no-op. The worker resumes an incomplete backfill before any other task.
 - **Write pacing (#755).** `applyPage` writes a slice in transactions of
   `BRIGHT_SYNC_APPLY_CHUNK_SIZE` records (default 250), not one transaction per slice. After each
   chunk the worker rests for `BRIGHT_SYNC_APPLY_PACE_RATIO` (default 1) times the chunk's duration.

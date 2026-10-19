@@ -4,6 +4,10 @@ kind: Kustomization
 # Reference base resources (cloud-agnostic configs)
 resources:
   - ../../base
+  # PodDisruptionBudgets for services with more than one replica (#954)
+  - poddisruptionbudgets/api-gateway.poddisruptionbudget.yaml
+  - poddisruptionbudgets/account-service.poddisruptionbudget.yaml
+  - poddisruptionbudgets/cribstop-web.poddisruptionbudget.yaml
 
 # Environment-specific patches (test/staging environment)
 # Patches override base resources with test-specific configuration:

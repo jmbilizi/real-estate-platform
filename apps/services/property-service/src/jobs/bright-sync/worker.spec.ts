@@ -4,6 +4,7 @@ import {
   backfillIncomplete,
   backfillStatuses,
   prepareWorker,
+  resolveWorkerPoolConfig,
   resolveWorkerSettings,
   SELECT_FINGERPRINT_STREAM,
   soldCloseDateFrom,
@@ -188,6 +189,26 @@ describe('selectFingerprint', () => {
     expect(selectFingerprint(['A', 'B'])).toBe(selectFingerprint(['B', 'A']));
     expect(selectFingerprint(['A', 'B'])).not.toBe(selectFingerprint(['A', 'B', 'C']));
     expect(selectFingerprint()).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+describe('worker pool config (#954)', () => {
+  it('caps the pool at 4, the statements at 60 s, and names the connections', () => {
+    expect(resolveWorkerPoolConfig({})).toEqual({
+      max: 4,
+      statement_timeout: 60_000,
+      application_name: 'bright-sync-worker',
+    });
+  });
+
+  it('reads both limits from the environment and rejects a bad value', () => {
+    expect(
+      resolveWorkerPoolConfig({
+        BRIGHT_SYNC_DB_POOL_MAX: '3',
+        BRIGHT_SYNC_STATEMENT_TIMEOUT_MS: '90000',
+      }),
+    ).toMatchObject({ max: 3, statement_timeout: 90_000 });
+    expect(() => resolveWorkerPoolConfig({ BRIGHT_SYNC_DB_POOL_MAX: '0' })).toThrow();
   });
 });
 

@@ -66,6 +66,26 @@ namespace ApiGateway.Tests
         }
 
         /// <summary>
+        /// Readiness answers 200 only because Ocelot loaded its routes (#954). Liveness stays static.
+        /// </summary>
+        /// <returns>A task that completes when the assertions have run.</returns>
+        [Fact]
+        public async Task HealthReady_WithRoutesLoaded_ReturnsOk()
+        {
+            using var host = await StartHostAsync(new Dictionary<string, string?>
+            {
+                { "OTEL_ENABLED", "false" },
+            }).ConfigureAwait(true);
+            var client = host.GetTestClient();
+
+            var ready = await client.GetAsync(new Uri("/health/ready", UriKind.Relative)).ConfigureAwait(true);
+            var live = await client.GetAsync(new Uri("/health/live", UriKind.Relative)).ConfigureAwait(true);
+
+            ready.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+            live.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        }
+
+        /// <summary>
         /// Starts a test host driven by the real <see cref="Startup"/>.
         /// </summary>
         /// <param name="settings">Configuration values for this case.</param>
