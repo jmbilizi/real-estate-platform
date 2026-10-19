@@ -118,10 +118,10 @@ describe('MobileTabBar (#923, #943)', () => {
       render(<MobileTabBar />);
       expect(screen.getByTestId('mobile-tab-bar').className).toContain('mobile-tab-bar');
       expect(css).toMatch(
-        /html:has\(\[data-scroll-lock\]\) \.mobile-tab-bar\s*\{\s*visibility:\s*hidden/,
+        /html\[data-overlay-open\] \.mobile-tab-bar[^{]*\{\s*visibility:\s*hidden/,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-      expect(document.querySelector('[data-scroll-lock]')).not.toBeNull();
+      expect(document.documentElement).toHaveAttribute('data-overlay-open');
     });
 
     it('defines the offset sticky actions use, and zeroes it from md up', () => {

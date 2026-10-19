@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useOverlayOpen } from '@/lib/overlay';
 
 /** Set on `<html>` while the map is expanded. `globals.css` keys the stacking and scroll rules on it. */
 export const MAP_EXPANDED_ATTRIBUTE = 'data-map-expanded';
@@ -20,6 +21,7 @@ export function useMapExpand(container: HTMLElement | null) {
   const [expanded, setExpanded] = useState(false);
   const expandedRef = useRef(false);
   const pushedRef = useRef(false);
+  useOverlayOpen(expanded);
 
   const enter = useCallback(() => {
     if (expandedRef.current) return;

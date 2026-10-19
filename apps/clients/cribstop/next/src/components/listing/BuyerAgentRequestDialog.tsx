@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useOverlayOpen } from '@/lib/overlay';
 import Link from 'next/link';
 import {
   CONSENT_TEXTS,
@@ -84,6 +85,7 @@ interface Props {
  * listing modal's Escape and Tab handlers sit on `window`, so this handler stops the event first.
  */
 export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Props) {
+  useOverlayOpen(true);
   const { user } = useApp();
   const copy = COPY[kind];
   const titleId = useId();
@@ -334,7 +336,8 @@ export default function BuyerAgentRequestDialog({ listingId, kind, onClose }: Pr
         data-testid="buyer-agent-request-dialog"
         className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:max-w-md sm:rounded-2xl ${
           view === 'auth' ? 'sm:bg-transparent sm:shadow-none' : 'p-5 sm:p-6'
-        }`}
+        } pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6
+        `}
       >
         {view === 'auth' ? (
           <div>

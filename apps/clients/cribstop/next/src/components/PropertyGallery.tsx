@@ -5,6 +5,7 @@ import ToolbarIconButton, { BACK_ICON, FORWARD_ICON } from '@/components/Toolbar
 import type { Media } from '@/lib/types';
 import ListingImage from '@/components/listing/ListingImage';
 import { resolveTourEntry } from '@/lib/tour-url';
+import { useOverlayOpen } from '@/lib/overlay';
 
 /**
  * The detail page's photo gallery.
@@ -156,6 +157,7 @@ function PhotoViewer({
   /** Right slot of the top bar, for example Share and Save. */
   actions?: ReactNode;
 }) {
+  useOverlayOpen(true);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const count = media.length + (tour ? 1 : 0);

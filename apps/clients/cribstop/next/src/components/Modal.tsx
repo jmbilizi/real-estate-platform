@@ -1,5 +1,6 @@
 import React, { ReactNode, useEffect, useId, useRef, useState } from 'react';
 import DismissButton from '@/components/DismissButton';
+import { useOverlayOpen } from '@/lib/overlay';
 import {
   cancelDeferredUnlock,
   deferUnlockScroll,
@@ -126,6 +127,7 @@ export default function Modal({
   const cardRef = useRef<HTMLDivElement>(null);
   const returnFocusTo = useRef<HTMLElement | null>(null);
   const titleId = useId();
+  useOverlayOpen(open || mounted);
 
   useEffect(() => {
     if (open) {
@@ -277,7 +279,7 @@ export default function Modal({
       /* `z-dialog`, not `z-50` — see `lib/z-layers`. At 50 this tied with the sticky header and sat
          *below* the docked search bar's 55, so scrolling a results page far enough to dock the pill
          and then opening a listing put the pill on top of the panel's own header row. */
-      data-scroll-lock
+      data-overlay
       className={`fixed inset-0 ${stacked ? 'z-auth-dialog' : 'z-dialog'} flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
     >
       <div
