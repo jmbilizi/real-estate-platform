@@ -1,0 +1,192 @@
+name: Dev Availability Probe
+
+# #963: measures dev availability from inside the dev cluster. The workstation cannot reach the dev
+# host, and an outside probe needs the ingress credential. This workflow starts a short-lived pod
+# with the `KUBECONFIG` secret of the GitHub `dev` environment, as `deploy-k8s-resources.yml` does.
+# The pod reads Service DNS names, so a gap in the endpoints during a rolling restart shows up.
+# It sends only GET requests. Never point it at test or prod.
+#
+# Targets: cribstop-web home page and `/api/health`, the home-row read through the web proxy and
+# directly on api-gateway, and one listing detail. Logic and unit tests:
+# `tools/ci/availability-probe.js`.
+#
+# The pod sends its own IP as `X-Real-IP`, the gateway rate limit key. At a 2 s interval it makes
+# 30 reads per minute per route. The limits are 240 (home row) and 90 (detail) per minute.
+# No NetworkPolicy selects api-gateway or cribstop-web, so the pod can reach both. A policy exists
+# only for property-service and account-service, and the pod never calls them.
+#
+# `workflow_dispatch` runs only from the default branch (dev). The first run needs this file
+# merged first. `actions: write` is only for the optional deploy dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: "Probe length in seconds (1-3600). Use 900 or more with with_deploy."
+        required: true
+        type: number
+        default: 600
+      interval_seconds:
+        description: "Seconds between rounds (minimum 2)"
+        required: true
+        type: number
+        default: 2
+      with_deploy:
+        description: "Dispatch a dev deploy 30 s after the probe starts"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: dev-availability-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 80
+    env:
+      POD: dev-availability-probe
+      CONFIGMAP: dev-availability-probe-script
+      DURATION_SECONDS: ${{ inputs.duration_seconds }}
+      INTERVAL_SECONDS: ${{ inputs.interval_seconds }}
+      WITH_DEPLOY: ${{ inputs.with_deploy }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        run: |
+          KUBECTL_VERSION=$(curl -Ls https://dl.k8s.io/release/stable.txt || echo "v1.31.0")
+          curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get ns default >/dev/null
+
+      - name: Start the probe pod
+        run: |
+          D=$DURATION_SECONDS
+          [ "$D" -lt 1 ] 2>/dev/null && D=1
+          [ "$D" -gt 3600 ] 2>/dev/null && D=3600
+          I=$INTERVAL_SECONDS
+          [ "$I" -lt 2 ] 2>/dev/null && I=2
+          DEADLINE=$((D + 180))
+          DEPLOY_AT=""
+          if [ "$WITH_DEPLOY" = "true" ]; then DEPLOY_AT=30; fi
+          echo "DEADLINE=$DEADLINE" >> "$GITHUB_ENV"
+
+          kubectl delete pod "$POD" -n default --ignore-not-found --wait=true
+          kubectl delete configmap "$CONFIGMAP" -n default --ignore-not-found
+          kubectl create configmap "$CONFIGMAP" -n default \
+            --from-file=availability-probe.js=tools/ci/availability-probe.js
+
+          cat <<EOF | kubectl create -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: ${POD}
+            namespace: default
+            labels:
+              app: dev-availability-probe
+          spec:
+            restartPolicy: Never
+            activeDeadlineSeconds: ${DEADLINE}
+            automountServiceAccountToken: false
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 1000
+              runAsGroup: 1000
+              seccompProfile:
+                type: RuntimeDefault
+            containers:
+              - name: probe
+                image: node:20.19.5-slim
+                command: ["node", "/probe/availability-probe.js"]
+                env:
+                  - name: DURATION_SECONDS
+                    value: "${D}"
+                  - name: INTERVAL_SECONDS
+                    value: "${I}"
+                  - name: DEPLOY_AT_SECONDS
+                    value: "${DEPLOY_AT}"
+                  - name: WEB_BASE_URL
+                    value: http://cribstop-web-svc:3000
+                  - name: GATEWAY_BASE_URL
+                    value: http://api-gateway-svc:8080
+                  - name: PROBE_CLIENT_IP
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: status.podIP
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 64Mi
+                  limits:
+                    cpu: 200m
+                    memory: 128Mi
+                volumeMounts:
+                  - name: script
+                    mountPath: /probe
+                    readOnly: true
+            volumes:
+              - name: script
+                configMap:
+                  name: ${CONFIGMAP}
+          EOF
+
+      - name: Wait until the pod runs
+        run: |
+          for _ in $(seq 1 60); do
+            phase=$(kubectl get pod "$POD" -n default -o jsonpath='{.status.phase}')
+            case "$phase" in Running|Succeeded|Failed) exit 0 ;; esac
+            sleep 5
+          done
+          kubectl describe pod "$POD" -n default | tail -n 20
+          echo "The probe pod did not start."
+          exit 1
+
+      - name: Dispatch a dev deploy
+        if: ${{ inputs.with_deploy }}
+        run: |
+          sleep 30
+          gh workflow run deploy-k8s-resources.yml \
+            --repo "${{ github.repository }}" \
+            --ref dev \
+            --field environment=dev
+          echo "Dev deploy dispatched."
+
+      - name: Wait for the probe and read its result
+        run: |
+          phase=""
+          for _ in $(seq 1 $(((DEADLINE + 120) / 5))); do
+            phase=$(kubectl get pod "$POD" -n default -o jsonpath='{.status.phase}')
+            case "$phase" in Succeeded|Failed) break ;; esac
+            sleep 5
+          done
+          kubectl logs "$POD" -n default > /tmp/probe.log || true
+          cat /tmp/probe.log
+          sed -n '/^--- summary ---$/,$p' /tmp/probe.log | tail -n +2 >> "$GITHUB_STEP_SUMMARY"
+          echo "Pod phase: $phase"
+          [ "$phase" = "Succeeded" ]
+
+      - name: Delete the probe pod
+        if: always()
+        run: |
+          kubectl delete pod "$POD" -n default --ignore-not-found --wait=false
+          kubectl delete configmap "$CONFIGMAP" -n default --ignore-not-found
