@@ -1,22 +1,20 @@
 'use strict';
 
 /**
- * Dev availability probe (#963). Runs on a GitHub runner, never on a workstation.
- * Reads five dev targets in sequence and reports status counts and latency per target.
+ * Dev availability probe (#963). Runs in a short-lived pod inside the dev cluster.
+ * It reads five in-cluster targets in sequence and reports status counts and latency per target.
  * The exit code is 1 if any read returned a status other than 200.
  *
- * Env: CRIBSTOP_DOMAIN, API_GATEWAY_DOMAIN, DEV_BASIC_AUTH ("user:password"),
- * DURATION_SECONDS, INTERVAL_SECONDS, DEPLOY_AT_SECONDS (report only).
- * A host name or credential is never printed.
+ * Env: WEB_BASE_URL, GATEWAY_BASE_URL, PROBE_CLIENT_IP, DURATION_SECONDS, INTERVAL_SECONDS,
+ * DEPLOY_AT_SECONDS (report only).
  */
-
-const fs = require('node:fs');
 
 const REQUEST_TIMEOUT_MS = 10_000;
 const MIN_INTERVAL_SECONDS = 2;
 const MAX_DURATION_SECONDS = 3600;
 const HOME_ROW_QUERY = 'listingType=sale&sort=newly-listed&pageSize=15&skipTotal=true';
 const DISCOVERY_ATTEMPTS = 5;
+const SUMMARY_MARKER = '--- summary ---';
 
 function clampInt(value, fallback, min, max) {
   const n = Number.parseInt(value, 10);
@@ -152,24 +150,25 @@ async function discoverListingId(gatewayBase, headers) {
   return null;
 }
 
-function baseUrl(domain) {
-  return `https://${domain.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`;
+function trimBase(url) {
+  return url.replace(/\/+$/, '');
+}
+
+/** The gateway rate limit keys on X-Real-IP. The probe sends its own pod IP, so it has its own quota. */
+function buildHeaders(clientIp) {
+  const headers = { Accept: 'application/json, text/html' };
+  if (clientIp) {
+    headers['X-Real-IP'] = clientIp;
+    headers['X-Forwarded-For'] = clientIp;
+  }
+  return headers;
 }
 
 async function main(env = process.env) {
-  const required = ['CRIBSTOP_DOMAIN', 'API_GATEWAY_DOMAIN', 'DEV_BASIC_AUTH'];
-  const missing = required.filter((k) => !env[k]);
-  if (missing.length) {
-    console.error(`Missing required environment: ${missing.join(', ')}`);
-    return 1;
-  }
   const config = parseConfig(env);
-  const webBase = baseUrl(env.CRIBSTOP_DOMAIN);
-  const gatewayBase = baseUrl(env.API_GATEWAY_DOMAIN);
-  const headers = {
-    Accept: 'application/json, text/html',
-    Authorization: `Basic ${Buffer.from(env.DEV_BASIC_AUTH).toString('base64')}`,
-  };
+  const webBase = trimBase(env.WEB_BASE_URL || 'http://cribstop-web-svc:3000');
+  const gatewayBase = trimBase(env.GATEWAY_BASE_URL || 'http://api-gateway-svc:8080');
+  const headers = buildHeaders(env.PROBE_CLIENT_IP);
 
   const listingId = await discoverListingId(gatewayBase, headers);
   if (!listingId) {
@@ -199,8 +198,7 @@ async function main(env = process.env) {
   }
 
   const markdown = renderMarkdown(results, { ...config, deployAtSeconds });
-  console.log(markdown);
-  if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
+  console.log(`${SUMMARY_MARKER}\n${markdown}`);
   return Object.values(results).some((samples) => samples.some((s) => s.status !== 200)) ? 1 : 0;
 }
 
@@ -213,7 +211,9 @@ module.exports = {
   firstListingId,
   buildTargets,
   timedRead,
-  baseUrl,
+  trimBase,
+  buildHeaders,
+  SUMMARY_MARKER,
   main,
 };
 

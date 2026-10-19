@@ -13,7 +13,8 @@ const {
   firstListingId,
   buildTargets,
   timedRead,
-  baseUrl,
+  trimBase,
+  buildHeaders,
 } = require('./availability-probe');
 
 const s = (status, ms = 10) => ({ status, ms });
@@ -76,9 +77,15 @@ test('#963: targets use the home-row query the home page sends', () => {
   assert.equal(t[4].url, 'https://g/property/listings/a%2Fb');
 });
 
-test('#963: baseUrl strips a scheme and a trailing slash', () => {
-  assert.equal(baseUrl('https://dev.example/'), 'https://dev.example');
-  assert.equal(baseUrl('dev.example'), 'https://dev.example');
+test('#963: trimBase strips trailing slashes', () => {
+  assert.equal(trimBase('http://api-gateway-svc:8080/'), 'http://api-gateway-svc:8080');
+});
+
+test('#963: the probe sends its own IP for the gateway rate limit key', () => {
+  const h = buildHeaders('10.1.2.3');
+  assert.equal(h['X-Real-IP'], '10.1.2.3');
+  assert.equal(h['X-Forwarded-For'], '10.1.2.3');
+  assert.equal(buildHeaders(undefined)['X-Real-IP'], undefined);
 });
 
 test('#963: timedRead reports a status, and status 0 on a network error', async () => {
