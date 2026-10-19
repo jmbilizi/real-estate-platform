@@ -2,9 +2,13 @@
 
 import { createContext, useCallback, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PROPERTY_TYPES } from '@cribstop/property-contracts';
-import type { ListingsBatchResult, ListingsEnvelope } from '@cribstop/property-contracts';
+import type {
+  ListingsBatchResponse,
+  ListingsBatchResult,
+  ListingsEnvelope,
+} from '@cribstop/property-contracts';
 import {
   ListingsApiError,
   type ListingsBatchQuery,
@@ -146,6 +150,9 @@ function isUnsupported(error: unknown): boolean {
   return error instanceof ListingsApiError && (error.status === 404 || error.status === 405);
 }
 
+const homeBatchKey = (city?: string, state?: string) =>
+  searchKeys.homeBatch([city ?? '', '|', state ?? ''].join(''));
+
 export function HomeBatchProvider({
   place,
   placeLoading,
@@ -160,11 +167,29 @@ export function HomeBatchProvider({
 }) {
   const city = place?.city;
   const state = place?.state;
+  const client = useQueryClient();
   const query = useQuery({
     // The rows follow from the place alone, so the place is the whole key.
-    queryKey: searchKeys.homeBatch(`${city ?? ''}|${state ?? ''}`),
-    queryFn: ({ signal }) =>
-      searchListingsBatch(homeBatchRows(city && state ? { city, state } : null), signal),
+    queryKey: homeBatchKey(city, state),
+    queryFn: async ({ signal }) => {
+      const fresh = await searchListingsBatch(
+        homeBatchRows(city && state ? { city, state } : null),
+        signal,
+      );
+      // Every row failed: the service is down. Throw, so the backoff retry runs (#955).
+      if (fresh.rows.every((row) => 'error' in row)) {
+        throw new ListingsApiError('Batch failed.', 'internal_error', 503);
+      }
+      // A row that fails in a refresh keeps its last good answer, so it keeps its cards (#955).
+      const previous = client.getQueryData<ListingsBatchResponse>(homeBatchKey(city, state));
+      const before = new Map(previous?.rows.map((row) => [row.id, row]));
+      return {
+        rows: fresh.rows.map((row) => {
+          const old = before.get(row.id);
+          return 'error' in row && old && !('error' in old) ? old : row;
+        }),
+      };
+    },
     enabled: enabled && !placeLoading,
   });
   const { data, error, isError } = query;

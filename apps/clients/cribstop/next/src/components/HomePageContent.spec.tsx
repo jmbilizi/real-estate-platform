@@ -1282,6 +1282,34 @@ describe('HomePageContent', () => {
       expect(mockedSearchListings).not.toHaveBeenCalled();
     });
 
+    it('keeps a row its last good cards when a refresh fails that row (#955)', async () => {
+      const ok = (rows: { id: string }[]) =>
+        rows.map(({ id }) => ({ id, scope: {}, result: envelope([aListingCardRow()]) }));
+      (searchListingsBatch as jest.Mock)
+        .mockImplementationOnce(async (rows: { id: string }[]) => ({ rows: ok(rows) }))
+        .mockImplementationOnce(async (rows: { id: string }[]) => ({
+          rows: rows.map((row) =>
+            row.id === 'just-listed-sale'
+              ? { id: row.id, error: { code: 'internal_error', message: 'x' } }
+              : ok([row])[0],
+          ),
+        }));
+
+      const { client } = renderWithClient(<HomePageContent />);
+      await waitFor(() =>
+        expect(screen.getByText('Newest homes for sale').closest('section')).toHaveTextContent(
+          '$750,000',
+        ),
+      );
+
+      await client.refetchQueries({ queryKey: ['listings', 'search', 'home-batch'] });
+
+      expect(searchListingsBatch).toHaveBeenCalledTimes(2);
+      const section = screen.getByText('Newest homes for sale').closest('section');
+      expect(section).toHaveTextContent('$750,000');
+      expect(section).not.toHaveTextContent(/try again/i);
+    });
+
     it('links See all to the place the server used after it widened', async () => {
       mockRegionFetch({ city: 'Baltimore', state: 'MD' });
       (searchListingsBatch as jest.Mock).mockImplementation(async (rows: { id: string }[]) => ({
