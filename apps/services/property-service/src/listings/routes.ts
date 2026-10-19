@@ -3,8 +3,12 @@ import {
   type ErrorBody,
   exceedsResultWindow,
   idSchema,
+  INTERNAL_ERROR_BODY,
   type ListingGroupsRequest,
   listingGroupsRequestSchema,
+  listingsBatchRequestSchema,
+  type ListingsBatchResult,
+  type ListingsBatchRow,
   MAP_PIN_CAP_DEFAULT,
   type MapRequest,
   mapRequestSchema,
@@ -181,6 +185,57 @@ const asyncRoute =
     handler(req, res).catch(next);
   };
 
+type Scope = { city?: string; state?: string };
+
+/** The places a batch row tries, widest last: city and state, then the state, then no place. */
+function batchScopes(row: ListingsBatchRow): Scope[] {
+  const { city, state } = row.params;
+  if (row.widen && typeof city === 'string' && typeof state === 'string') {
+    return [{ city, state }, { state }, {}];
+  }
+  return [{}];
+}
+
+async function runBatchRow(
+  row: ListingsBatchRow,
+  pool: ReadPool,
+  shared: ReturnType<typeof createSingleFlight>,
+): Promise<ListingsBatchResult> {
+  try {
+    const scopes = batchScopes(row);
+    const widening = scopes.length > 1;
+    let last: ListingsBatchResult = { id: row.id, error: INTERNAL_ERROR_BODY.error };
+    for (const scope of scopes) {
+      const params: Record<string, string | string[]> = { ...row.params };
+      if (widening) {
+        delete params.city;
+        delete params.state;
+        if (scope.city) params.city = scope.city;
+        if (scope.state) params.state = scope.state;
+      }
+      const parsed = parseQuery(searchRequestSchema, params);
+      if (!parsed.ok) return { id: row.id, error: parsed.body.error };
+      if (exceedsResultWindow(parsed.value)) {
+        return { id: row.id, error: RESULT_WINDOW_EXCEEDED_BODY.error };
+      }
+      const effectiveRequest = resolvedSearchRequest(parsed.value);
+      const result = await shared(`search:${JSON.stringify(effectiveRequest)}`, () =>
+        searchListings(pool, effectiveRequest),
+      );
+      last = {
+        id: row.id,
+        scope: widening ? scope : { city: parsed.value.city, state: parsed.value.state },
+        result,
+      };
+      if (result.results.length > 0) break;
+    }
+    return last;
+  } catch (error) {
+    console.error('Batch row failed:', error instanceof Error ? error.message : error);
+    return { id: row.id, error: INTERNAL_ERROR_BODY.error };
+  }
+}
+
 export function createListingsRouter(
   pool: ReadPool,
   galleryLoader?: GalleryLoader,
@@ -251,6 +306,29 @@ export function createListingsRouter(
       // Postgres only. The sync worker (#338) keeps the database current, so search never calls
       // Bright and never waits on it.
       res.set('Cache-Control', LISTINGS_CACHE_CONTROL).status(200).json(envelope);
+    }),
+  );
+
+  /**
+   * #960. The home page rows in one request. Each row is a `GET /listings` query, parsed and run
+   * the same way. The answer is public and non-personal: no credential is read and no row carries
+   * `isSaved`, so the response can enter a shared cache. A row that fails answers with its own
+   * error and the rest still answer. Any failed row makes the whole answer `no-store`.
+   */
+  router.post(
+    '/listings/batch',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = listingsBatchRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json(invalidRequest('Invalid batch request.'));
+        return;
+      }
+      const rows = await Promise.all(parsed.data.rows.map((row) => runBatchRow(row, pool, shared)));
+      const failed = rows.some((row) => 'error' in row);
+      res
+        .set('Cache-Control', failed ? 'no-store' : LISTINGS_CACHE_CONTROL)
+        .status(200)
+        .json({ rows });
     }),
   );
 

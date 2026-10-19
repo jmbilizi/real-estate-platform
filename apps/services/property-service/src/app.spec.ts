@@ -1002,6 +1002,7 @@ describe('GET /openapi.json', () => {
       '/analytics/events',
       '/home-feed',
       '/listings',
+      '/listings/batch',
       '/listings/brokers',
       '/listings/map',
       '/listings/meta',

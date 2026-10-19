@@ -2,6 +2,7 @@ export * from './common';
 export * from './area-polygon';
 export * from './search-request';
 export * from './listing-card';
+export * from './listings-batch';
 export * from './listing-detail';
 export * from './listing-inquiry';
 export * from './listing-suggest';
