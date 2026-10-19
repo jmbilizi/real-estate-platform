@@ -172,6 +172,24 @@ describe('proxyListingsRead server cache (#755)', () => {
     expect(fetchGateway).toHaveBeenCalledTimes(2);
   });
 
+  it('sends a body as a POST and caches by body (#960)', async () => {
+    fetchGateway.mockResolvedValue(okUpstream({ rows: [] }, 'public, max-age=60'));
+    const body = JSON.stringify({ rows: [{ id: 'a', params: { city: 'Rockville' } }] });
+    const other = JSON.stringify({ rows: [{ id: 'a', params: { city: 'Baltimore' } }] });
+
+    await proxyListingsRead('/batch', '', { cache: true, body });
+    await proxyListingsRead('/batch', '', { cache: true, body });
+    await proxyListingsRead('/batch', '', { cache: true, body: other });
+
+    expect(fetchGateway).toHaveBeenCalledTimes(2);
+    const [path, init] = fetchGateway.mock.calls[0] as [string, RequestInit];
+    expect(path).toBe('/property/listings/batch');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(body);
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+    expect(new Headers(init.headers).has('cookie')).toBe(false);
+  });
+
   it('keeps reads with different queries apart', async () => {
     fetchGateway.mockResolvedValue(okUpstream({ total: 3 }, 'public, max-age=60'));
 

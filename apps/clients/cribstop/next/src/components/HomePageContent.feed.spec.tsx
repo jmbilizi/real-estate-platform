@@ -3,13 +3,21 @@ import { pinClock, restoreClock } from '@/test/fixed-clock';
 import { renderWithClient } from '@/test/renderWithClient';
 import type { HomeFeedResponse } from '@cribstop/property-contracts';
 import { aListingCardRow } from '@/test/fixtures';
-import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
+import {
+  getListingsMeta,
+  getNeighborhoods,
+  searchListings,
+  searchListingsBatch,
+} from '@/lib/api/listings';
+import { batchFromSearch } from '@/test/batch-from-search';
 import { getHomeFeed } from '@/lib/api/home-feed';
 import { trackEvent } from '@/lib/analytics';
 import { bucketOf } from '@/lib/home-feed';
 import HomePageContent from './HomePageContent';
 
 jest.mock('@/lib/api/listings', () => ({
+  ...jest.requireActual('@/lib/api/listings'),
+  searchListingsBatch: jest.fn(),
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
   getNeighborhoods: jest.fn(),
@@ -88,13 +96,17 @@ function titles(container: HTMLElement): string[] {
   return [...container.querySelectorAll('h2')].map((h) => h.textContent ?? '');
 }
 
-// One render starts 9 row queries and 6 neighborhood queries. #938 found no request loop. A full run
+// One render starts one batch request and 6 neighborhood queries. #938 found no request loop. A full run
 // under load from other lanes took over 5 s for one render, so the test timeout stays at 20 s.
 jest.setTimeout(20_000);
 
 describe('HomePageContent home feed (#836)', () => {
   beforeEach(() => {
     pinClock();
+    (searchListingsBatch as jest.Mock).mockReset();
+    (searchListingsBatch as jest.Mock).mockImplementation(
+      batchFromSearch((query, signal) => (searchListings as jest.Mock)(query, signal)),
+    );
     mockSeenImpressions.clear();
     (getListingsMeta as jest.Mock).mockResolvedValue({
       dataUpdatedAt: '2026-04-20T18:00:00.000Z',
@@ -279,9 +291,47 @@ describe('HomePageContent home feed (#836)', () => {
     await settledTitles(<HomePageContent homeFeed={ON} />);
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(mockedGetHomeFeed).toHaveBeenCalledTimes(1);
-    // Nine home rows read one query each. The neighborhoods row reads six scopes.
-    expect(searchListings).toHaveBeenCalledTimes(9);
+    // The nine home rows share one batch request (#960). A home load sends at most 3 listing
+    // requests to the gateway: the batch, plus one for a signed-in visitor's saved-home row.
+    // The mocked batch fans out to the search mock itself, so only batch calls reach the gateway.
+    expect(searchListingsBatch).toHaveBeenCalledTimes(1);
+    expect((searchListingsBatch as jest.Mock).mock.calls.length).toBeLessThanOrEqual(3);
+    // The neighborhoods row reads six scopes.
     expect(getNeighborhoods).toHaveBeenCalledTimes(6);
+  });
+
+  it('sends no row search outside the batch (#960)', async () => {
+    const card = aListingCardRow();
+    (searchListingsBatch as jest.Mock).mockImplementation(async (rows: { id: string }[]) => ({
+      rows: rows.map(({ id }) => ({
+        id,
+        scope: {},
+        result: {
+          results: [card],
+          total: 1,
+          page: 1,
+          pageSize: 8,
+          pageCount: 1,
+          appliedFilters: {},
+        },
+      })),
+    }));
+    await settledTitles(<HomePageContent />);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(searchListingsBatch).toHaveBeenCalledTimes(1);
+    expect(searchListings).not.toHaveBeenCalled();
+    const [rows] = (searchListingsBatch as jest.Mock).mock.calls[0] as [{ id: string }[]];
+    expect(rows.map((r) => r.id)).toEqual([
+      'near-you-sale',
+      'near-you-rent',
+      'just-listed-sale',
+      'just-listed-rent',
+      'coming-soon-sale',
+      'coming-soon-rent',
+      'price-drops',
+      'price-sort-sale',
+      'price-sort-rent',
+    ]);
   });
 
   it('shows a skeleton with card rows while the feed loads', async () => {

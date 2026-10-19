@@ -1,6 +1,5 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { PROPERTY_TYPES } from '@cribstop/property-contracts';
 import type {
   HomeFeedResponse,
   NeighborhoodRow as NeighborhoodApiRow,
@@ -26,6 +25,17 @@ import { isPersonalisationEnabled, readItems } from '@/lib/feed-profile';
 import { useHomeTarget } from '@/lib/useHomeTarget';
 import { feedRowTitle, type HomeFeedFlags } from '@/lib/home-feed';
 import { useHomeFeed } from '@/lib/useHomeFeed';
+import {
+  CAROUSEL_PAGE_SIZE,
+  DEFAULT_PRICE_SORT,
+  homeBatchId,
+  HomeBatchProvider,
+  homeRowQuery,
+  PRICE_FLOOR,
+  type PriceSort,
+  SALE_HOME_TYPES,
+  useHomeBatchRow,
+} from '@/lib/home-batch';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import {
@@ -38,12 +48,6 @@ import {
  *  sale and rent, each as its own section. */
 type ListingSide = 'sale' | 'rent';
 
-/** Small — a carousel shows a handful of cards, never a full results page. */
-const CAROUSEL_PAGE_SIZE = 8;
-
-/** Rows that share a side and a target fetch this many extra cards, so a card an earlier row
- *  already shows can drop out and the row still fills (#873). */
-const DEDUPE_PAGE_SIZE = CAROUSEL_PAGE_SIZE + 7;
 /** A row left with fewer cards than this after the drop keeps its original cards. */
 const MIN_DEDUPED_CARDS = 4;
 /** Cards a row shows before "See all". */
@@ -194,16 +198,27 @@ type CarouselState = {
  * blocks or blanks the others — they render in parallel because each is an independent effect
  * fired on mount / whenever `query` changes, not a chain of awaits.
  */
-function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoading = false) {
+function useCarouselListings(
+  query: ListingSearchQuery,
+  skip = false,
+  skipLoading = false,
+  batchId?: string,
+) {
+  // #960. A row with a batch id reads the one home request. It runs its own search only when
+  // no batch answers for it.
+  const batch = useHomeBatchRow(skip ? undefined : batchId);
   // #755. A row shows a handful of cards and never pages, so it skips the exact match count.
   // `total` then holds the number of cards returned, which is all the rows below read.
   // No previous data is kept: old cards never stay under a new place title.
   const result = useQuery({
     ...searchResultsOptions({ ...query, skipTotal: true }, { keepPrevious: false }),
-    enabled: !skip,
+    enabled: !skip && batch === null,
   });
   const { refetch } = result;
-  const retry = useCallback(() => void refetch(), [refetch]);
+  const retry = useCallback(() => {
+    if (batch?.kind === 'failed') batch.refetch();
+    else void refetch();
+  }, [refetch, batch]);
 
   // No place to scope to (#363's near-you row, before the region resolves or once it resolves to
   // none): never fires an unscoped, platform-wide request. `skipLoading` tells the two `skip`
@@ -212,6 +227,19 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
   let state: CarouselState;
   if (skip) {
     state = { listings: [], total: 0, loading: skipLoading, failed: false };
+  } else if (batch) {
+    state =
+      batch.kind === 'pending'
+        ? { listings: [], total: 0, loading: true, failed: false }
+        : batch.kind === 'failed'
+          ? { listings: [], total: 0, loading: false, failed: true }
+          : {
+              listings: batch.result.results,
+              total: batch.result.total,
+              loading: false,
+              failed: false,
+              settledKey: JSON.stringify(query),
+            };
   } else if (result.isError && !result.data) {
     // A failed refetch keeps the last good cards (#955). Only a row with nothing to show fails.
     state = { listings: [], total: 0, loading: false, failed: true };
@@ -226,7 +254,11 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
   } else {
     state = { listings: [], total: 0, loading: true, failed: false };
   }
-  return { ...state, refetch: retry };
+  return {
+    ...state,
+    refetch: retry,
+    batchScope: batch?.kind === 'ready' ? batch.scope : undefined,
+  };
 }
 
 /** The place a target row queries: the city, then the whole state, then nowhere (platform-wide). */
@@ -250,19 +282,23 @@ function useTargetCarousel(
   base: ListingSearchQuery,
   place: InferredTarget | null,
   placeLoading: boolean,
+  batchId?: string,
 ) {
+  // #960. A batched row never widens here: the server widened it and reports the place it used.
+  const batched = useHomeBatchRow(placeLoading ? undefined : batchId) !== null;
   const placeKey = place ? `${place.city}|${place.state}` : '';
   const [fallback, setFallback] = useState({ placeKey, step: 0 });
-  const step = fallback.placeKey === placeKey ? fallback.step : 0;
-  const scope: CarouselScope = !place
+  const step = batched ? 0 : fallback.placeKey === placeKey ? fallback.step : 0;
+  const stepScope: CarouselScope = !place
     ? {}
     : step === 0
       ? { city: place.city, state: place.state }
       : step === 1
         ? { state: place.state }
         : {};
-  const query = { ...base, ...scope };
-  const result = useCarouselListings(query, placeLoading, placeLoading);
+  const query = { ...base, ...stepScope };
+  const result = useCarouselListings(query, placeLoading, placeLoading, batchId);
+  const scope: CarouselScope = result.batchScope ?? stepScope;
   // A failed query does not widen. The row shows its retry for that step.
   const empty =
     !placeLoading &&
@@ -270,7 +306,7 @@ function useTargetCarousel(
     !result.failed &&
     result.total === 0 &&
     result.settledKey === JSON.stringify(query);
-  const widening = empty && place !== null && step < 2;
+  const widening = !batched && empty && place !== null && step < 2;
 
   useEffect(() => {
     if (widening) setFallback({ placeKey, step: step + 1 });
@@ -450,9 +486,10 @@ function JustListedRow({
 }) {
   useTargetDebug(`just-listed-${side}`, place);
   const carousel = useTargetCarousel(
-    { sort: 'newly-listed', listingType: side, pageSize: DEDUPE_PAGE_SIZE },
+    homeRowQuery.justListed(side),
     place,
     placeLoading,
+    homeBatchId.justListed(side),
   );
   const { total, loading, failed, refetch, scope } = carousel;
   const listings = useDedupedListings(
@@ -511,15 +548,10 @@ function NearYouRow({
 }) {
   useTargetDebug(`near-you-${side}`, region);
   const near = useCarouselListings(
-    {
-      listingType: side,
-      city: region?.city,
-      state: region?.state,
-      sort: 'newest',
-      pageSize: DEDUPE_PAGE_SIZE,
-    },
+    homeRowQuery.nearYou(side, region),
     regionLoading || !region,
     regionLoading,
+    homeBatchId.nearYou(side),
   );
   const { total, loading } = near;
   const listings = useDedupedListings(
@@ -691,16 +723,10 @@ function ComingSoonRow({
   // Scoped to the home target even with no subtitle to name it. While the target resolves, the
   // row waits. With no target at all, it shows the platform-wide row.
   const { listings, total, loading, failed, refetch } = useCarouselListings(
-    {
-      status: ['Coming Soon'],
-      sort: 'newest',
-      listingType: side,
-      pageSize: CAROUSEL_PAGE_SIZE,
-      city: place?.city,
-      state: place?.state,
-    },
+    homeRowQuery.comingSoon(side, place),
     placeLoading,
     placeLoading,
+    homeBatchId.comingSoon(side),
   );
 
   const show = loading || total > 0 || failed;
@@ -735,14 +761,10 @@ function PriceDropsRow({
 }) {
   useTargetDebug('price-drops', place);
   const carousel = useTargetCarousel(
-    {
-      priceReduced: true,
-      sort: 'newly-listed',
-      listingType: 'sale',
-      pageSize: DEDUPE_PAGE_SIZE,
-    },
+    homeRowQuery.priceDrops(),
     place,
     placeLoading,
+    homeBatchId.priceDrops,
   );
   const { total, loading, failed, refetch, scope } = carousel;
   const listings = useDedupedListings(
@@ -771,8 +793,6 @@ function PriceDropsRow({
   );
 }
 
-type PriceSort = 'price-asc' | 'price-desc';
-
 /** Titles describe price only (Fair Housing). "Cheapest"/"Priciest" name the sort, never a place. */
 const PRICE_SORT_TITLE: Record<ListingSide, Record<PriceSort, string>> = {
   sale: { 'price-asc': 'Cheapest homes for sale', 'price-desc': 'Priciest homes for sale' },
@@ -783,13 +803,6 @@ const PRICE_SORT_OPTIONS: { value: PriceSort; label: string }[] = [
   { value: 'price-asc', label: 'Lowest' },
   { value: 'price-desc', label: 'Highest' },
 ];
-
-/** Data-quality floors, not budget caps. The feed holds placeholder prices (sale $500, rent $0)
- *  that would head the low-to-high rows. Real low prices sit above these (#478). */
-const PRICE_FLOOR: Record<ListingSide, number> = { sale: 5_000, rent: 200 };
-
-/** The sale row shows homes, not lots: `Land` at $999 headed the low-to-high row. */
-const SALE_HOME_TYPES = PROPERTY_TYPES.filter((type) => type !== 'Land');
 
 /**
  * Two-segment pill beside a row title. The active segment uses the app's one selected-chip style
@@ -843,21 +856,15 @@ function PriceSortRow({
   place: InferredTarget | null;
   placeLoading: boolean;
 }) {
-  const [sort, setSort] = useState<PriceSort>('price-asc');
+  const [sort, setSort] = useState<PriceSort>(DEFAULT_PRICE_SORT);
   useTargetDebug(`price-sort-${side}`, place);
 
+  // The batch carries the default sort. Another sort is a click, so it runs its own search.
   const { listings, total, loading, failed, refetch } = useCarouselListings(
-    {
-      listingType: side,
-      sort,
-      minPrice: PRICE_FLOOR[side],
-      ...(side === 'sale' ? { propertyType: SALE_HOME_TYPES } : {}),
-      pageSize: CAROUSEL_PAGE_SIZE,
-      city: place?.city,
-      state: place?.state,
-    },
+    homeRowQuery.priceSort(side, sort, place),
     placeLoading,
     placeLoading,
+    sort === DEFAULT_PRICE_SORT ? homeBatchId.priceSort(side) : undefined,
   );
 
   if (!loading && !failed && total === 0) return null;
@@ -1099,9 +1106,15 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
 
   return (
     <ShownProvider>
-      {body}
+      <HomeBatchProvider
+        place={region}
+        placeLoading={regionLoading}
+        enabled={feedState.status === 'off'}
+      >
+        {body}
 
-      {priceSortRows}
+        {priceSortRows}
+      </HomeBatchProvider>
 
       <ExploreNeighborhoodsRow region={region} regionLoading={regionLoading} />
 

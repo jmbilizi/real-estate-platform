@@ -7,6 +7,7 @@ import type {
   ListingCardRow,
   ListingDetail,
   ListingGroupsRequest,
+  ListingsBatchResponse,
   ListingsEnvelope,
   ListingsMeta,
   MapBounds,
@@ -129,8 +130,12 @@ export function retryAfterMsOf(value: string | null, now = Date.now()): number |
   return Number.isNaN(at) ? undefined : Math.max(0, at - now);
 }
 
-async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, { signal, headers: { Accept: 'application/json' } });
+async function getJson<T>(path: string, signal?: AbortSignal, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    signal,
+    ...init,
+    headers: { Accept: 'application/json', ...init?.headers },
+  });
   const body = await res.json().catch(() => null);
 
   // An abort during the body read fails `json()`, and `catch` hides it as a null body. Report the
@@ -182,6 +187,39 @@ export async function searchListings(
 ): Promise<ListingsEnvelope> {
   const params = toSearchParams(query).toString();
   return getJson<ListingsEnvelope>(`/api/listings${params ? `?${params}` : ''}`, signal);
+}
+
+/** One home row for `searchListingsBatch`: the typed query, and whether an empty place widens. */
+export interface ListingsBatchQuery {
+  id: string;
+  query: ListingSearchQuery;
+  widen?: boolean;
+}
+
+/**
+ * The home page rows in one request (#960). Each row is a `searchListings` query. With `widen`, the
+ * server repeats an empty city with its state, then with no place, and reports the place it used.
+ */
+export async function searchListingsBatch(
+  rows: ListingsBatchQuery[],
+  signal?: AbortSignal,
+): Promise<ListingsBatchResponse> {
+  const body = {
+    rows: rows.map(({ id, query, widen }) => {
+      const params: Record<string, string | string[]> = {};
+      const search = toSearchParams(query);
+      for (const key of new Set(search.keys())) {
+        const values = search.getAll(key);
+        params[key] = values.length === 1 ? (values[0] as string) : values;
+      }
+      return { id, params, widen: widen === true };
+    }),
+  };
+  return getJson<ListingsBatchResponse>('/api/listings/batch', signal, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 /**

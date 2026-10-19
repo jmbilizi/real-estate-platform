@@ -2,11 +2,20 @@ import { cleanup, configure, fireEvent, screen, waitFor } from '@testing-library
 import { pinClock, restoreClock } from '@/test/fixed-clock';
 import { renderWithClient } from '@/test/renderWithClient';
 import { aListingCardRow } from '@/test/fixtures';
-import { getListingsMeta, getNeighborhoods, searchListings } from '@/lib/api/listings';
+import {
+  getListingsMeta,
+  getNeighborhoods,
+  ListingsApiError,
+  searchListings,
+  searchListingsBatch,
+} from '@/lib/api/listings';
+import { batchFromSearch } from '@/test/batch-from-search';
 import { listRecentSavedHomes } from '@/lib/api/saved-homes';
 import HomePageContent from './HomePageContent';
 
 jest.mock('@/lib/api/listings', () => ({
+  ...jest.requireActual('@/lib/api/listings'),
+  searchListingsBatch: jest.fn(),
   searchListings: jest.fn(),
   getListingsMeta: jest.fn(),
   getNeighborhoods: jest.fn(),
@@ -121,6 +130,10 @@ describe('HomePageContent', () => {
 
   beforeEach(() => {
     pinClock();
+    (searchListingsBatch as jest.Mock).mockReset();
+    (searchListingsBatch as jest.Mock).mockImplementation(
+      batchFromSearch((query, signal) => (searchListings as jest.Mock)(query, signal)),
+    );
     mockedGetListingsMeta.mockResolvedValue({
       dataUpdatedAt: '2026-04-20T18:00:00.000Z',
       sources: ['internal'],
@@ -643,21 +656,18 @@ describe('HomePageContent', () => {
       for (let n = 1; n <= 14; n++) expect(drops.has(pid(n))).toBe(false);
     });
 
-    it('never makes a row wait on another row, and shows repeats until the earlier row resolves', async () => {
+    it('drops a card an earlier row shows once the batch lands (#873, #960)', async () => {
       mockRegionFetch({ city: 'Baltimore', state: 'MD' });
-      let resolveNear: (value: unknown) => void = () => undefined;
       mockedSearchListings.mockImplementation((q: Query) => {
-        if (q.listingType === 'sale' && rowKind(q) === 'near-you')
-          return new Promise((resolve) => (resolveNear = resolve));
-        if (q.listingType === 'sale' && rowKind(q) === 'just-listed')
+        if (q.listingType === 'sale' && ['near-you', 'just-listed'].includes(rowKind(q)))
           return Promise.resolve(envelope(cards(1, 15)));
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
       renderWithClient(<HomePageContent />);
 
-      await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(true));
-      resolveNear(envelope(cards(1, 15)));
+      // One batch answers every row at once, so no row waits on another row's own request.
+      await waitFor(() => expect(linksIn('Homes for sale near you').has(pid(1))).toBe(true));
       await waitFor(() => expect(linksIn('Newest homes for sale').has(pid(1))).toBe(false));
       expect(linksIn('Newest homes for sale').has(pid(8))).toBe(true);
     });
@@ -1245,6 +1255,50 @@ describe('HomePageContent', () => {
 
       expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
+    });
+  });
+
+  describe('one batch request for the rows (#960)', () => {
+    it('runs one search per row when the gateway has no batch route (404)', async () => {
+      (searchListingsBatch as jest.Mock).mockRejectedValue(
+        new ListingsApiError('missing', 'internal_error', 404),
+      );
+
+      renderWithClient(<HomePageContent />);
+
+      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+      await waitFor(() => expect(mockedSearchListings.mock.calls.length).toBeGreaterThanOrEqual(7));
+    });
+
+    it('keeps the rows out of the individual path while a batch fails with a server error', async () => {
+      (searchListingsBatch as jest.Mock).mockRejectedValue(
+        new ListingsApiError('down', 'upstream_unavailable', 503),
+      );
+
+      renderWithClient(<HomePageContent />);
+
+      await waitFor(() => expect(searchListingsBatch).toHaveBeenCalled());
+      await screen.findByText('Newest homes for sale');
+      expect(mockedSearchListings).not.toHaveBeenCalled();
+    });
+
+    it('links See all to the place the server used after it widened', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      (searchListingsBatch as jest.Mock).mockImplementation(async (rows: { id: string }[]) => ({
+        rows: rows.map(({ id }) => ({
+          id,
+          scope: id === 'price-drops' ? { state: 'MD' } : { city: 'Baltimore', state: 'MD' },
+          result: envelope([aListingCardRow()]),
+        })),
+      }));
+
+      renderWithClient(<HomePageContent />);
+
+      const title = await screen.findByText('Price drops on homes for sale');
+      const hrefOf = () =>
+        title.closest('section')?.querySelector('a[href*="priceReduced"]')?.getAttribute('href');
+      await waitFor(() => expect(hrefOf()).toContain('state=MD'));
+      expect(hrefOf()).not.toContain('city=');
     });
   });
 });
