@@ -1,0 +1,78 @@
+name: Dev Availability Probe
+
+# #963: measures dev availability from a GitHub runner. The workstation cannot reach the dev host,
+# and a workstation probe spends the developer's per-IP gateway quota.
+# The probe only sends GET requests. It reads five targets: the web home page, `/api/health`, the
+# home-row read through the web proxy, the same read on the gateway, and one listing detail.
+# Logic and unit tests: `tools/ci/availability-probe.js`.
+#
+# `DEV_BASIC_AUTH` is the plaintext dev ingress credential ("user:password") in the GitHub `dev`
+# environment. `INGRESS_AUTH` holds only the htpasswd hash and cannot sign in.
+#
+# `workflow_dispatch` runs only from the default branch (dev). The first run needs this file
+# merged first. `actions: write` is only for the optional deploy dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        description: "Probe length in seconds (1-3600). Use 900 or more with with_deploy."
+        required: true
+        type: number
+        default: 600
+      interval_seconds:
+        description: "Seconds between rounds (minimum 2)"
+        required: true
+        type: number
+        default: 2
+      with_deploy:
+        description: "Dispatch a dev deploy 30 s after the probe starts"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: dev-availability-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 75
+    env:
+      CRIBSTOP_DOMAIN: ${{ secrets.CRIBSTOP_DOMAIN }}
+      API_GATEWAY_DOMAIN: ${{ secrets.API_GATEWAY_DOMAIN }}
+      DEV_BASIC_AUTH: ${{ secrets.DEV_BASIC_AUTH }}
+      DURATION_SECONDS: ${{ inputs.duration_seconds }}
+      INTERVAL_SECONDS: ${{ inputs.interval_seconds }}
+      WITH_DEPLOY: ${{ inputs.with_deploy }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.5"
+
+      - name: Probe dev
+        run: |
+          if [ "$WITH_DEPLOY" = "true" ]; then
+            export DEPLOY_AT_SECONDS=30
+          fi
+          node tools/ci/availability-probe.js &
+          PROBE_PID=$!
+          if [ "$WITH_DEPLOY" = "true" ]; then
+            sleep 30
+            gh workflow run deploy-k8s-resources.yml \
+              --repo "${{ github.repository }}" \
+              --ref dev \
+              --field environment=dev
+            echo "Dev deploy dispatched."
+          fi
+          wait "$PROBE_PID"
