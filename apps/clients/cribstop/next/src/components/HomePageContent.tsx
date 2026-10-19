@@ -212,7 +212,8 @@ function useCarouselListings(query: ListingSearchQuery, skip = false, skipLoadin
   let state: CarouselState;
   if (skip) {
     state = { listings: [], total: 0, loading: skipLoading, failed: false };
-  } else if (result.isError) {
+  } else if (result.isError && !result.data) {
+    // A failed refetch keeps the last good cards (#955). Only a row with nothing to show fails.
     state = { listings: [], total: 0, loading: false, failed: true };
   } else if (result.data) {
     state = {

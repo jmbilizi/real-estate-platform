@@ -29,11 +29,17 @@ namespace ApiGateway.Middleware
         public const string ErrorMessage = "Too many requests. Please try again shortly.";
 
         /// <summary>
-        /// The exact string <c>Configuration/Ocelot.Settings.json</c>'s
-        /// <c>RateLimitOptions.QuotaExceededMessage</c> must hold. A gateway test asserts the two
-        /// never drift apart.
+        /// The body a client receives at 429.
         /// </summary>
         public const string ResponseBody = "{\"error\":{\"code\":\"" + ErrorCode + "\",\"message\":\"" + ErrorMessage + "\"}}";
+
+        /// <summary>
+        /// The exact string <c>Configuration/Ocelot.Settings.json</c>'s
+        /// <c>RateLimitOptions.QuotaExceededMessage</c> must hold. Ocelot 24 passes it to
+        /// <c>string.Format</c>, so every brace is doubled. A bare brace throws a
+        /// <c>FormatException</c> and turns the 429 into an empty 500 (#955).
+        /// </summary>
+        public const string QuotaExceededMessage = "{{\"error\":{{\"code\":\"" + ErrorCode + "\",\"message\":\"" + ErrorMessage + "\"}}}}";
 
         /// <summary>
         /// The status Ocelot's rate limiter must be configured to use.
