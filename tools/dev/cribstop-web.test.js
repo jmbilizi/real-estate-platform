@@ -13,6 +13,8 @@ const {
   resolvePrimaryCheckout,
   selectEnvLocalPath,
   readEnvKeyNames,
+  isLoopbackHost,
+  assembleLocalEnv,
 } = require('./cribstop-web');
 
 function tempDir(prefix) {
@@ -214,5 +216,45 @@ test('process.loadEnvFile lets a variable already set in the shell win', () => {
   } finally {
     delete process.env[name];
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- local mode (#967) ---------------------------------------------------------------------
+
+test('isLoopbackHost accepts loopback names and addresses only', () => {
+  for (const host of ['localhost', 'LOCALHOST', '127.0.0.1', '127.1.2.3', '::1', '[::1]']) {
+    assert.equal(isLoopbackHost(host), true, host);
+  }
+  for (const host of [
+    'host.example.test',
+    'api-gateway-svc',
+    '10.0.0.5',
+    '127.0.0.1.example.test',
+    '',
+    null,
+  ]) {
+    assert.equal(isLoopbackHost(host), false, String(host));
+  }
+});
+
+test('assembleLocalEnv defaults to localhost:8080 and clears basic auth', () => {
+  const { env, error } = assembleLocalEnv({ API_GATEWAY_BASIC_AUTH: 'fake:fake', PATH: 'x' });
+  assert.equal(error, undefined);
+  assert.equal(env.API_GATEWAY_URL, 'http://localhost:8080');
+  assert.equal(env.API_GATEWAY_BASIC_AUTH, '');
+  assert.equal(env.PATH, 'x');
+});
+
+test('assembleLocalEnv keeps a loopback URL from the shell', () => {
+  const { env } = assembleLocalEnv({ API_GATEWAY_URL: 'http://127.0.0.1:9090' });
+  assert.equal(env.API_GATEWAY_URL, 'http://127.0.0.1:9090');
+});
+
+test('assembleLocalEnv refuses a non-loopback host without printing it', () => {
+  for (const url of ['https://gateway.example.test', 'not a url']) {
+    const result = assembleLocalEnv({ API_GATEWAY_URL: url });
+    assert.equal(result.env, undefined);
+    assert.ok(result.error);
+    assert.ok(!result.error.includes('example.test'));
   }
 });

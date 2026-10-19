@@ -19,6 +19,10 @@
  * When the app directory already has its own `.env.local`, this changes nothing: Next.js loads it
  * as it always has.
  *
+ * Local mode (#967): `pnpm run cribstop:web:local` (`--local`) is the only mode agents run. It
+ * never loads a `.env.local`, sets the gateway to `localhost:8080`, clears the basic-auth
+ * credential, and refuses to start if the resolved gateway host is not loopback.
+ *
  * Casing fix (#440): an agent worktree's shell can start with `c:` or `C:`. Windows paths are
  * case-insensitive but not case-preserving, so the two casings resolve to the same directory but
  * are different strings. Node's module cache keys on the string, not the real path, so a `cwd`
@@ -110,6 +114,38 @@ function readEnvKeyNames(envFilePath) {
   return keys;
 }
 
+const LOCAL_GATEWAY_URL = 'http://localhost:8080';
+
+/** True only for a loopback host name or address. */
+function isLoopbackHost(hostname) {
+  const host = String(hostname || '')
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
+  return host === 'localhost' || host === '::1' || /^127(\.\d{1,3}){3}$/.test(host);
+}
+
+/**
+ * Builds the child env for local mode. Pure. Returns `{ env }`, or `{ error }` when the resolved
+ * gateway host is not loopback. The error never contains the URL value.
+ */
+function assembleLocalEnv(baseEnv) {
+  const gatewayUrl = baseEnv.API_GATEWAY_URL || LOCAL_GATEWAY_URL;
+  let hostname = null;
+  try {
+    hostname = new URL(gatewayUrl).hostname;
+  } catch {
+    // An unparsable URL fails the loopback check below.
+  }
+  if (!isLoopbackHost(hostname)) {
+    return {
+      error:
+        'API_GATEWAY_URL in this shell does not name a loopback host. Local mode refuses to ' +
+        'start. Unset API_GATEWAY_URL or use http://localhost:8080.',
+    };
+  }
+  return { env: { ...baseEnv, API_GATEWAY_URL: gatewayUrl, API_GATEWAY_BASIC_AUTH: '' } };
+}
+
 /** Load the primary checkout's `.env.local` into this process, if there is one to load. */
 function loadPrimaryEnvLocal(cwd) {
   const appEnvLocalPath = path.join(cwd, APP_ENV_LOCAL_RELATIVE);
@@ -149,13 +185,25 @@ function main() {
   }
   process.chdir(canonicalWorkspaceRoot);
 
-  loadPrimaryEnvLocal(canonicalWorkspaceRoot);
+  let childEnv = process.env;
+  if (process.argv.includes('--local')) {
+    const local = assembleLocalEnv(process.env);
+    if (local.error) {
+      console.error(`[cribstop:web] ${local.error}`);
+      process.exit(1);
+    }
+    childEnv = local.env;
+    console.log(`[cribstop:web] Local mode: gateway ${childEnv.API_GATEWAY_URL}`);
+  } else {
+    loadPrimaryEnvLocal(canonicalWorkspaceRoot);
+    childEnv = process.env;
+  }
 
   const result = spawnSync('pnpm', ['exec', 'nx', 'serve', 'cribstop-web'], {
     cwd: canonicalWorkspaceRoot,
     stdio: 'inherit',
     shell: true,
-    env: { ...process.env, NX_WORKSPACE_ROOT_PATH: canonicalWorkspaceRoot },
+    env: { ...childEnv, NX_WORKSPACE_ROOT_PATH: canonicalWorkspaceRoot },
   });
 
   process.exit(result.status ?? 1);
@@ -172,4 +220,6 @@ module.exports = {
   resolvePrimaryCheckout,
   selectEnvLocalPath,
   readEnvKeyNames,
+  isLoopbackHost,
+  assembleLocalEnv,
 };

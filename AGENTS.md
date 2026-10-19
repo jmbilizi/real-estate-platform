@@ -167,7 +167,8 @@ pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:di
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
 pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
 pnpm run infra:validate:dev            # Kustomize validation per env
-pnpm run cribstop:web                  # Frontend-only work: run against dev gateway, see cribstop AGENTS.md
+pnpm run cribstop:web:local            # Agents: web app on the local gateway (localhost:8080)
+pnpm run cribstop:web                  # Humans only: loads .env.local, may point at dev
 ```
 
 ## Layout
