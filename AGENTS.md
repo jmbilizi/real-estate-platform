@@ -119,6 +119,11 @@ guide.
     skaffold, and deploy-control. Everything is `"private": true`; internal dependencies are
     `workspace:*`.
 
+13. **Agents never send a request to a deployed host.** Dev, test and prod gateways, ingresses and
+    sites are off limits from the workstation (stakeholder rule, 2026-10-19; a SecOps hook blocks
+    it). Verify with specs, mocked data, or the local cluster. Read dev state only through GitHub
+    workflows on env branches, such as `.github/workflows/dev-service-logs.yml`.
+
 ## Writing Standard (ASD-STE100)
 
 Every agent writes in Simplified Technical English. The rules that matter most here:
@@ -167,7 +172,7 @@ pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:di
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
 pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
 pnpm run infra:validate:dev            # Kustomize validation per env
-pnpm run cribstop:web                  # Frontend-only work: run against dev gateway, see cribstop AGENTS.md
+pnpm run cribstop:web                  # Frontend work: local gateway on localhost:8080, see cribstop AGENTS.md
 ```
 
 ## Layout
