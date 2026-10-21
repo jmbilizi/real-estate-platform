@@ -250,6 +250,9 @@ sign-offs — and those get a `human-action` ticket, not a question.
 Subagent lanes inherit none of this knowledge — when an implementation or verification lane needs a
 running stack, put the exact commands (and the services-vs-clients split) in its prompt.
 
+Agents never send a request to a deployed host (dev, test, prod). Tell every lane to verify with
+specs, mocked data, or the local cluster only.
+
 ## Tickets you create
 
 You file tickets too — exactly two kinds:
