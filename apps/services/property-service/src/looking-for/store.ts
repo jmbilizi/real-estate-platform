@@ -71,6 +71,15 @@ export async function deleteLookingFor(
   ]);
 }
 
+/** Account deletion (#803). Idempotent: an account with no rows changes nothing. */
+export async function eraseAccountLookingFor(db: ReadClient, accountId: string): Promise<number> {
+  const result = await db.query<{ id: string }>(
+    'DELETE FROM looking_for_preferences WHERE account_id = $1 RETURNING id',
+    [accountId],
+  );
+  return result.rows.length;
+}
+
 export type UpsertOutcome =
   | { kind: 'created'; item: LookingFor }
   | { kind: 'replaced'; item: LookingFor }

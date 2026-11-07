@@ -7,6 +7,7 @@ import {
 import { toOpenApiDocument } from './openapi/openapi';
 import { createAnalyticsPool, getPool } from './db/pool';
 import { createGalleryLoader, type GalleryLoader } from './listings/gallery-loader';
+import { createAccountErasureRouter } from './account-erasure/routes';
 import { createListingsRouter } from './listings/routes';
 import { createHomeFeedRouter } from './home-feed/routes';
 import { createAddressLoader } from './listings/address-loader';
@@ -177,6 +178,8 @@ export interface CreateAppOptions {
   analyticsSinks?: AnalyticsSink[];
   /** The admin sync token (#338). Defaults to reading BRIGHT_ADMIN_TOKEN per request. */
   adminToken?: () => string | undefined;
+  /** The internal key for `/internal/*` (#803). Defaults to reading ACCOUNT_SERVICE_INTERNAL_KEY. */
+  internalKey?: () => string | undefined;
 }
 
 /**
@@ -249,6 +252,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   app.use(createHomeFeedRouter(pool));
   app.use(createSavedHomesRouter({ pool, introspection }));
   app.use(createLookingForRouter({ pool, introspection }));
+  app.use(createAccountErasureRouter({ pool, internalKey: options.internalKey }));
   app.use(
     createAnalyticsRouter({
       pool: options.pool === undefined ? (createAnalyticsPool() as unknown as ReadPool) : pool,

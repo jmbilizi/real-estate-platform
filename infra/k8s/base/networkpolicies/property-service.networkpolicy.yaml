@@ -1,5 +1,5 @@
-# #269: only api-gateway may reach property-service. The inquiry rate limit (#131) keys on
-# X-Real-IP, and the gateway is the only caller that sets it. Kubelet probes come from the node
+# #269: only api-gateway and account-service (#803) may reach property-service. The inquiry rate
+# limit (#131) keys on X-Real-IP, and the gateway is the only public caller that sets it. Kubelet probes come from the node
 # and the policy allows them. No ingress-nginx rule: the Ingress targets api-gateway-svc.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -18,6 +18,10 @@ spec:
         - podSelector:
             matchLabels:
               app: api-gateway
+        # #803: account-service calls the internal erasure route.
+        - podSelector:
+            matchLabels:
+              app: account-service
       ports:
         - protocol: TCP
           port: 3002
