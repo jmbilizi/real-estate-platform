@@ -798,6 +798,22 @@ the Property API document. Never publish a second document.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
 
+## Account erasure (`src/account-erasure/`, #803)
+
+`DELETE /internal/account/:accountId/data`. account-service calls it after an account delete. It
+removes the account's `saved_homes` and `looking_for_preferences` rows through `eraseAccount*` in
+each table's `store.ts`.
+
+- It needs the `X-Internal-Key` header. The key is `ACCOUNT_SERVICE_INTERNAL_KEY`, the secret
+  account-service already holds. No usable key (unset, under 32 characters, or the placeholder)
+  means `401` for every call. A bad id answers `400`.
+- It is idempotent. A repeat call, or an account with no rows, answers `200` with zero counts.
+- It has no gateway route (`InternalRoutesNotExposedTests`) and is absent from `/openapi.json`.
+  `property-service.networkpolicy.yaml` admits `account-service` for it.
+- Other account-keyed data stays. `listing_inquiries`, lead notes and the lead audit are retained
+  under PRD §6.4 (3-year lead retention, then anonymize). `analytics_account_links`,
+  `agent_profiles`, agent assignments and `notification_outbox` need a follow-up ticket.
+
 ## Home feed (`src/home-feed/`)
 
 `POST /home-feed` (#835). The gateway exposes it as `POST /property/home-feed`. It ranks the home
