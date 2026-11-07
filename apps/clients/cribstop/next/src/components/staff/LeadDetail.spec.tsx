@@ -48,6 +48,7 @@ const lead = (over: Partial<StaffLeadDetail> = {}): StaffLeadDetail => ({
     status: 'Active',
   },
   possibleDuplicate: true,
+  needsReassignment: false,
   duplicateLeadIds: ['33333333-3333-4333-8333-333333333333'],
   history: [
     {
@@ -105,6 +106,18 @@ describe('LeadDetail', () => {
     expect(screen.getByText('Verified account')).toBeInTheDocument();
     expect(screen.getByText('v1')).toBeInTheDocument();
     expect(screen.getByText('Status history')).toBeInTheDocument();
+  });
+
+  it('shows the Needs reassignment badge only when the open agent is deactivated (#1007)', async () => {
+    await open();
+    expect(screen.queryByText('Needs reassignment')).toBeNull();
+  });
+
+  it('shows the Needs reassignment badge for a deactivated agent (#1007)', async () => {
+    fetchLead.mockResolvedValue(lead({ needsReassignment: true }));
+    render(<LeadDetail id={ID} />);
+    await screen.findByRole('heading', { name: 'Sam Rivera' });
+    expect(screen.getByText('Needs reassignment')).toBeInTheDocument();
   });
 
   it('shows the Fair Housing hint beside the note field', async () => {

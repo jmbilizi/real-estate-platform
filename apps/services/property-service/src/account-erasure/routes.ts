@@ -3,7 +3,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { type NextFunction, type Request, type Response, Router } from 'express';
 
 import { eraseAccountAnalyticsLinks } from '../analytics/account-link';
-import type { ReadClient } from '../listings/repository';
+import type { TransactionalPool } from '../inquiries/lead-status-write';
+import type { Queryable } from '../inquiries/write';
 import { eraseAccountLookingFor } from '../looking-for/store';
 import { eraseAccountSavedHomes } from '../saved/store';
 import { eraseAccountAgent } from '../staff/agents-store';
@@ -15,10 +16,11 @@ import { eraseAccountOutbox } from './outbox-erasure';
  * `analytics_account_links` rows and its unsent `notification_outbox` rows. Sent outbox rows lose
  * the recipient id and stay. The agent profile is pseudonymised, never deleted: it loses its
  * account link and becomes inactive, and keeps name, licence and brokerage for the 5-year
- * brokerage record (MD BOP 17-507, VA 18VAC135-20-185).
+ * brokerage record (MD BOP 17-507, VA 18VAC135-20-185). Its open `assigned` and `accepted` leads
+ * return to `verified` in the same transaction (#1007). Later statuses keep the assignment.
  *
- * Retained by PRD §6.4, not touched here: `listing_inquiries`, lead notes, `lead_assignments` and
- * lead audit (`lead_status_events`). They record a regulated lead history.
+ * Retained by PRD §6.4, never deleted here: `listing_inquiries`, lead notes, `lead_assignments`
+ * and lead audit (`lead_status_events`). They record a regulated lead history.
  *
  * In-cluster only: no gateway route reaches `/internal` (`InternalRoutesNotExposedTests`) and the
  * document at `/openapi.json` does not list it. The `X-Internal-Key` header carries the same
@@ -49,7 +51,7 @@ export function isInternalKeyValid(presented: string | undefined, key: string | 
 }
 
 export interface AccountErasureDeps {
-  pool: ReadClient;
+  pool: Queryable & TransactionalPool;
   /** Defaults to reading `ACCOUNT_SERVICE_INTERNAL_KEY` per request. */
   internalKey?: () => string | undefined;
 }

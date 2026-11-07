@@ -20,7 +20,12 @@ import {
   STATUS_LABEL,
   telHref,
 } from '@/lib/staff-leads';
-import { DuplicateBadge, StatusBadge, VerifiedAccountBadge } from './LeadBadges';
+import {
+  DuplicateBadge,
+  NeedsReassignmentBadge,
+  StatusBadge,
+  VerifiedAccountBadge,
+} from './LeadBadges';
 import { AssignAgentSheet, UnassignSheet } from './AgentSheets';
 import { LeadDetailSkeleton } from './LeadSkeletons';
 import { ErrorLine, LINK, NoteField, Section } from './StaffFields';
@@ -263,6 +268,7 @@ export default function LeadDetail({ id }: { id: string }) {
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <StatusBadge status={lead.status} />
           {lead.possibleDuplicate && <DuplicateBadge />}
+          {lead.needsReassignment && <NeedsReassignmentBadge />}
           {lead.verifiedAccount && <VerifiedAccountBadge />}
           <span className="text-sm text-ink-muted">
             {KIND_LABEL[lead.kind]} · {formatDateTime(lead.createdAt)}

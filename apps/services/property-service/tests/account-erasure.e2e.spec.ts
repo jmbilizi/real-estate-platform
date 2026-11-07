@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import axios from 'axios';
 import { closePool, getPool } from '../src/db/pool';
+import type { ContactsClient } from '../src/inquiries/account-contacts';
+import { listLeads, readLeadDetail } from '../src/staff/leads-store';
 import { complianceFixtureIds } from './support/fixture-ids';
 
 /**
@@ -24,11 +26,11 @@ const one = async <T>(sql: string, values: unknown[]): Promise<T | undefined> =>
 
 const seededLeads: string[] = [];
 
-async function seedLead(): Promise<string> {
+async function seedLead(status = 'assigned'): Promise<string> {
   const row = await one<{ id: string }>(
     `INSERT INTO listing_inquiries (listing_id, kind, message, status, account_id)
-     VALUES ($1, 'message', 'Hello (e2e)', 'assigned', $2) RETURNING id`,
-    [listing, randomUUID()],
+     VALUES ($1, 'message', 'Hello (e2e)', $3, $2) RETURNING id`,
+    [listing, randomUUID(), status],
   );
   if (!row) throw new Error('seed failed');
   seededLeads.push(row.id);
@@ -108,6 +110,7 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       notificationOutboxAnonymised: 1,
       agentProfilesPseudonymised: 1,
       leadAssignmentsKept: 2,
+      leadsReturnedToQueue: 2,
     });
 
     const links = await pool().query(
@@ -158,8 +161,110 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       notificationOutboxAnonymised: 0,
       agentProfilesPseudonymised: 0,
       leadAssignmentsKept: 0,
+      leadsReturnedToQueue: 0,
     });
     expect(await one<ProfileRow>(PROFILE_SQL, [profileId])).toEqual(after);
+  });
+
+  it('returns assigned and accepted leads to verified and flags a touring lead (#1007)', async () => {
+    const account = randomUUID();
+    const profile = await one<{ id: string }>(
+      `INSERT INTO agent_profiles (account_id, display_name, licence_number, licence_states)
+       VALUES ($1, 'E2E Agent', 'E2E-4', ARRAY['ZZ']) RETURNING id`,
+      [account],
+    );
+    const profileId = profile?.id ?? '';
+    const leads = {
+      assigned: await seedLead('assigned'),
+      accepted: await seedLead('accepted'),
+      touring: await seedLead('touring'),
+      closed: await seedLead('closed'),
+    };
+    for (const [status, lead] of Object.entries(leads)) {
+      const isClosed = status === 'closed';
+      await pool().query(
+        `INSERT INTO lead_assignments
+           (lead_id, agent_profile_id, assigned_by_account_id, ended_at, end_reason)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [lead, profileId, randomUUID(), isClosed ? new Date() : null, isClosed ? 'closed' : null],
+      );
+      await pool().query(
+        `INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role, agent_profile_id)
+         VALUES ($1, 'verified', $2, 'staff', $3)`,
+        [lead, status, profileId],
+      );
+    }
+    const ids = Object.values(leads);
+    const EVENTS_SQL = `SELECT id, lead_id, from_status, to_status, actor_account_id, actor_role,
+                               note, agent_profile_id, created_at
+                          FROM lead_status_events WHERE lead_id = ANY($1::uuid[])
+                         ORDER BY created_at, id`;
+    const eventsBefore = (await pool().query(EVENTS_SQL, [ids])).rows;
+
+    const res = await erase(account);
+    expect(res.status).toBe(200);
+    expect(res.data).toMatchObject({ agentProfilesPseudonymised: 1, leadsReturnedToQueue: 2 });
+
+    const statuses = await pool().query<{ id: string; status: string }>(
+      'SELECT id, status FROM listing_inquiries WHERE id = ANY($1::uuid[])',
+      [ids],
+    );
+    const statusOf = (id: string) => statuses.rows.find((row) => row.id === id)?.status;
+    expect(statusOf(leads.assigned)).toBe('verified');
+    expect(statusOf(leads.accepted)).toBe('verified');
+    expect(statusOf(leads.touring)).toBe('touring');
+    expect(statusOf(leads.closed)).toBe('closed');
+
+    const eventsAfter = (await pool().query(EVENTS_SQL, [ids])).rows;
+    expect(eventsAfter).toHaveLength(eventsBefore.length + 2);
+    for (const before of eventsBefore) expect(eventsAfter).toContainEqual(before);
+    for (const [lead, from] of [
+      [leads.assigned, 'assigned'],
+      [leads.accepted, 'accepted'],
+    ]) {
+      expect(eventsAfter).toContainEqual(
+        expect.objectContaining({
+          lead_id: lead,
+          from_status: from,
+          to_status: 'verified',
+          actor_account_id: null,
+          actor_role: 'system',
+          note: 'agent account erased',
+          agent_profile_id: profileId,
+        }),
+      );
+    }
+
+    const open = await pool().query<{ lead_id: string }>(
+      'SELECT lead_id FROM lead_assignments WHERE lead_id = ANY($1::uuid[]) AND ended_at IS NULL',
+      [ids],
+    );
+    expect(open.rows).toEqual([{ lead_id: leads.touring }]);
+    const returned = await pool().query<{ end_reason: string }>(
+      'SELECT end_reason FROM lead_assignments WHERE lead_id = ANY($1::uuid[])',
+      [[leads.assigned, leads.accepted]],
+    );
+    expect(returned.rows).toEqual([{ end_reason: 'returned' }, { end_reason: 'returned' }]);
+
+    const contacts: ContactsClient = { lookup: () => Promise.resolve(new Map()) };
+    const detail = await readLeadDetail(pool(), contacts, leads.touring, {
+      accountId: randomUUID(),
+      role: 'Admin',
+    });
+    expect(detail?.needsReassignment).toBe(true);
+    const page = await listLeads(pool(), contacts, {
+      filters: { listingId: listing },
+      limit: 50,
+      cursor: null,
+    });
+    const flagged = new Map(page.results.map((row) => [row.id, row.needsReassignment]));
+    expect(flagged.get(leads.touring)).toBe(true);
+    expect(flagged.get(leads.closed)).toBe(false);
+    expect(flagged.get(leads.assigned)).toBe(false);
+
+    const repeat = await erase(account);
+    expect(repeat.data).toMatchObject({ agentProfilesPseudonymised: 0, leadsReturnedToQueue: 0 });
+    expect((await pool().query(EVENTS_SQL, [ids])).rows).toEqual(eventsAfter);
   });
 
   it('refuses to reactivate a pseudonymised profile', async () => {

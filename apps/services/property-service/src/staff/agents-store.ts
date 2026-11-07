@@ -5,6 +5,10 @@ import {
   type StaffAgentsRequest,
   type UpdateAgentProfileRequest,
 } from '@cribstop/property-contracts';
+import {
+  changeLeadStatusInTransaction,
+  type TransactionalPool,
+} from '../inquiries/lead-status-write';
 import type { Queryable } from '../inquiries/write';
 
 /** Reads and writes for the agent directory (#634). */
@@ -178,32 +182,100 @@ export async function hasOpenAssignment(client: Queryable, leadId: string): Prom
   return rows.length > 0;
 }
 
+export const AGENT_ERASED_NOTE = 'agent account erased';
+
+export interface AgentErasureResult {
+  agentProfilesPseudonymised: number;
+  leadAssignmentsKept: number;
+  leadsReturnedToQueue: number;
+}
+
 /**
- * Account deletion (#992). Pseudonymises the agent profile of the account and never deletes it.
- * The brokerage record keeps the licensee for 5 years (MD BOP 17-507, VA 18VAC135-20-185). The row
- * keeps `display_name`, `licence_number`, `licence_states`, `brokerage` and the dates. It loses
+ * Account deletion (#992, #1007). Pseudonymises the agent profile of the account and never deletes
+ * it. The brokerage record keeps the licensee for 5 years (MD BOP 17-507, VA 18VAC135-20-185). The
+ * row keeps `display_name`, `licence_number`, `licence_states`, `brokerage` and the dates. It loses
  * the `account_id` link, so no login maps to it, and becomes inactive with `deactivated_at` set.
- * `lead_assignments` and `lead_status_events` keep `agent_profile_id`. One statement gives the
- * counts. A second call finds no linked profile and changes nothing.
+ * `lead_assignments` and `lead_status_events` keep `agent_profile_id`.
+ *
+ * In the same transaction, each lead still `assigned` or `accepted` with this agent returns to
+ * `verified` through `changeLeadStatusInTransaction`: system actor, end reason `returned`, one
+ * appended event. Later statuses have no transition to `verified`, so they keep the assignment and
+ * staff see `needsReassignment`. The profile update runs first, so a concurrent assign waits for it
+ * and does not open an assignment on a profile this call missed. A second call finds no linked
+ * profile and changes nothing.
  */
 export async function eraseAccountAgent(
-  db: Queryable,
+  pool: TransactionalPool,
   accountId: string,
-): Promise<{ agentProfilesPseudonymised: number; leadAssignmentsKept: number }> {
-  const result = await db.query<{ profiles: number; assignments: number }>(
-    `WITH scrubbed AS (
-       UPDATE agent_profiles
+): Promise<AgentErasureResult> {
+  const client = await pool.connect();
+  let releaseError: Error | undefined;
+  try {
+    await client.query('BEGIN');
+    const scrubbed = await client.query<{ id: string }>(
+      `UPDATE agent_profiles
           SET account_id = NULL, active = false, deactivated_at = now()
         WHERE account_id = $1
-        RETURNING id)
-     SELECT (SELECT count(*) FROM scrubbed)::int AS profiles,
-            (SELECT count(*) FROM lead_assignments
-              WHERE agent_profile_id IN (SELECT id FROM scrubbed))::int AS assignments`,
-    [accountId],
-  );
-  const row = result.rows[0];
-  return {
-    agentProfilesPseudonymised: row?.profiles ?? 0,
-    leadAssignmentsKept: row?.assignments ?? 0,
-  };
+        RETURNING id`,
+      [accountId],
+    );
+    const profileIds = scrubbed.rows.map((row) => row.id);
+    if (profileIds.length === 0) {
+      await client.query('COMMIT');
+      return { agentProfilesPseudonymised: 0, leadAssignmentsKept: 0, leadsReturnedToQueue: 0 };
+    }
+
+    const kept = await client.query<{ count: number }>(
+      'SELECT count(*)::int AS count FROM lead_assignments WHERE agent_profile_id = ANY($1::uuid[])',
+      [profileIds],
+    );
+    // Ordered by lead id, so two erasures that share a lead lock in the same order.
+    const open = await client.query<{ lead_id: string; agent_profile_id: string }>(
+      `SELECT a.lead_id, a.agent_profile_id
+         FROM lead_assignments a
+         JOIN listing_inquiries i ON i.id = a.lead_id
+        WHERE a.agent_profile_id = ANY($1::uuid[]) AND a.ended_at IS NULL
+          AND i.status IN ('assigned', 'accepted')
+        ORDER BY a.lead_id`,
+      [profileIds],
+    );
+    let returned = 0;
+    for (const row of open.rows) {
+      const result = await changeLeadStatusInTransaction(client, {
+        leadId: row.lead_id,
+        to: 'verified',
+        actorAccountId: null,
+        actorRole: 'system',
+        note: AGENT_ERASED_NOTE,
+        assignmentEndReason: 'returned',
+        // A staff change between the select and the row lock can end the assignment or move the
+        // lead on. The change is then skipped.
+        precheck: async (db) => {
+          const still = await db.query(
+            `SELECT 1 FROM lead_assignments
+              WHERE lead_id = $1 AND agent_profile_id = $2 AND ended_at IS NULL`,
+            [row.lead_id, row.agent_profile_id],
+          );
+          return still.rows.length > 0 ? null : 'assignment_changed';
+        },
+      });
+      if (result.ok) returned += 1;
+    }
+    await client.query('COMMIT');
+    return {
+      agentProfilesPseudonymised: profileIds.length,
+      leadAssignmentsKept: kept.rows[0]?.count ?? 0,
+      leadsReturnedToQueue: returned,
+    };
+  } catch (error) {
+    // A failed ROLLBACK means a broken connection. Release it with the error so the pool drops it.
+    releaseError = await client.query('ROLLBACK').then(
+      () => undefined,
+      (rollbackError: unknown) =>
+        rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
+    );
+    throw error;
+  } finally {
+    client.release(releaseError);
+  }
 }

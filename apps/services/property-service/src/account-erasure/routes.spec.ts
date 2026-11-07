@@ -19,6 +19,7 @@ interface Held {
   outboxSent: number;
   agentProfiles: number;
   assignments: number;
+  openLeads: number;
 }
 
 const EMPTY: Held = {
@@ -29,6 +30,7 @@ const EMPTY: Held = {
   outboxSent: 0,
   agentProfiles: 0,
   assignments: 0,
+  openLeads: 0,
 };
 
 const ids = (count: number) => Array.from({ length: count }, (_, i) => ({ id: String(i) }));
@@ -50,10 +52,24 @@ function createPool(initial: Partial<Held>) {
     else if (sql.includes('analytics_account_links')) result = take('links');
     else if (sql.startsWith('DELETE FROM notification_outbox')) result = take('outboxUnsent');
     else if (sql.startsWith('UPDATE notification_outbox')) result = take('outboxSent');
-    else if (sql.includes('agent_profiles')) {
-      result = [{ profiles: rows.agentProfiles, assignments: rows.assignments }];
-      rows.agentProfiles = 0;
+    else if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) result = [];
+    else if (sql.includes('UPDATE agent_profiles')) result = take('agentProfiles');
+    else if (sql.includes('count(*)::int AS count FROM lead_assignments')) {
+      result = [{ count: rows.assignments }];
       rows.assignments = 0;
+    } else if (sql.includes('SELECT a.lead_id')) {
+      result = Array.from({ length: rows.openLeads }, (_, i) => ({
+        lead_id: `lead-${i}`,
+        agent_profile_id: 'profile',
+      }));
+    } else if (sql.includes('FOR UPDATE')) result = [{ status: 'assigned' }];
+    else if (sql.startsWith('SELECT 1 FROM lead_assignments')) result = [{}];
+    else if (sql.startsWith('UPDATE lead_assignments')) result = [{ agent_profile_id: 'profile' }];
+    else if (
+      sql.startsWith('UPDATE listing_inquiries') ||
+      sql.startsWith('INSERT INTO lead_status_events')
+    ) {
+      result = [];
     } else throw new Error(`Unexpected SQL: ${sql}`);
     return Promise.resolve({ rows: result as T[] });
   };
@@ -75,6 +91,7 @@ const ZERO_COUNTS = {
   notificationOutboxAnonymised: 0,
   agentProfilesPseudonymised: 0,
   leadAssignmentsKept: 0,
+  leadsReturnedToQueue: 0,
 };
 
 describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
@@ -99,10 +116,14 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
       notificationOutboxAnonymised: 6,
       agentProfilesPseudonymised: 1,
       leadAssignmentsKept: 7,
+      leadsReturnedToQueue: 0,
     });
     expect(rows).toEqual(EMPTY);
-    expect(recorded).toHaveLength(6);
-    expect(recorded.every((r) => r.values[0] === ACCOUNT)).toBe(true);
+    expect(
+      recorded
+        .filter((r) => r.values.length > 0)
+        .every((r) => r.values[0] === ACCOUNT || r.values[0] instanceof Array),
+    ).toBe(true);
   });
 
   it('deletes only unsent outbox rows and blanks the recipient on sent rows', async () => {
@@ -118,11 +139,35 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
     const { pool, recorded } = createPool({ agentProfiles: 1 });
     await request(app(pool)).delete(PATH).set('X-Internal-Key', KEY);
 
-    const sql = recorded.map((r) => r.sql).find((s) => s.includes('agent_profiles')) ?? '';
+    const sql = recorded.map((r) => r.sql).find((s) => s.includes('UPDATE agent_profiles')) ?? '';
     expect(sql).toContain('UPDATE agent_profiles');
     expect(sql).toContain('account_id = NULL');
     expect(sql).toContain('deactivated_at = now()');
     expect(sql).not.toMatch(/DELETE FROM agent_profiles|licence_number|display_name/);
+  });
+
+  it('returns open assigned and accepted leads to verified in one transaction', async () => {
+    const { pool, recorded } = createPool({ agentProfiles: 1, assignments: 2, openLeads: 2 });
+    const response = await request(app(pool)).delete(PATH).set('X-Internal-Key', KEY);
+
+    expect(response.body).toMatchObject({ leadAssignmentsKept: 2, leadsReturnedToQueue: 2 });
+    const events = recorded.filter((r) => r.sql.startsWith('INSERT INTO lead_status_events'));
+    expect(events).toHaveLength(2);
+    expect(events[0]?.values.slice(1, 6)).toEqual([
+      'assigned',
+      'verified',
+      null,
+      'system',
+      'agent account erased',
+    ]);
+    const sql = recorded.map((r) => r.sql);
+    expect(sql.filter((s) => s === 'COMMIT')).toHaveLength(1);
+    expect(sql.indexOf('BEGIN')).toBeLessThan(
+      sql.findIndex((s) => s.startsWith('UPDATE agent_profiles')),
+    );
+    expect(sql.lastIndexOf('COMMIT')).toBeGreaterThan(
+      sql.findIndex((s) => s.startsWith('INSERT INTO lead_status_events')),
+    );
   });
 
   it('never touches a retained table', async () => {
