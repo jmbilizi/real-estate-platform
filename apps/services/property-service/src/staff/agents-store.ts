@@ -137,7 +137,7 @@ export async function checkAgentForLead(
   agentProfileId: string,
 ): Promise<'agent_not_found' | 'agent_inactive' | 'agent_not_licensed' | null> {
   const agent = await client.query<{ active: boolean; licence_states: string[] }>(
-    'SELECT active, licence_states FROM agent_profiles WHERE id = $1 FOR SHARE',
+    'SELECT active, licence_states FROM agent_profiles WHERE id = $1 AND account_id IS NOT NULL FOR SHARE',
     [agentProfileId],
   );
   const profile = agent.rows[0];
