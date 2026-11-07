@@ -7,7 +7,7 @@ import { useApp } from '@/lib/context';
 import { openAuthModal } from '@/lib/auth-modal';
 import ListingCard from '@/components/ListingCard';
 import OffMarketHomeCard from '@/components/OffMarketHomeCard';
-import { getListing, type ListingDetailView, ListingsApiError } from '@/lib/api/listings';
+import { getListingsByIds } from '@/lib/api/listings';
 import { listAllSavedHomes } from '@/lib/api/saved-homes';
 import type { SavedHome } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
@@ -15,24 +15,6 @@ import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/Lis
 import Link from 'next/link';
 
 const DEFAULT_ERROR_MESSAGE = "We couldn't load your saved homes. Please try again.";
-
-/**
- * Projects a fetched detail down to the card fields `ListingCard` needs.
- *
- * Only the signed-out path uses this. A signed-out visitor has no saved-homes list on the server,
- * so the page resolves each locally saved listing with one `getListing` call (bounded card-row
- * lookup by id set is #76). A signed-in visitor gets home-shaped rows from `GET /saved-homes`.
- * `primaryMedia` and `openHouse` do not exist on the detail view, so they come from the first
- * `media` and `openHouses` entries, the same projection the search endpoint makes.
- */
-function toFavoriteCardRow(detail: ListingDetailView): ListingCardRow {
-  return {
-    ...detail,
-    propertyId: detail.subjectId,
-    primaryMedia: detail.media[0] ?? null,
-    openHouse: detail.openHouses[0] ?? null,
-  };
-}
 
 /** A card to draw: a listed home, or an off-market home (`listing: null`, #23). */
 type FavoriteItem =
@@ -45,7 +27,7 @@ export default function FavoritesPage() {
   // A signed-out visitor's list is the local cache. Keyed on its content so the query runs when
   // the saved set changes, not on every new array identity.
   const localListingIds = savedHomes.flatMap((h) => (h.listingId ? [h.listingId] : []));
-  const localKey = [...localListingIds].sort().join(',');
+  const localKey = localListingIds.join(',');
   const signedIn = user !== null;
   // A signed-out visitor with nothing saved has nothing to fetch, so the empty state shows at once.
   const idle = !signedIn && localListingIds.length === 0;
@@ -73,24 +55,10 @@ export default function FavoritesPage() {
             : { kind: 'off-market', propertyId: home.propertyId, home },
         );
       }
-      const results = await Promise.allSettled(localListingIds.map((id) => getListing(id, signal)));
-      const next: FavoriteItem[] = [];
-      let realFailure: unknown = null;
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const card = toFavoriteCardRow(result.value);
-          next.push({ kind: 'listed', propertyId: card.propertyId, card });
-          continue;
-        }
-        // A withdrawn listing is skipped quietly. Any other rejection is a real failure.
-        const err = result.reason;
-        if (err instanceof ListingsApiError && err.isNotFound) continue;
-        realFailure ??= err;
-      }
-      // Distinguished from "loaded zero results" (a legitimate empty state): only a real failure
-      // with nothing to show is retryable.
-      if (next.length === 0 && realFailure !== null) throw realFailure;
-      return next;
+      // A signed-out visitor has no saved-homes list on the server, so one lookup by id resolves
+      // the local list. A withdrawn listing is absent from the answer.
+      const cards = await getListingsByIds(localKey.split(','), signal);
+      return cards.map((card) => ({ kind: 'listed', propertyId: card.propertyId, card }));
     },
   });
   const loading = isPending && !idle;

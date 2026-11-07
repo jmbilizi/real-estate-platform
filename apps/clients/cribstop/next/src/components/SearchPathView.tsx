@@ -5,7 +5,8 @@ import JsonLd from '@/components/JsonLd';
 import ListingsInfoPopover from '@/components/ListingsInfoPopover';
 import SearchExperience from '@/components/SearchExperience';
 import AreaLinks, { type NearbyLink } from '@/components/AreaLinks';
-import { loadCityStats } from '@/lib/api/city-stats';
+import CityMediansTable from '@/components/CityMediansTable';
+import { loadCityMedians, loadCityStats } from '@/lib/api/city-stats';
 import { loadCityNeighborhoods } from '@/lib/api/neighborhood-groups';
 import { loadCityZips } from '@/lib/api/zip-groups';
 import { nearbyNeighborhoods, neighborhoodBreadcrumbs } from '@/lib/neighborhood-page';
@@ -13,7 +14,13 @@ import { breadcrumbJsonLd, nearbyZips, zipBreadcrumbs } from '@/lib/zip-page';
 import { initialRequestFor, loadInitialResults } from '@/lib/api/listings-initial';
 import HydratedSearch from '@/lib/query/HydratedSearch';
 import { BRAND } from '@/lib/brand';
-import { cityRobots, citySummary, cityTitle } from '@/lib/city-summary';
+import {
+  cityMedianRows,
+  cityRobots,
+  citySummary,
+  cityTitle,
+  statsSource,
+} from '@/lib/city-summary';
 import { formatDate } from '@/lib/format';
 import { publishableOrigin } from '@/lib/publishable-origin';
 import { searchRouteProps } from '@/lib/search-route';
@@ -51,13 +58,21 @@ export default async function SearchPathView({
       ? { place: parsed.place, name: props.place.filters.neighborhood, area: props.area }
       : null;
   const listingType = parsed.segment === 'homes-for-rent' ? 'rent' : 'sale';
-  const [initialResults, stats, cityZips, cityNeighborhoods] = await Promise.all([
+  // A city page adds the medians table (#986).
+  const cityPlace =
+    props.place.searchPlace?.kind === 'city' &&
+    props.place.filters.city &&
+    props.place.filters.state
+      ? { city: props.place.filters.city, state: props.place.filters.state }
+      : null;
+  const [initialResults, stats, cityZips, cityNeighborhoods, medians] = await Promise.all([
     loadInitialResults(props.initialQuery, props.place),
     label ? loadCityStats(props.initialQuery, props.place) : null,
     zip && props.area ? loadCityZips(props.area.city, props.area.state, listingType) : null,
     neighborhood
       ? loadCityNeighborhoods(neighborhood.area.city, neighborhood.area.state, listingType)
       : null,
+    cityPlace ? loadCityMedians(cityPlace.city, cityPlace.state, listingType) : null,
   ]);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
   const crumbs = zip
@@ -109,6 +124,14 @@ export default async function SearchPathView({
           </div>
         ) : null}
         <p className="text-sm text-ink-body">{citySummary(label, parsed.segment, stats)}</p>
+        {medians ? (
+          <CityMediansTable
+            rows={cityMedianRows(medians, parsed.segment)}
+            asOf={medians.dataUpdatedAt ?? stats.asOf}
+            source={statsSource(stats.sources)}
+            caption={`${label} market figures`}
+          />
+        ) : null}
         <p className="mt-2 text-xs text-ink-muted">
           <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
           {' · '}
