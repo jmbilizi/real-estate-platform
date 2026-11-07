@@ -20,7 +20,7 @@ export interface LegalContent {
  * rolled-over wrong date, on a public legal page.
  *
  * A pure UTC calendar date with its own fallback text, not `lib/format.ts`'s `formatDate`: that
- * helper renders a property timestamp in `PROPERTY_TIME_ZONE` and falls back to the raw string on
+ * helper renders a property timestamp in the property's time zone and falls back to the raw string on
  * a parse error, both wrong for a legal effective date.
  */
 export function formatEffectiveDate(effectiveDate: string | null): string {

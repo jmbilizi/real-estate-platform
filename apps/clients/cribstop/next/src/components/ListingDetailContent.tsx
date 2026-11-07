@@ -22,6 +22,7 @@ import ListingHeaderNav from '@/components/listing/ListingHeaderNav';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatCalendarDate, formatNumber, formatPrice } from '@/lib/format';
+import { timeZoneForState } from '@/lib/time-zone';
 import { describePriceChange, formatDetailPriceChange } from '@/lib/price-change';
 import { BRAND } from '@/lib/brand';
 import {
@@ -556,7 +557,7 @@ export default function ListingDetailContent({
                   {listing.openHouses.map((openHouse, i) => (
                     <li key={i}>
                       <p className="text-base font-semibold text-ink">
-                        {formatOpenHouse(openHouse)}
+                        {formatOpenHouse(openHouse, timeZoneForState(listing.state))}
                       </p>
                       {openHouse.remarks && (
                         <p className="text-sm text-ink-muted">{openHouse.remarks}</p>
@@ -616,7 +617,11 @@ export default function ListingDetailContent({
          * Provenance is driven off this row's own `source`, never a build flag or default.
          */}
         <footer className="mt-8 space-y-1.5 border-t border-surface-border pt-6 text-center text-xs leading-relaxed text-ink-muted">
-          <ListingProvenance source={listing.source} lastUpdated={listing.lastUpdated} />
+          <ListingProvenance
+            source={listing.source}
+            lastUpdated={listing.lastUpdated}
+            timeZone={timeZoneForState(listing.state)}
+          />
           <p>
             This information is for personal, non-commercial use. Some properties may no longer be
             available.

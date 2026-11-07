@@ -1,18 +1,4 @@
-/**
- * Listing timestamps render in the **property's** local time, never the viewer's.
- *
- * `toLocaleString` with no `timeZone` uses whatever zone the runtime happens to be in. That made
- * the same open house read "9am–1pm" on an Eastern machine and "1–5pm" in UTC CI — and, shipped,
- * it would have shown a buyer in California a DC open house at the wrong hour, or near midnight on
- * the wrong day. An open house is an appointment at the property; the property's clock is the only
- * correct one.
- *
- * Real Broker, LLC is licensed in MD/DC/VA (PRD §6.1) and all three are Eastern, so a single
- * constant is unambiguous today. The moment the brokerage licenses outside Eastern this has to
- * become a per-property zone carried on the listing — it cannot stay a constant. Tracked as #79,
- * which is a blocker on licensing outside Eastern rather than routine cleanup.
- */
-export const PROPERTY_TIME_ZONE = 'America/New_York';
+import { PROPERTY_TIME_ZONE } from '@/lib/time-zone';
 
 export function formatPrice(value: number, listingType?: 'sale' | 'rent' | 'sold'): string {
   const formatted = new Intl.NumberFormat('en-US', {
@@ -62,13 +48,13 @@ export function formatCalendarDate(iso: string): string {
   }
 }
 
-export function formatDate(iso: string): string {
+export function formatDate(iso: string, timeZone: string = PROPERTY_TIME_ZONE): string {
   try {
     return new Date(iso).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
-      timeZone: PROPERTY_TIME_ZONE,
+      timeZone,
     });
   } catch {
     return iso;
@@ -126,9 +112,9 @@ function preciseListingAge(listedAtPrecise: string | null, now: number): Listing
  * list date. Counting 24-hour periods read "1 day ago" from 8pm Eastern on the list date.
  * Calendar math also keeps a DST change day from shifting the count.
  */
-function calendarDaysSince(listed: Date, now: number): number {
+function calendarDaysSince(listed: Date, now: number, timeZone: string): number {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: PROPERTY_TIME_ZONE,
+    timeZone,
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -147,6 +133,7 @@ export function listingAge(
   listedAt: string | null,
   now: number = Date.now(),
   listedAtPrecise: string | null = null,
+  timeZone: string = PROPERTY_TIME_ZONE,
 ): ListingAge | null {
   const precise = preciseListingAge(listedAtPrecise, now);
   if (precise !== null) {
@@ -160,7 +147,7 @@ export function listingAge(
   if (Number.isNaN(listedAtMs)) {
     return null;
   }
-  return { unit: 'day', value: calendarDaysSince(new Date(listedAtMs), now) };
+  return { unit: 'day', value: calendarDaysSince(new Date(listedAtMs), now, timeZone) };
 }
 
 /** #542. A listing under this many days old gets the new-listing badge, not the footer time. */
@@ -184,8 +171,9 @@ export function formatTimeOnMarket(
   listedAt: string | null,
   now: number = Date.now(),
   listedAtPrecise: string | null = null,
+  timeZone: string = PROPERTY_TIME_ZONE,
 ): string | null {
-  const age = listingAge(listedAt, now, listedAtPrecise);
+  const age = listingAge(listedAt, now, listedAtPrecise, timeZone);
   if (age === null) return null;
   if (age.unit !== 'day') return `${age.value} ${age.unit}`;
   const days = age.value;
@@ -206,8 +194,9 @@ export function formatNewListingAge(
   listedAt: string | null,
   now: number = Date.now(),
   listedAtPrecise: string | null = null,
+  timeZone: string = PROPERTY_TIME_ZONE,
 ): string | null {
-  const age = listingAge(listedAt, now, listedAtPrecise);
+  const age = listingAge(listedAt, now, listedAtPrecise, timeZone);
   if (age === null || !isNewListingAge(age)) return null;
   if (age.unit === 'min') return `${age.value} min ago`;
   if (age.unit === 'hr') return `${age.value} hr ago`;
@@ -220,12 +209,13 @@ export function formatNewListingBadge(
   listedAt: string | null,
   now: number = Date.now(),
   listedAtPrecise: string | null = null,
+  timeZone: string = PROPERTY_TIME_ZONE,
 ): string | null {
-  const age = formatNewListingAge(listedAt, now, listedAtPrecise);
+  const age = formatNewListingAge(listedAt, now, listedAtPrecise, timeZone);
   return age === null ? null : `New · ${age}`;
 }
 
-export function formatDateTime(iso: string): string {
+export function formatDateTime(iso: string, timeZone: string = PROPERTY_TIME_ZONE): string {
   try {
     return new Date(iso).toLocaleString('en-US', {
       month: 'short',
@@ -233,7 +223,7 @@ export function formatDateTime(iso: string): string {
       year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
-      timeZone: PROPERTY_TIME_ZONE,
+      timeZone,
     });
   } catch {
     return iso;

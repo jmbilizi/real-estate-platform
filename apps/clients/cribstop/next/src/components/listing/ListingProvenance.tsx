@@ -28,10 +28,12 @@ import { formatListingProvenance } from '@/lib/listing-format';
 export default function ListingProvenance({
   source,
   lastUpdated,
+  timeZone,
   className = '',
 }: {
   source: ListingSource;
   lastUpdated: string;
+  timeZone?: string;
   className?: string;
 }) {
   const sentence = formatListingProvenance(source);
@@ -39,7 +41,7 @@ export default function ListingProvenance({
 
   return (
     <p className={`text-xs leading-relaxed text-ink-muted ${className}`}>
-      {`${sentence} Data last updated: ${formatDate(lastUpdated)}.`}
+      {`${sentence} Data last updated: ${formatDate(lastUpdated, timeZone)}.`}
     </p>
   );
 }

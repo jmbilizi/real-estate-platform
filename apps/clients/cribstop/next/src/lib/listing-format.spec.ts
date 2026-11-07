@@ -9,6 +9,8 @@ import {
   formatListingPrice,
   formatLotSize,
   formatOpenHouse,
+  formatOpenHouseBadge,
+  formatOpenHouseDate,
   formatOpenHouseWhen,
   formatStreetAddress,
   hasMapCoordinates,
@@ -17,6 +19,7 @@ import {
   PRICE_WITHHELD_COPY,
   telHref,
 } from './listing-format';
+import { timeZoneForState } from './time-zone';
 
 describe('formatListingPrice', () => {
   it('formats a price', () => {
@@ -219,6 +222,36 @@ describe('formatOpenHouseWhen', () => {
         remarks: null,
       }),
     ).toBe('Sat, Sep 5 · 8–10pm');
+  });
+
+  // #79. The zone is the listing's, so a Pacific open house reads Pacific time in any runtime.
+  describe('a Pacific listing', () => {
+    const pacific = timeZoneForState('CA');
+
+    it("renders the property's local hour, not Eastern or the runtime's", () => {
+      const openHouse = {
+        startsAt: '2026-09-05T16:00:00.000Z',
+        endsAt: '2026-09-05T20:00:00.000Z',
+        remarks: null,
+      };
+
+      expect(formatOpenHouseWhen(openHouse, pacific)).toBe('Sat, Sep 5 · 9am–1pm');
+      expect(formatOpenHouse(openHouse, pacific)).toBe('Sat, Sep 5, 9 AM–1 PM');
+      expect(formatOpenHouseBadge(openHouse, pacific)).toBe('Sat 9am–1pm (9/5)');
+    });
+
+    it("keeps a late-evening open house on the property's calendar day", () => {
+      // 04:00Z Sun Sep 6 is 9pm Sat Sep 5 in Pacific and midnight Sun in Eastern.
+      const openHouse = {
+        startsAt: '2026-09-06T04:00:00.000Z',
+        endsAt: '2026-09-06T06:00:00.000Z',
+        remarks: null,
+      };
+
+      expect(formatOpenHouseWhen(openHouse, pacific)).toBe('Sat, Sep 5 · 9–11pm');
+      expect(formatOpenHouseDate(openHouse, pacific)).toBe('9/5');
+      expect(formatOpenHouseDate(openHouse)).toBe('9/6');
+    });
   });
 });
 

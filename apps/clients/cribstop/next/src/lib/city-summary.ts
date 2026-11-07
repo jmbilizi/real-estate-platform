@@ -47,9 +47,14 @@ export function cityRobots(
  * Two or three sentences, composed from the figures only. It makes no claim about people,
  * schools, safety or fit (Fair Housing, PRD §6.1).
  */
-export function citySummary(label: string, segment: PathSegment, stats: CityStats): string {
+export function citySummary(
+  label: string,
+  segment: PathSegment,
+  stats: CityStats,
+  timeZone?: string,
+): string {
   const rent = segment === 'homes-for-rent';
-  const date = formatDate(stats.asOf);
+  const date = formatDate(stats.asOf, timeZone);
   const noun = stats.activeCount === 1 ? 'listing' : 'listings';
   const count = `${stats.activeCount.toLocaleString('en-US')} active ${noun}`;
   const first = `As of ${date}, ${label} has ${count} ${rent ? 'for rent' : 'for sale'}.`;

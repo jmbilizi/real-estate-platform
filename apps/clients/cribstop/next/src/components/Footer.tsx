@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { BRAND } from '@/lib/brand';
 import { getListingsMeta } from '@/lib/api/listings';
-import { PROPERTY_TIME_ZONE } from '@/lib/format';
+import { PROPERTY_TIME_ZONE } from '@/lib/time-zone';
 import type { ListingsMeta } from '@/lib/types';
 import PersonaliseSwitch from '@/components/PersonaliseSwitch';
 
@@ -36,8 +36,8 @@ export default function Footer() {
   const lastUpdatedFormatted =
     freshness != null
       ? new Date(freshness).toLocaleString('en-US', {
-          // Shared with the per-listing provenance line so the two "Data last updated" sentences
-          // on a page can never disagree about the day.
+          // One dataset-wide sync time, so no single listing state applies. It uses the fallback zone,
+          // and the short zone name below states it on screen (#79).
           timeZone: PROPERTY_TIME_ZONE,
           month: 'long',
           day: 'numeric',
