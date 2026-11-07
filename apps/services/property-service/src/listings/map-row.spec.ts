@@ -168,3 +168,26 @@ describe('listedAtPrecise (#459)', () => {
     expect(none.listedAtPrecise).toBeNull();
   });
 });
+
+describe('timeZone (#983)', () => {
+  it('serves the zone of a split-zone state listing and carries it to the detail', () => {
+    const db = cardDbRowFixture({ state: 'TX', zip: '79901', latitude: 31.76, longitude: -106.49 });
+    expect(toListingCardRow(db).timeZone).toBe('America/Denver');
+    expect(toListingDetail(db).listing.timeZone).toBe('America/Denver');
+  });
+
+  it('omits the zone when the listing sits in the zone of its state table', () => {
+    const row = toListingCardRow(
+      cardDbRowFixture({ state: 'TX', zip: '77002', latitude: 29.76, longitude: -95.37 }),
+    );
+    expect(row.timeZone).toBeUndefined();
+    expect('timeZone' in JSON.parse(JSON.stringify(row))).toBe(false);
+  });
+
+  it('falls back to the ZIP when the address is hidden', () => {
+    const row = toListingCardRow(
+      cardDbRowFixture({ state: 'FL', zip: '32502', latitude: null, longitude: null }),
+    );
+    expect(row.timeZone).toBe('America/Chicago');
+  });
+});

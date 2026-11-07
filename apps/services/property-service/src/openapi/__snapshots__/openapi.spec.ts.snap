@@ -3737,6 +3737,10 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
             ],
             "type": "string",
           },
+          "timeZone": {
+            "minLength": 1,
+            "type": "string",
+          },
           "title": {
             "type": "string",
           },
@@ -4258,6 +4262,10 @@ exports[`toOpenApiDocument matches the committed golden document 1`] = `
                 "minimum": -9007199254740991,
                 "nullable": true,
                 "type": "integer",
+              },
+              "timeZone": {
+                "minLength": 1,
+                "type": "string",
               },
               "title": {
                 "type": "string",

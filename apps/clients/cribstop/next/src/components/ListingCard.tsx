@@ -11,7 +11,7 @@ import { openListingPanel } from '@/lib/listing-panel';
 import { usePrefetchListing } from '@/lib/query/usePrefetchListing';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatNewListingBadge, formatTimeOnMarket } from '@/lib/format';
-import { timeZoneForState } from '@/lib/time-zone';
+import { listingTimeZone } from '@/lib/time-zone';
 import { useMinuteClock } from '@/lib/useMinuteClock';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import { shareOrigin } from '@/lib/site-origin';
@@ -95,7 +95,7 @@ export default function ListingCard({
   const minuteNow = useMinuteClock(!isComingSoon && listing.listedAtPrecise !== null);
   const now = minuteNow ?? Date.now();
   const precise = minuteNow === null ? null : listing.listedAtPrecise;
-  const timeZone = timeZoneForState(listing.state);
+  const timeZone = listingTimeZone(listing);
 
   /**
    * #542. Under 7 days the age moves into a new-listing badge, so the footer slot stays empty to

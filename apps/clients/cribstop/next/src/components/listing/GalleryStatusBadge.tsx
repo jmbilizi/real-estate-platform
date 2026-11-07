@@ -4,13 +4,13 @@ import type { ListingDetailView } from '@/lib/api/listings';
 import { formatNewListingAge } from '@/lib/format';
 import { formatComingSoonBadge } from '@/lib/listing-format';
 import { useMinuteClock } from '@/lib/useMinuteClock';
-import { timeZoneForState } from '@/lib/time-zone';
+import { listingTimeZone } from '@/lib/time-zone';
 
 type Props = Pick<
   ListingDetailView,
   'status' | 'listingType' | 'listedAt' | 'listedAtPrecise' | 'comingSoonDate'
 > &
-  Partial<Pick<ListingDetailView, 'state'>> & {
+  Partial<Pick<ListingDetailView, 'state' | 'timeZone'>> & {
     /** The property page's market status. 'Under Contract' has no consumer status (#349). */
     statusLabel?: string;
   };
@@ -35,6 +35,7 @@ export default function GalleryStatusBadge({
   listedAtPrecise,
   comingSoonDate,
   state,
+  timeZone,
   statusLabel,
 }: Props) {
   const label = statusLabel ?? status;
@@ -49,7 +50,7 @@ export default function GalleryStatusBadge({
         listedAt,
         minuteNow ?? Date.now(),
         minuteNow === null ? null : listedAtPrecise,
-        timeZoneForState(state),
+        listingTimeZone({ state, timeZone }),
       )
     : null;
 

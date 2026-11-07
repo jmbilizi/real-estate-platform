@@ -11,6 +11,7 @@ import {
 
 import { parseListingDetail } from './detail-repair';
 import { derivePreciseListedAt } from './listed-at-precise';
+import { deriveTimeZone } from './time-zone';
 
 /**
  * Database row -> wire shape. Every mapper ends in the contract's own `.parse()`, deliberately.
@@ -216,6 +217,12 @@ function commonFields(row: ListingCardDbRow): Record<string, unknown> {
     // #459. Only an Active listing: a later same-day flip (Pending, Under Contract) rewrites the timestamp.
     listedAtPrecise:
       row.status === 'Active' ? derivePreciseListedAt(row.listed_at, row.status_changed_at) : null,
+    timeZone: deriveTimeZone({
+      state: row.state,
+      zip: row.zip,
+      latitude: row.latitude,
+      longitude: row.longitude,
+    }),
     listingAgentName: row.listing_agent_name,
     brokerName: row.broker_name,
     brokerPhone: row.broker_phone,

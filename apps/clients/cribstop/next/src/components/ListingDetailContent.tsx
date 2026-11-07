@@ -22,7 +22,7 @@ import ListingHeaderNav from '@/components/listing/ListingHeaderNav';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatCalendarDate, formatNumber, formatPrice } from '@/lib/format';
-import { timeZoneForState } from '@/lib/time-zone';
+import { listingTimeZone } from '@/lib/time-zone';
 import { describePriceChange, formatDetailPriceChange } from '@/lib/price-change';
 import { BRAND } from '@/lib/brand';
 import {
@@ -557,7 +557,7 @@ export default function ListingDetailContent({
                   {listing.openHouses.map((openHouse, i) => (
                     <li key={i}>
                       <p className="text-base font-semibold text-ink">
-                        {formatOpenHouse(openHouse, timeZoneForState(listing.state))}
+                        {formatOpenHouse(openHouse, listingTimeZone(listing))}
                       </p>
                       {openHouse.remarks && (
                         <p className="text-sm text-ink-muted">{openHouse.remarks}</p>
@@ -620,7 +620,7 @@ export default function ListingDetailContent({
           <ListingProvenance
             source={listing.source}
             lastUpdated={listing.lastUpdated}
-            timeZone={timeZoneForState(listing.state)}
+            timeZone={listingTimeZone(listing)}
           />
           <p>
             This information is for personal, non-commercial use. Some properties may no longer be

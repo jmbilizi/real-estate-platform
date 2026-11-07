@@ -2,8 +2,8 @@
  * Listing timestamps render in the property's local time, never the viewer's (#79).
  *
  * The zone comes from the listing's state code. The table has one zone per state. A state that
- * spans two zones takes the zone of its most populous area. The wire contract carries no zone.
- * A zone on the contract stays a later option.
+ * spans two zones takes the zone of its most populous area. A listing in the other area carries
+ * its own IANA zone on the wire contract (#983). `listingTimeZone` reads that first.
  */
 export const STATE_TIME_ZONES: Readonly<Record<string, string>> = Object.freeze({
   AL: 'America/Chicago',
@@ -74,4 +74,26 @@ export const PROPERTY_TIME_ZONE = 'America/New_York';
 export function timeZoneForState(state: string | null | undefined): string {
   const key = state?.trim().toUpperCase();
   return (key && STATE_TIME_ZONES[key]) || PROPERTY_TIME_ZONE;
+}
+
+function isKnownTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The display zone of a listing (#983). Order: the zone on the wire contract, the state table
+ * (#79), then the fallback. A zone the runtime does not know is ignored, so a bad value cannot
+ * throw inside a formatter.
+ */
+export function listingTimeZone(listing: {
+  timeZone?: string | null;
+  state?: string | null;
+}): string {
+  const zone = listing.timeZone?.trim();
+  return zone && isKnownTimeZone(zone) ? zone : timeZoneForState(listing.state);
 }
