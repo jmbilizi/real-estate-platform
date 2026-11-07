@@ -11,7 +11,7 @@ import { cityRobots, citySummary, cityTitle } from '@/lib/city-summary';
 import { formatDate } from '@/lib/format';
 import { publishableOrigin } from '@/lib/publishable-origin';
 import { searchRouteProps } from '@/lib/search-route';
-import { thinPageMinListings } from '@/lib/seo-config';
+import { searchCanonical, searchUrlKind, thinPageMinListings } from '@/lib/seo-config';
 
 /**
  * A search path page (#350), for a place (`/alexandria-va/homes-for-sale`) or a map area
@@ -81,7 +81,17 @@ export async function searchPathMetadata(
   params: URLSearchParams,
 ): Promise<Metadata> {
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
-  if (parsed.place === null) return { title: `${noun} · ${BRAND.brokerage}` };
+  const urlKind = searchUrlKind(params);
+  const origin = publishableOrigin();
+  if (parsed.place === null) {
+    // The map-area path. Only its clean form is an index candidate (#847).
+    const canonical = searchCanonical(origin, searchPath(null, parsed.segment), urlKind);
+    return {
+      title: `${noun} · ${BRAND.brokerage}`,
+      ...(urlKind.kind === 'clean' ? {} : { robots: { index: false, follow: true } }),
+      ...(canonical ? { alternates: { canonical } } : {}),
+    };
+  }
   const props = await searchRouteProps(parsed, params);
   if (props.status !== 'found') {
     return { title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`, robots: { index: false } };
@@ -92,13 +102,14 @@ export async function searchPathMetadata(
   const description = stats
     ? citySummary(label, parsed.segment, stats)
     : `${noun} in ${label}, brokered by ${BRAND.brokerage}.`;
-  // The canonical link names the path without the visitor's query. See `publishable-origin.ts`.
-  const origin = publishableOrigin();
-  const url = origin === null ? null : `${origin}${searchPath(parsed.place, parsed.segment)}`;
+  // The canonical link names the path without the visitor's query, except for a page of 2 or more
+  // (#847). See `publishable-origin.ts`.
+  const url = searchCanonical(origin, searchPath(parsed.place, parsed.segment), urlKind);
+  const cityIndex = cityRobots(stats?.activeCount ?? null, thinPageMinListings());
   return {
     title,
     description,
-    robots: cityRobots(stats?.activeCount ?? null, thinPageMinListings()),
+    robots: { index: cityIndex.index && urlKind.kind === 'clean', follow: true },
     ...(url ? { alternates: { canonical: url } } : {}),
     openGraph: {
       type: 'website',

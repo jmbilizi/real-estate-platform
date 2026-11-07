@@ -164,7 +164,7 @@ describe('searchPathMetadata (#842)', () => {
 
   it('sets the tags and indexes a full page', async () => {
     (loadCityStats as jest.Mock).mockResolvedValue(stats);
-    const meta = await searchPathMetadata(city as never, new URLSearchParams('beds=3'));
+    const meta = await searchPathMetadata(city as never, new URLSearchParams());
     expect(meta.title).toBe('Homes for sale in Alexandria, VA · Real Broker, LLC');
     expect(meta.description).toContain('42 active listings');
     expect(meta.alternates?.canonical).toBe(
@@ -179,6 +179,42 @@ describe('searchPathMetadata (#842)', () => {
     (loadCityStats as jest.Mock).mockResolvedValue({ ...stats, activeCount: 9 });
     const meta = await searchPathMetadata(city as never, new URLSearchParams());
     expect(meta.robots).toEqual({ index: false, follow: true });
+  });
+
+  it.each(['beds=3', 'boundary=abc', 'bounds=1,2,3,4', 'page=1', 'beds=3&page=2'])(
+    'answers noindex, follow with the clean canonical for ?%s (#847)',
+    async (qs) => {
+      (loadCityStats as jest.Mock).mockResolvedValue(stats);
+      const meta = await searchPathMetadata(city as never, new URLSearchParams(qs));
+      expect(meta.robots).toEqual({ index: false, follow: true });
+      expect(meta.alternates?.canonical).toBe(
+        'https://cribstop.example/alexandria-va/homes-for-sale',
+      );
+    },
+  );
+
+  it('answers noindex, follow with a self canonical for page 2 and up (#847)', async () => {
+    (loadCityStats as jest.Mock).mockResolvedValue(stats);
+    const meta = await searchPathMetadata(city as never, new URLSearchParams('page=3'));
+    expect(meta.robots).toEqual({ index: false, follow: true });
+    expect(meta.alternates?.canonical).toBe(
+      'https://cribstop.example/alexandria-va/homes-for-sale?page=3',
+    );
+  });
+
+  it('applies the same rules to the map-area path (#847)', async () => {
+    const area = { place: null, segment: 'homes-for-sale' };
+    const clean = await searchPathMetadata(area as never, new URLSearchParams());
+    expect(clean.robots).toBeUndefined();
+    expect(clean.alternates?.canonical).toBe('https://cribstop.example/homes-for-sale');
+    for (const qs of ['boundary=abc', 'bounds=1,2,3,4']) {
+      const meta = await searchPathMetadata(area as never, new URLSearchParams(qs));
+      expect(meta.robots).toEqual({ index: false, follow: true });
+      expect(meta.alternates?.canonical).toBe('https://cribstop.example/homes-for-sale');
+    }
+    const paged = await searchPathMetadata(area as never, new URLSearchParams('page=2'));
+    expect(paged.robots).toEqual({ index: false, follow: true });
+    expect(paged.alternates?.canonical).toBe('https://cribstop.example/homes-for-sale?page=2');
   });
 
   it('answers noindex when the figures cannot be read', async () => {
