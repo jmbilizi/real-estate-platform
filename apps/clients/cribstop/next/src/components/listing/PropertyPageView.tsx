@@ -10,7 +10,7 @@ import { SampleBadge } from '@/components/listing/ListingBadges';
 import { toListingDetailView } from '@/lib/api/listings';
 import { formatDate, formatNumber } from '@/lib/format';
 import { formatClosePrice, formatListingPrice } from '@/lib/listing-format';
-import { timeZoneForState } from '@/lib/time-zone';
+import { listingTimeZone, timeZoneForState } from '@/lib/time-zone';
 
 /**
  * The property page (#382): one page per home, in its current market status.
@@ -26,7 +26,14 @@ export default function PropertyPageView({ page }: { page: PropertyPage }) {
   const { propertyRecord, latestListing, marketStatus, history, nearby } = page;
   const historyPanel =
     history.length > 0 ? (
-      <PropertyHistory entries={history} timeZone={timeZoneForState(propertyRecord.state)} />
+      <PropertyHistory
+        entries={history}
+        timeZone={
+          latestListing
+            ? listingTimeZone(toListingDetailView(latestListing))
+            : timeZoneForState(propertyRecord.state)
+        }
+      />
     ) : undefined;
 
   return (

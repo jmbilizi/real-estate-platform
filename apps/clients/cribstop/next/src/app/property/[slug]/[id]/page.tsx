@@ -16,7 +16,7 @@ import { BRAND } from '@/lib/brand';
 import { listingJsonLd } from '@/lib/listing-jsonld';
 import { listingMetadata, unresolvedListingMetadata } from '@/lib/listing-metadata';
 import { publishableOrigin } from '@/lib/publishable-origin';
-import { timeZoneForState } from '@/lib/time-zone';
+import { listingTimeZone } from '@/lib/time-zone';
 
 type RouteProps = { params: Promise<{ slug: string; id: string }> };
 
@@ -113,10 +113,7 @@ export default async function PropertyRoute({ params }: RouteProps) {
           nearby={page.nearby}
           propertyPanel={
             page.history.length > 0 ? (
-              <PropertyHistory
-                entries={page.history}
-                timeZone={timeZoneForState(page.propertyRecord.state)}
-              />
+              <PropertyHistory entries={page.history} timeZone={listingTimeZone(listing)} />
             ) : undefined
           }
         />

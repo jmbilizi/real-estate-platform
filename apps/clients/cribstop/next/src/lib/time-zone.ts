@@ -76,13 +76,19 @@ export function timeZoneForState(state: string | null | undefined): string {
   return (key && STATE_TIME_ZONES[key]) || PROPERTY_TIME_ZONE;
 }
 
+const knownZones = new Map<string, boolean>();
+
 function isKnownTimeZone(zone: string): boolean {
+  const cached = knownZones.get(zone);
+  if (cached !== undefined) return cached;
+  let known = true;
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: zone });
-    return true;
   } catch {
-    return false;
+    known = false;
   }
+  knownZones.set(zone, known);
+  return known;
 }
 
 /**
