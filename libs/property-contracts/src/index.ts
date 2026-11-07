@@ -20,3 +20,4 @@ export * from './staff';
 export * from './staff-metrics';
 export * from './agent-leads';
 export * from './analytics-event';
+export * from './city-stats';

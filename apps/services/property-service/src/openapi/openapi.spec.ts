@@ -40,6 +40,7 @@ describe('toOpenApiDocument', () => {
       '/listings',
       '/listings/batch',
       '/listings/brokers',
+      '/listings/city-stats',
       '/listings/map',
       '/listings/meta',
       '/listings/neighborhoods',
