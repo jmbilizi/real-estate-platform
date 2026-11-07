@@ -1,9 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { type ParsedSearchPath, searchPath } from '@cribstop/property-contracts';
+import JsonLd from '@/components/JsonLd';
 import ListingsInfoPopover from '@/components/ListingsInfoPopover';
 import SearchExperience from '@/components/SearchExperience';
+import ZipLinks from '@/components/ZipLinks';
 import { loadCityStats } from '@/lib/api/city-stats';
+import { loadCityZips } from '@/lib/api/zip-groups';
+import { breadcrumbJsonLd, nearbyZips, zipBreadcrumbs } from '@/lib/zip-page';
 import { initialRequestFor, loadInitialResults } from '@/lib/api/listings-initial';
 import HydratedSearch from '@/lib/query/HydratedSearch';
 import { BRAND } from '@/lib/brand';
@@ -37,14 +41,34 @@ export default async function SearchPathView({
   // the URL. An App Router page cannot set `Retry-After`, so the error boundary answers 500.
   if (props.status === 'error') throw new Error('Place lookup failed');
   const label = props.place.label;
-  const [initialResults, stats] = await Promise.all([
+  // A bare ZIP page adds a breadcrumb trail and links to the city's other ZIPs (#973).
+  const zip = parsed.place?.kind === 'zip-only' ? parsed.place.zip : null;
+  const [initialResults, stats, cityZips] = await Promise.all([
     loadInitialResults(props.initialQuery, props.place),
     label ? loadCityStats(props.initialQuery, props.place) : null,
+    zip && props.area
+      ? loadCityZips(
+          props.area.city,
+          props.area.state,
+          parsed.segment === 'homes-for-rent' ? 'rent' : 'sale',
+        )
+      : null,
   ]);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
+  const crumbs = zip ? zipBreadcrumbs(zip, parsed.segment, props.area) : null;
+  const nearby =
+    zip && cityZips ? nearbyZips(cityZips, zip, parsed.segment, thinPageMinListings()) : [];
+  // The markup must match the visible trail, and the trail shows only with the figures.
+  const breadcrumbLd = crumbs && stats ? breadcrumbJsonLd(publishableOrigin(), crumbs) : null;
+
   const about =
     label && stats ? (
       <ListingsInfoPopover>
+        {crumbs ? (
+          <div className="mb-3">
+            <ZipLinks crumbs={crumbs} nearby={nearby} noun={noun} />
+          </div>
+        ) : null}
         <p className="text-sm text-ink-body">{citySummary(label, parsed.segment, stats)}</p>
         <p className="mt-2 text-xs text-ink-muted">
           <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
@@ -61,7 +85,12 @@ export default async function SearchPathView({
   );
   return (
     <>
-      {label ? <h1 className="sr-only">{`${noun} in ${label}`}</h1> : null}
+      {label ? (
+        <>
+          <h1 className="sr-only">{`${noun} in ${label}`}</h1>
+          {breadcrumbLd ? <JsonLd data={breadcrumbLd} /> : null}
+        </>
+      ) : null}
       {initialResults ? (
         <HydratedSearch
           request={initialRequestFor(props.initialQuery, props.place)}

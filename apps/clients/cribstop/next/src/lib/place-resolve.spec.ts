@@ -189,3 +189,54 @@ describe('resolvePlace — our own data first (#841)', () => {
     expect(geocode).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('resolvePlace — bare ZIP path (#973)', () => {
+  const ZIP_ONLY = { kind: 'zip-only' as const, zip: '22304' };
+  const hit = (over: Record<string, string> = {}) => ({
+    kind: 'zip' as const,
+    name: '22304',
+    city: 'Alexandria',
+    state: 'VA',
+    zip: '22304',
+    ...over,
+  });
+
+  it('resolves from suggest data and names the one city, with no geocoder call', async () => {
+    const geocode = geocoder(null);
+    const result = await resolvePlace(ZIP_ONLY, geocode, lookup(null), suggestions([hit()]));
+    expect(result).toEqual({
+      status: 'found',
+      filters: { zip: '22304' },
+      label: 'Alexandria, VA 22304',
+      area: { city: 'Alexandria', state: 'VA' },
+    });
+    expect(geocode).not.toHaveBeenCalled();
+  });
+
+  it('names no city when the feed maps the ZIP to more than one', async () => {
+    const result = await resolvePlace(
+      ZIP_ONLY,
+      geocoder(null),
+      lookup(null),
+      suggestions([hit(), hit({ city: 'Fairfax' })]),
+    );
+    expect(result).toEqual({
+      status: 'found',
+      filters: { zip: '22304' },
+      label: 'ZIP code 22304',
+    });
+  });
+
+  it('is not found when no suggestion carries the ZIP', async () => {
+    const other = hit({ zip: '22305', name: '22305' });
+    expect(await resolvePlace(ZIP_ONLY, geocoder([]), lookup(null), suggestions([other]))).toEqual({
+      status: 'not-found',
+    });
+  });
+
+  it('is an error, never not found, when the lookup fails', async () => {
+    expect(await resolvePlace(ZIP_ONLY, geocoder([]), lookup(null), suggestions(null))).toEqual({
+      status: 'error',
+    });
+  });
+});

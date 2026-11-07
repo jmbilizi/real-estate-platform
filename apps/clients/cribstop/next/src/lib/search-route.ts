@@ -7,7 +7,13 @@ import { boundsToBoundary, listingTypeForPath, withoutPlaceKeys } from '@/lib/se
 /** Server-side props for a search path page (#350). */
 
 export type SearchRouteProps =
-  | { readonly status: 'found'; readonly initialQuery: string; readonly place: SearchPathPlace }
+  | {
+      readonly status: 'found';
+      readonly initialQuery: string;
+      readonly place: SearchPathPlace;
+      /** The city a bare ZIP path maps to (#973). */
+      readonly area?: { readonly city: string; readonly state: string };
+    }
   /** An old drill-down link (#525). The page answers 308 to the neighborhood path (#533). */
   | { readonly status: 'redirect'; readonly to: string }
   | { readonly status: 'not-found' }
@@ -91,5 +97,6 @@ export async function searchRouteProps(
       query,
       searchPlace: place as SearchPlace,
     },
+    ...(resolution.area ? { area: resolution.area } : {}),
   };
 }

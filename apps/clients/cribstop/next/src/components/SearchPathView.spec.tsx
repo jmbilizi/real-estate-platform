@@ -21,11 +21,13 @@ jest.mock('@/lib/api/listings-initial', () => ({
   initialRequestFor: jest.fn(() => ({ page: 1 })),
 }));
 jest.mock('@/lib/api/city-stats', () => ({ loadCityStats: jest.fn() }));
+jest.mock('@/lib/api/zip-groups', () => ({ loadCityZips: jest.fn() }));
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { makeTestQueryClient } from '@/test/renderWithClient';
 import { loadCityStats } from '@/lib/api/city-stats';
+import { loadCityZips } from '@/lib/api/zip-groups';
 import { loadInitialResults } from '@/lib/api/listings-initial';
 import { searchRouteProps } from '@/lib/search-route';
 
@@ -226,6 +228,106 @@ describe('searchPathMetadata (#842)', () => {
   it('keeps a not-found city out of the index', async () => {
     (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'not-found' });
     const meta = await searchPathMetadata(city as never, new URLSearchParams());
+    expect(meta.robots).toEqual({ index: false });
+  });
+});
+
+describe('a bare ZIP page (#973)', () => {
+  const OLD = process.env.SITE_ORIGIN;
+  const zipPath = parseSearchPath(['22304', 'homes-for-sale']);
+  const zipFound = {
+    status: 'found',
+    initialQuery: '',
+    place: {
+      label: 'Alexandria, VA 22304',
+      filters: { zip: '22304' },
+      query: '',
+      searchPlace: { kind: 'zip-only', zip: '22304' },
+    },
+    area: { city: 'Alexandria', state: 'VA' },
+  };
+  beforeEach(() => {
+    process.env.SITE_ORIGIN = 'https://cribstop.example';
+    (searchRouteProps as jest.Mock).mockResolvedValue(zipFound);
+    (loadInitialResults as jest.Mock).mockResolvedValue(undefined);
+    (loadCityStats as jest.Mock).mockResolvedValue(stats);
+    (loadCityZips as jest.Mock).mockResolvedValue([
+      { key: '22304', count: 40 },
+      { key: '22302', count: 25 },
+      { key: '22301', count: 25 },
+      { key: '22305', count: 4 },
+    ]);
+  });
+  afterEach(() => {
+    process.env.SITE_ORIGIN = OLD;
+    jest.clearAllMocks();
+  });
+
+  const render = async () =>
+    renderToStaticMarkup(
+      await SearchPathView({ parsed: zipPath as never, params: new URLSearchParams() }),
+    );
+
+  it('renders one H1 and the dated summary', async () => {
+    const html = await render();
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html).toContain('Homes for sale in Alexandria, VA 22304');
+    expect(html).toContain('42 active listings');
+    expect(html).toContain('Updated Oct 14, 2026');
+  });
+
+  it('renders Home, City, ZIP breadcrumbs in the server HTML with BreadcrumbList JSON-LD', async () => {
+    const html = await render();
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Home<\/a>/);
+    expect(html).toMatch(/<a[^>]*href="\/alexandria-va\/homes-for-sale"[^>]*>Alexandria, VA<\/a>/);
+    expect(html).toMatch(/<span[^>]*aria-current="page"[^>]*>22304<\/span>/);
+    expect(html).toContain('"@type":"BreadcrumbList"');
+  });
+
+  it('drops the City level when the ZIP maps to no single city, and lists no nearby ZIP', async () => {
+    const { area: _area, ...noArea } = zipFound;
+    (searchRouteProps as jest.Mock).mockResolvedValue(noArea);
+    const html = await render();
+    expect(html).not.toContain('href="/alexandria-va/homes-for-sale"');
+    expect(html).not.toContain('Nearby ZIP codes');
+    expect(loadCityZips).not.toHaveBeenCalled();
+  });
+
+  it('lists nearby ZIPs of the city at or above the threshold, by count then ZIP', async () => {
+    const html = await render();
+    expect(html).toContain('Homes for sale in nearby ZIP codes');
+    const links = [...html.matchAll(/href="\/(\d{5})\/homes-for-sale"/g)].map((m) => m[1]);
+    // The current ZIP and the ZIP below the threshold are absent.
+    expect(links).toEqual(['22301', '22302']);
+    expect(loadCityZips).toHaveBeenCalledWith('Alexandria', 'VA', 'sale');
+  });
+
+  it('keeps the page when the nearby read fails', async () => {
+    (loadCityZips as jest.Mock).mockResolvedValue(null);
+    const html = await render();
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).not.toContain('Nearby ZIP codes');
+  });
+
+  it('sets the canonical to the bare ZIP path and indexes a full page', async () => {
+    const meta = await searchPathMetadata(zipPath as never, new URLSearchParams());
+    expect(meta.title).toBe('Homes for sale in Alexandria, VA 22304 · Real Broker, LLC');
+    expect(meta.alternates?.canonical).toBe('https://cribstop.example/22304/homes-for-sale');
+    expect(meta.openGraph?.title).toBe(meta.title);
+    expect(meta.twitter?.title).toBe(meta.title);
+    expect(meta.robots).toEqual({ index: true, follow: true });
+  });
+
+  it('answers noindex, follow below the threshold', async () => {
+    (loadCityStats as jest.Mock).mockResolvedValue({ ...stats, activeCount: 9 });
+    const meta = await searchPathMetadata(zipPath as never, new URLSearchParams());
+    expect(meta.robots).toEqual({ index: false, follow: true });
+  });
+
+  it('answers noindex for a ZIP that resolves to nothing', async () => {
+    (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'not-found' });
+    const meta = await searchPathMetadata(zipPath as never, new URLSearchParams());
     expect(meta.robots).toEqual({ index: false });
   });
 });
