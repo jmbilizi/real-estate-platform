@@ -943,6 +943,8 @@ home exists. It runs inside `buildSearchQuery`, on every query, with no flag and
   a default search.
 - Only live statuses count. An off-market record never wins and never counts. A hidden record still
   opens at `/listings/:id`. The detail response lists the other live records in `alsoListedAs`.
-- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first.
+- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first. `getNeighborhoods`
+  and `getListingsMeta` do it through `readWithoutJit`. `tests/listings-read-jit.e2e.spec.ts` fails
+  when a read compiles with JIT (#1003).
 - `listings.source_listing_id` holds the MLS number (`ListingId`). A value equal to the feed key is
   an older row and reads as unknown until the sync writes the row again.
