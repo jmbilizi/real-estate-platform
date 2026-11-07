@@ -8,7 +8,8 @@ exports.shorthands = undefined;
  * - `lead_assignments.agent_profile_id` and `lead_status_events.agent_profile_id` become
  *   `ON DELETE SET NULL`. Deleting an `agent_profiles` row detaches its history rows.
  * - The two guard triggers accept one extra change: `agent_profile_id` going from a value to NULL
- *   with every other column unchanged. Any other UPDATE keeps its old rule.
+ *   with every other column unchanged, and only inside the foreign key action
+ *   (`pg_trigger_depth() > 1`). A direct UPDATE has depth 1, so it keeps its old rule.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
@@ -25,7 +26,7 @@ exports.up = (pgm) => {
   }
 
   const detachOnly =
-    "OLD.agent_profile_id IS NOT NULL AND NEW.agent_profile_id IS NULL AND (to_jsonb(NEW) - 'agent_profile_id') = (to_jsonb(OLD) - 'agent_profile_id')";
+    "pg_trigger_depth() > 1 AND OLD.agent_profile_id IS NOT NULL AND NEW.agent_profile_id IS NULL AND (to_jsonb(NEW) - 'agent_profile_id') = (to_jsonb(OLD) - 'agent_profile_id')";
 
   pgm.createFunction(
     'lead_assignments_guard',
@@ -71,7 +72,8 @@ exports.up = (pgm) => {
 };
 
 /**
- * Fails when an erased row exists, because the restored NOT NULL rules refuse NULL.
+ * Restores each NOT NULL rule only while no erased row exists. An erased row keeps its NULL, so
+ * the column stays nullable. The down never deletes audit rows.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
@@ -117,6 +119,16 @@ exports.down = (pgm) => {
          FOREIGN KEY (agent_profile_id) REFERENCES agent_profiles (id)`,
     );
   }
-  pgm.alterColumn('lead_assignments', 'agent_profile_id', { notNull: true });
-  pgm.alterColumn('notification_outbox', 'recipient_account_id', { notNull: true });
+  for (const [table, column] of [
+    ['lead_assignments', 'agent_profile_id'],
+    ['notification_outbox', 'recipient_account_id'],
+  ]) {
+    pgm.sql(
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM ${table} WHERE ${column} IS NULL) THEN
+           ALTER TABLE ${table} ALTER COLUMN ${column} SET NOT NULL;
+         END IF;
+       END $$`,
+    );
+  }
 };

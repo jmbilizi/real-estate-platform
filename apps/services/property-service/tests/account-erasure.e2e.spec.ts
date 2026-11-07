@@ -135,4 +135,35 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       pool().query("UPDATE lead_status_events SET note = 'edit' WHERE id = $1", [event?.id]),
     ).rejects.toThrow(/append-only/);
   });
+
+  it('refuses a direct update that detaches the agent from a status event or an assignment', async () => {
+    const account = randomUUID();
+    const lead = await seedLead();
+    const profile = await one<{ id: string }>(
+      `INSERT INTO agent_profiles (account_id, display_name, licence_number, licence_states)
+       VALUES ($1, 'E2E Agent', 'E2E-2', ARRAY['ZZ']) RETURNING id`,
+      [account],
+    );
+    await pool().query(
+      `INSERT INTO lead_assignments (lead_id, agent_profile_id, assigned_by_account_id)
+       VALUES ($1, $2, $3)`,
+      [lead, profile?.id, randomUUID()],
+    );
+    await pool().query(
+      `INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role, agent_profile_id)
+       VALUES ($1, 'verified', 'assigned', 'staff', $2)`,
+      [lead, profile?.id],
+    );
+    await expect(
+      pool().query('UPDATE lead_assignments SET agent_profile_id = NULL WHERE lead_id = $1', [
+        lead,
+      ]),
+    ).rejects.toThrow(/keeps its history/);
+    await expect(
+      pool().query('UPDATE lead_status_events SET agent_profile_id = NULL WHERE lead_id = $1', [
+        lead,
+      ]),
+    ).rejects.toThrow(/append-only/);
+    expect((await erase(account)).status).toBe(200);
+  });
 });
