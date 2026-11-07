@@ -50,6 +50,7 @@ function createPool(initial: Partial<Held>) {
     if (sql.includes('saved_homes')) result = take('saved');
     else if (sql.includes('looking_for_preferences')) result = take('looking');
     else if (sql.includes('analytics_account_links')) result = take('links');
+    else if (sql.includes('INTO erased_accounts')) result = [];
     else if (sql.startsWith('DELETE FROM notification_outbox')) result = take('outboxUnsent');
     else if (sql.startsWith('UPDATE notification_outbox')) result = take('outboxSent');
     else if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) result = [];

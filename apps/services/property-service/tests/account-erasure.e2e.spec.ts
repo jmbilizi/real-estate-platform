@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import axios from 'axios';
 import { closePool, getPool } from '../src/db/pool';
 import type { ContactsClient } from '../src/inquiries/account-contacts';
+import { changeLeadStatus } from '../src/inquiries/lead-status-write';
 import { listLeads, readLeadDetail } from '../src/staff/leads-store';
 import { complianceFixtureIds } from './support/fixture-ids';
 
@@ -265,6 +266,59 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
     const repeat = await erase(account);
     expect(repeat.data).toMatchObject({ agentProfilesPseudonymised: 0, leadsReturnedToQueue: 0 });
     expect((await pool().query(EVENTS_SQL, [ids])).rows).toEqual(eventsAfter);
+  });
+
+  it('queues no outbox row for an erased buyer on a later status event (#1006)', async () => {
+    const buyer = randomUUID();
+    const lead = await one<{ id: string }>(
+      `INSERT INTO listing_inquiries
+         (listing_id, kind, message, status, account_id, consent_to_contact,
+          consent_disclosure_text, consent_given_at, consent_text_version, consent_channels)
+       VALUES ($1, 'message', 'Hello (e2e)', 'new', $2, true, 'e2e consent', now(), 'v1',
+               ARRAY['email']) RETURNING id`,
+      [listing, buyer],
+    );
+    const leadId = lead?.id ?? '';
+    seededLeads.push(leadId);
+    const countRows = async () =>
+      (
+        await pool().query('SELECT 1 FROM notification_outbox WHERE recipient_account_id = $1', [
+          buyer,
+        ])
+      ).rows.length;
+
+    const consentBefore = await one(
+      'SELECT consent_to_contact, consent_channels FROM listing_inquiries WHERE id = $1',
+      [leadId],
+    );
+    expect((await erase(buyer)).status).toBe(200);
+
+    const change = await changeLeadStatus(pool(), {
+      leadId,
+      to: 'verified',
+      actorAccountId: null,
+      actorRole: 'system',
+    });
+    expect(change).toMatchObject({ ok: true, to: 'verified' });
+    expect(await countRows()).toBe(0);
+
+    const repeat = await erase(buyer);
+    expect(repeat.status).toBe(200);
+    expect(repeat.data).toMatchObject({
+      notificationOutboxDeleted: 0,
+      notificationOutboxAnonymised: 0,
+    });
+    const events = await pool().query(
+      'SELECT 1 FROM lead_status_events WHERE lead_id = $1 AND to_status = $2',
+      [leadId, 'verified'],
+    );
+    expect(events.rows).toHaveLength(1);
+    expect(
+      await one(
+        'SELECT consent_to_contact, consent_channels FROM listing_inquiries WHERE id = $1',
+        [leadId],
+      ),
+    ).toEqual(consentBefore);
   });
 
   it('refuses to reactivate a pseudonymised profile', async () => {
