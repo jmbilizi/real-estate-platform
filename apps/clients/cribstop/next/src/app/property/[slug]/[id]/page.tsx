@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
+import { preload } from 'react-dom';
 import { idSchema, type PropertyPage } from '@cribstop/property-contracts';
 import JsonLd from '@/components/JsonLd';
 import ListingLoadError from '@/components/listing/ListingLoadError';
@@ -98,6 +99,11 @@ export default async function PropertyRoute({ params }: RouteProps) {
     city: listing.city,
     state: listing.state,
   }).toString();
+
+  // The first photo is the LCP image. The preload link reaches the head ahead of the body markup
+  // (#890). The URL matches the `img` src, so the browser reuses the fetch.
+  const firstPhoto = listing.media[0];
+  if (firstPhoto) preload(firstPhoto.url, { as: 'image', fetchPriority: 'high' });
 
   const jsonLd = listingJsonLd(listing, publishableOrigin());
 
