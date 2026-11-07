@@ -44,6 +44,7 @@ import { nearbyListingsOptions } from '@/lib/query/listings';
 import type { ListingDetailView } from '@/lib/api/listings';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
+import { useRecordRecentlyViewed } from '@/lib/useRecordRecentlyViewed';
 import { searchTargetUrl } from '@/lib/search-place';
 import type { ListingCardRow } from '@/lib/types';
 import { trackEvent } from '@/lib/analytics';
@@ -96,6 +97,7 @@ export default function ListingDetailContent({
 }: Props) {
   const { toggleSave, isSaved } = useApp();
   const { toast } = useToast();
+  useRecordRecentlyViewed(listing.id);
   const saved = isSaved(listing.propertyId);
   const rootRef = useRef<HTMLDivElement>(null);
   // #132: one request path for every "Request a Tour" and "Message Agent" button.
