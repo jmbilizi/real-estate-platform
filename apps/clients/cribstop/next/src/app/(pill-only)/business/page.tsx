@@ -1,4 +1,5 @@
 import { BRAND } from '@/lib/brand';
+import ProviderWaitlistButton from './ProviderWaitlistButton';
 
 export default function BusinessPage() {
   return (
@@ -23,23 +24,21 @@ export default function BusinessPage() {
       </div>
 
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">
-        Find and connect with the trusted businesses and professionals behind every step of your
-        real estate journey — from the agent who finds your home to the contractor who makes it
-        yours.
+        A directory of the businesses and professionals behind every step of a real estate journey,
+        from agents to contractors. It is not open yet.
       </p>
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700 ring-1 ring-amber-200">
         <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-        Coming soon — directory launching with first businesses
+        The directory is not open yet
       </div>
 
       {/* How the directory works */}
       <div className="mt-12 rounded-2xl border border-surface-border bg-white p-6 shadow-card">
         <h2 className="font-display text-xl font-bold">One directory. Every real estate pro.</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          {BRAND.siteName} Business connects buyers, sellers, and homeowners with vetted
-          professionals across every category — all in one place, with transparent profiles,
-          reviews, and direct contact.
+          {BRAND.siteName} Business is planned as one place to find professionals across these
+          categories. This is what we plan to build. None of it is live today.
         </p>
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           {HOW_IT_WORKS.map((item) => (
@@ -55,12 +54,12 @@ export default function BusinessPage() {
       </div>
 
       {/* Business categories */}
-      <h2 className="mt-12 font-display text-2xl font-bold">Browse by category</h2>
+      <h2 className="mt-12 font-display text-2xl font-bold">Planned categories</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {BUSINESS_CATEGORIES.map((cat) => (
           <div
             key={cat.title}
-            className="flex items-center gap-4 rounded-2xl border border-surface-border bg-white px-5 py-4 shadow-card opacity-70"
+            className="flex min-w-0 items-center gap-4 rounded-2xl border border-surface-border bg-white px-5 py-4 shadow-card opacity-70"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
               {cat.icon}
@@ -86,16 +85,10 @@ export default function BusinessPage() {
       <div className="mt-14 rounded-2xl border border-surface-border bg-surface-alt px-6 py-8 text-center">
         <h2 className="font-display text-xl font-bold">Own a real estate business?</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          Create a free business profile on {BRAND.siteName} and get discovered by buyers, sellers,
-          and homeowners in your area. Agents, agencies, inspectors, movers, and contractors are all
-          welcome.
+          Tell us you want to be listed on {BRAND.siteName} when the directory opens. This does not
+          create a business profile. We make no promise about ranking, matches or response time.
         </p>
-        <button
-          disabled
-          className="mt-5 rounded-full bg-brand px-6 py-2.5 text-sm font-semibold text-white opacity-50 cursor-not-allowed"
-        >
-          Create a business profile — coming soon
-        </button>
+        <ProviderWaitlistButton />
       </div>
     </div>
   );
@@ -124,8 +117,7 @@ const HOW_IT_WORKS = [
   },
   {
     title: 'Compare',
-    description:
-      'Read verified reviews, check credentials, and compare profiles side by side before reaching out.',
+    description: 'View profiles side by side before you reach out.',
     icon: (
       <svg
         className="h-5 w-5"
@@ -144,10 +136,7 @@ const HOW_IT_WORKS = [
   },
   {
     title: 'Connect',
-    description:
-      'Message directly, request a quote, or book a consultation — all without leaving ' +
-      BRAND.siteName +
-      '.',
+    description: 'Contact the professionals you choose.',
     icon: (
       <svg
         className="h-5 w-5"
@@ -169,7 +158,7 @@ const HOW_IT_WORKS = [
 const BUSINESS_CATEGORIES = [
   {
     title: 'Buyer & Seller Agents',
-    subtitle: 'Licensed real estate agents and brokers',
+    subtitle: 'Real estate agents and brokers',
     icon: (
       <svg
         className="h-5 w-5"
