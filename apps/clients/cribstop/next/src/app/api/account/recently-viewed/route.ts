@@ -17,3 +17,20 @@ export async function POST(req: NextRequest) {
   });
   return new NextResponse(null, { status: upstream.ok ? 204 : upstream.status, headers: NO_STORE });
 }
+
+/** Lists the listing ids the signed-in account viewed, newest first (#366). */
+export async function GET(req: NextRequest) {
+  const upstream = await fetchGatewayAsUser(req, '/account/recently-viewed', { method: 'GET' });
+  if (!upstream.ok) {
+    return NextResponse.json(
+      { error: 'Failed to load recently viewed' },
+      { status: upstream.status, headers: NO_STORE },
+    );
+  }
+  const body = await upstream.json().catch(() => null);
+  const ids: unknown[] = Array.isArray(body?.listingIds) ? body.listingIds : [];
+  return NextResponse.json(
+    { listingIds: ids.filter((id): id is string => typeof id === 'string') },
+    { headers: NO_STORE },
+  );
+}

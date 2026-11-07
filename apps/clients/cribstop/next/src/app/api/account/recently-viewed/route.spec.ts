@@ -1,7 +1,7 @@
 /** @jest-environment node */
 import { NextRequest } from 'next/server';
 import { fetchGateway } from '@/app/api/_lib/gateway';
-import { POST } from './route';
+import { GET, POST } from './route';
 
 jest.mock('@/app/api/_lib/gateway', () => ({ fetchGateway: jest.fn() }));
 jest.mock('@/app/api/_lib/refresh', () => ({ tryRefreshToken: jest.fn() }));
@@ -40,5 +40,29 @@ describe('POST /api/account/recently-viewed', () => {
   it('keeps the upstream failure status', async () => {
     mockFetch.mockResolvedValue(new Response('{}', { status: 400 }));
     expect((await POST(post({ listingId: '!' }))).status).toBe(400);
+  });
+});
+
+describe('GET /api/account/recently-viewed', () => {
+  const get = () =>
+    new NextRequest('http://localhost/api/account/recently-viewed', {
+      headers: { cookie: 'access_token=tok' },
+    });
+
+  it('returns only string ids, uncached', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ listingIds: ['L2', 5, 'L1'] }), { status: 200 }),
+    );
+    const res = await GET(get());
+
+    expect(await res.json()).toEqual({ listingIds: ['L2', 'L1'] });
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    expect(mockFetch.mock.calls[0][0]).toBe('/account/recently-viewed');
+    expect(mockFetch.mock.calls[0][1].method).toBe('GET');
+  });
+
+  it('keeps the upstream failure status', async () => {
+    mockFetch.mockResolvedValue(new Response('{}', { status: 503 }));
+    expect((await GET(get())).status).toBe(503);
   });
 });

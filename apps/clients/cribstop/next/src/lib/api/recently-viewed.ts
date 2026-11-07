@@ -15,3 +15,17 @@ export function recordRecentlyViewed(listingId: string): void {
     // A synchronous failure is also silent.
   }
 }
+
+/** The listing ids the signed-in visitor viewed, newest first (#366). Rejects on any failure. */
+export async function getRecentlyViewedIds(signal?: AbortSignal): Promise<string[]> {
+  const res = await fetch('/api/account/recently-viewed', {
+    signal,
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Recently viewed answered ${res.status}`);
+  const body = await res.json().catch(() => null);
+  return Array.isArray(body?.listingIds)
+    ? body.listingIds.filter((id: unknown): id is string => typeof id === 'string')
+    : [];
+}
