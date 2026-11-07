@@ -48,6 +48,7 @@ function createPool(initial: Partial<Held>) {
     if (sql.includes('saved_homes')) result = take('saved');
     else if (sql.includes('looking_for_preferences')) result = take('looking');
     else if (sql.includes('analytics_account_links')) result = take('links');
+    else if (sql.includes('INTO erased_accounts')) result = [];
     else if (sql.startsWith('DELETE FROM notification_outbox')) result = take('outboxUnsent');
     else if (sql.startsWith('UPDATE notification_outbox')) result = take('outboxSent');
     else if (sql.includes('agent_profiles')) {
@@ -101,7 +102,7 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
       leadAssignmentsKept: 7,
     });
     expect(rows).toEqual(EMPTY);
-    expect(recorded).toHaveLength(6);
+    expect(recorded).toHaveLength(7);
     expect(recorded.every((r) => r.values[0] === ACCOUNT)).toBe(true);
   });
 
