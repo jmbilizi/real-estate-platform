@@ -8,8 +8,10 @@ exports.shorthands = undefined;
  * - `lead_assignments.agent_profile_id` and `lead_status_events.agent_profile_id` become
  *   `ON DELETE SET NULL`. Deleting an `agent_profiles` row detaches its history rows.
  * - The two guard triggers accept one extra change: `agent_profile_id` going from a value to NULL
- *   with every other column unchanged, and only inside the foreign key action
- *   (`pg_trigger_depth() > 1`). A direct UPDATE has depth 1, so it keeps its old rule.
+ *   with every other column unchanged. The change needs `pg_trigger_depth() > 1` and a deleted
+ *   profile row, so only the foreign key action passes. A direct UPDATE keeps its old rule.
+ * - `lead_assignments_guard` compares `agent_profile_id` with `IS NOT DISTINCT FROM`, so staff can
+ *   still end an open assignment after the agent is detached.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
@@ -26,7 +28,7 @@ exports.up = (pgm) => {
   }
 
   const detachOnly =
-    "pg_trigger_depth() > 1 AND OLD.agent_profile_id IS NOT NULL AND NEW.agent_profile_id IS NULL AND (to_jsonb(NEW) - 'agent_profile_id') = (to_jsonb(OLD) - 'agent_profile_id')";
+    "pg_trigger_depth() > 1 AND OLD.agent_profile_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agent_profiles WHERE id = OLD.agent_profile_id) AND NEW.agent_profile_id IS NULL AND (to_jsonb(NEW) - 'agent_profile_id') = (to_jsonb(OLD) - 'agent_profile_id')";
 
   pgm.createFunction(
     'lead_assignments_guard',
@@ -39,7 +41,7 @@ exports.up = (pgm) => {
          END IF;
          IF OLD.ended_at IS NULL
             AND NEW.id = OLD.id AND NEW.lead_id = OLD.lead_id
-            AND NEW.agent_profile_id = OLD.agent_profile_id
+            AND NEW.agent_profile_id IS NOT DISTINCT FROM OLD.agent_profile_id
             AND NEW.assigned_by_account_id = OLD.assigned_by_account_id
             AND NEW.assigned_at = OLD.assigned_at THEN
            RETURN NEW;

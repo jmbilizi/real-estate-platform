@@ -22,6 +22,8 @@ const erase = (accountId: string) =>
 const one = async <T>(sql: string, values: unknown[]): Promise<T | undefined> =>
   (await pool().query(sql, values)).rows[0] as T | undefined;
 
+const seededLeads: string[] = [];
+
 async function seedLead(): Promise<string> {
   const row = await one<{ id: string }>(
     `INSERT INTO listing_inquiries (listing_id, kind, message, status, account_id)
@@ -29,10 +31,13 @@ async function seedLead(): Promise<string> {
     [listing, randomUUID()],
   );
   if (!row) throw new Error('seed failed');
+  seededLeads.push(row.id);
   return row.id;
 }
 
+// A sent outbox row with no recipient breaks the down of migration 053 in the migration suites.
 afterAll(async () => {
+  await pool().query('DELETE FROM listing_inquiries WHERE id = ANY($1::uuid[])', [seededLeads]);
   await closePool();
 });
 
@@ -105,6 +110,13 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       [lead],
     );
     expect(assignments.rows).toEqual([{ agent_profile_id: null }]);
+    await expect(
+      pool().query(
+        `UPDATE lead_assignments SET ended_at = now(), end_reason = 'unassigned'
+          WHERE lead_id = $1 AND ended_at IS NULL`,
+        [lead],
+      ),
+    ).resolves.toMatchObject({ rowCount: 1 });
     const events = await pool().query<{ agent_profile_id: string | null }>(
       'SELECT agent_profile_id FROM lead_status_events WHERE lead_id = $1 AND to_status = $2',
       [lead, 'assigned'],
