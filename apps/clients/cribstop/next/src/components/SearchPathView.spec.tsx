@@ -20,14 +20,14 @@ jest.mock('@/lib/api/listings-initial', () => ({
   loadInitialResults: jest.fn(),
   initialRequestFor: jest.fn(() => ({ page: 1 })),
 }));
-jest.mock('@/lib/api/city-stats', () => ({ loadCityStats: jest.fn() }));
+jest.mock('@/lib/api/city-stats', () => ({ loadCityStats: jest.fn(), loadCityMedians: jest.fn() }));
 jest.mock('@/lib/api/zip-groups', () => ({ loadCityZips: jest.fn() }));
 jest.mock('@/lib/api/neighborhood-groups', () => ({ loadCityNeighborhoods: jest.fn() }));
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { makeTestQueryClient } from '@/test/renderWithClient';
-import { loadCityStats } from '@/lib/api/city-stats';
+import { loadCityMedians, loadCityStats } from '@/lib/api/city-stats';
 import { loadCityZips } from '@/lib/api/zip-groups';
 import { loadCityNeighborhoods } from '@/lib/api/neighborhood-groups';
 import { loadInitialResults } from '@/lib/api/listings-initial';
@@ -331,6 +331,84 @@ describe('a bare ZIP page (#973)', () => {
     (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'not-found' });
     const meta = await searchPathMetadata(zipPath as never, new URLSearchParams());
     expect(meta.robots).toEqual({ index: false });
+  });
+});
+
+describe('the city medians table (#986)', () => {
+  const cityPath = parseSearchPath(['alexandria-va', 'homes-for-sale']);
+  const cityFound = {
+    status: 'found',
+    initialQuery: '',
+    place: {
+      label: 'Alexandria, VA',
+      filters: { city: 'Alexandria', state: 'VA' },
+      query: '',
+      searchPlace: { kind: 'city', city: 'Alexandria', state: 'VA' },
+    },
+  };
+  const stat = (value: number | null) => ({ value, inputCount: value === null ? 2 : 30 });
+  const medians = {
+    listingCount: 42,
+    medianListPrice: stat(525000),
+    medianDaysOnMarket: stat(18),
+    medianPricePerSqft: stat(312),
+    dataUpdatedAt: '2026-10-14T12:00:00.000Z',
+  };
+  beforeEach(() => {
+    (searchRouteProps as jest.Mock).mockResolvedValue(cityFound);
+    (loadInitialResults as jest.Mock).mockResolvedValue(undefined);
+    (loadCityStats as jest.Mock).mockResolvedValue(stats);
+    (loadCityMedians as jest.Mock).mockResolvedValue(medians);
+  });
+  afterEach(() => jest.clearAllMocks());
+
+  const render = async () =>
+    renderToStaticMarkup(
+      await SearchPathView({ parsed: cityPath as never, params: new URLSearchParams() }),
+    );
+
+  it('renders the count and each median in the server HTML, each with date and source', async () => {
+    const html = await render();
+    expect(html).toContain('<table');
+    expect(html).toContain('Median list price');
+    expect(html).toContain('$525,000');
+    expect(html).toContain('Median days on market');
+    expect(html).toContain('Median price per sq ft');
+    expect(html).toContain('$312');
+    expect(html.match(/Oct 14, 2026<\/time> · Bright MLS/g)).toHaveLength(4);
+    expect(loadCityMedians).toHaveBeenCalledWith('Alexandria', 'VA', 'sale');
+  });
+
+  it('shows "Not enough data" and no number for a null figure', async () => {
+    (loadCityMedians as jest.Mock).mockResolvedValue({
+      ...medians,
+      medianDaysOnMarket: stat(null),
+    });
+    const html = await render();
+    expect(html).toContain('Not enough data');
+    expect(html).not.toContain('>18<');
+  });
+
+  it('hides the table, and keeps the page, when the stats call fails', async () => {
+    (loadCityMedians as jest.Mock).mockResolvedValue(null);
+    const html = await render();
+    expect(html).not.toContain('<table');
+    expect(html).not.toMatch(/fail|error/i);
+    expect(html).toContain('42 active listings');
+  });
+
+  it('reads no medians for a ZIP page', async () => {
+    (searchRouteProps as jest.Mock).mockResolvedValue({
+      ...cityFound,
+      place: {
+        ...cityFound.place,
+        searchPlace: { kind: 'zip-only', zip: '22304' },
+        filters: { zip: '22304' },
+      },
+    });
+    const html = await render();
+    expect(html).not.toContain('<table');
+    expect(loadCityMedians).not.toHaveBeenCalled();
   });
 });
 
