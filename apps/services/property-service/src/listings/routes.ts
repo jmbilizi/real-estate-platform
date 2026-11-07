@@ -1,5 +1,7 @@
 import { type NextFunction, type Request, type Response, Router } from 'express';
 import {
+  type CityStatsRequest,
+  cityStatsRequestSchema,
   type ErrorBody,
   exceedsResultWindow,
   idSchema,
@@ -9,6 +11,8 @@ import {
   listingsBatchRequestSchema,
   type ListingsBatchResult,
   type ListingsBatchRow,
+  type ListingsByIdsRequest,
+  listingsByIdsRequestSchema,
   MAP_PIN_CAP_DEFAULT,
   type MapRequest,
   mapRequestSchema,
@@ -24,7 +28,9 @@ import {
   suggestRequestSchema,
 } from '@cribstop/property-contracts';
 import { PRIVATE_CACHE_CONTROL, type SavedStateReader, withSavedFlags } from '../saved/identity';
+import { withReadTimeout } from '../home-feed/candidates';
 import type { GalleryLoader } from './gallery-loader';
+import { getCityStats } from './city-stats';
 import { getBrokerGroups, getZipGroups } from './group-counts';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
@@ -40,6 +46,7 @@ import {
   findBrightListingKeys,
   findListingById,
   findListingCardById,
+  findListingCardsByIds,
   getListingsMeta,
   getNeighborhoods,
   type ReadPool,
@@ -113,15 +120,31 @@ function parseQuery(
   query: unknown,
 ): ParseResult<ListingGroupsRequest>;
 function parseQuery(
+  schema: typeof cityStatsRequestSchema,
+  query: unknown,
+): ParseResult<CityStatsRequest>;
+function parseQuery(
+  schema: typeof listingsByIdsRequestSchema,
+  query: unknown,
+): ParseResult<ListingsByIdsRequest>;
+function parseQuery(
   schema:
     | typeof searchRequestSchema
+    | typeof cityStatsRequestSchema
     | typeof mapRequestSchema
     | typeof neighborhoodsRequestSchema
     | typeof listingGroupsRequestSchema
+    | typeof listingsByIdsRequestSchema
     | typeof suggestRequestSchema,
   query: unknown,
 ): ParseResult<
-  SearchRequest | MapRequest | NeighborhoodsRequest | ListingGroupsRequest | SuggestRequest
+  | SearchRequest
+  | MapRequest
+  | NeighborhoodsRequest
+  | ListingGroupsRequest
+  | SuggestRequest
+  | CityStatsRequest
+  | ListingsByIdsRequest
 > {
   const parsed = schema.safeParse(query);
   if (parsed.success) {
@@ -373,6 +396,24 @@ export function createListingsRouter(
     }),
   );
 
+  // #985. Registered before `/listings/:id` for the same reason as `/listings/meta`.
+  router.get(
+    '/listings/city-stats',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(cityStatsRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const request = parsed.value;
+      const stats = await shared(
+        `city-stats:${JSON.stringify({ ...request, city: request.city.trim().toLowerCase() })}`,
+        () => getCityStats(pool, request),
+      );
+      res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(stats);
+    }),
+  );
+
   // #377. Registered before `/listings/:id` for the same reason as `/listings/meta`.
   router.get(
     '/listings/map',
@@ -448,6 +489,36 @@ export function createListingsRouter(
       }
       const envelope = await getZipGroups(pool, parsed.value);
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(envelope);
+    }),
+  );
+
+  /**
+   * #76. Card rows for a set of listing ids, at most 50. Registered before `/listings/:id`. The
+   * answer is public and non-personal: no credential is read and no row carries `isSaved`. An id
+   * that does not resolve is absent. The rows keep the caller's id order.
+   */
+  router.get(
+    '/listings/by-ids',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(listingsByIdsRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const ids = [...new Set(parsed.value.ids)];
+      const cards = await withReadTimeout(pool, (client) => findListingCardsByIds(client, ids));
+      const results = ids.flatMap((id) => cards.get(id) ?? []);
+      res
+        .set('Cache-Control', LISTINGS_CACHE_CONTROL)
+        .status(200)
+        .json({
+          results,
+          total: results.length,
+          page: 1,
+          pageSize: ids.length,
+          pageCount: results.length > 0 ? 1 : 0,
+          appliedFilters: { ids },
+        });
     }),
   );
 
