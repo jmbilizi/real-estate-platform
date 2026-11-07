@@ -47,6 +47,7 @@ describe('resolvePlace — neighborhood (#533)', () => {
       status: 'found',
       filters: { neighborhood: 'Del Ray', city: 'Alexandria', state: 'VA' },
       label: 'Del Ray, Alexandria, VA',
+      area: { city: 'Alexandria', state: 'VA' },
     });
   });
 

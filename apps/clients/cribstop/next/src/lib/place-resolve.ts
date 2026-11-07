@@ -49,7 +49,7 @@ export type PlaceResolution =
        * make the tile link work without one.
        */
       readonly suggestion?: SearchSuggestionValue;
-      /** The city a bare ZIP path maps to (#973). Absent for every other place. */
+      /** The city a bare ZIP or neighborhood path maps to (#973, #974). Absent for other places. */
       readonly area?: { readonly city: string; readonly state: string };
     }
   | { readonly status: 'not-found' }
@@ -350,7 +350,9 @@ async function resolveWithGeocoder(
       (sameSlug(r.name, match.name) ||
         NEIGHBORHOOD_TYPES.some((key) => sameSlug(r.address?.[key], match.name))),
   );
+  // `area` is the neighborhood's own city, from our own data (#974).
+  const area = { city: match.city, state };
   return hit
-    ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label) }
-    : { status: 'found', filters, label };
+    ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label), area }
+    : { status: 'found', filters, label, area };
 }

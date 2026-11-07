@@ -1,19 +1,24 @@
 import Link from 'next/link';
-import type { Crumb, NearbyZip } from '@/lib/zip-page';
+import type { Crumb } from '@/lib/zip-page';
+
+export type NearbyLink = { readonly label: string; readonly count: number; readonly path: string };
 
 /**
- * The breadcrumb trail and the nearby ZIP links of a ZIP page (#973). A server component, so both
- * are in the first HTML. They sit inside the "About these listings" popover, which takes no row.
- * The text comes from the feed's numbers only. It says nothing about the people or the area.
+ * The breadcrumb trail and the nearby-area links of a ZIP page (#973) or a neighborhood page
+ * (#974). A server component, so both are in the first HTML. They sit inside the "About these
+ * listings" popover, which takes no row. The text comes from the feed's numbers only. It says
+ * nothing about the people or the area.
  */
-export default function ZipLinks({
+export default function AreaLinks({
   crumbs,
   nearby,
-  noun,
+  heading,
+  navLabel,
 }: {
   crumbs: readonly Crumb[];
-  nearby: readonly NearbyZip[];
-  noun: string;
+  nearby: readonly NearbyLink[];
+  heading: string;
+  navLabel: string;
 }) {
   return (
     <>
@@ -39,13 +44,13 @@ export default function ZipLinks({
         </ol>
       </nav>
       {nearby.length > 0 ? (
-        <nav aria-label="Nearby ZIP codes" className="mt-3">
-          <p className="text-xs font-semibold text-ink-body">{`${noun} in nearby ZIP codes`}</p>
+        <nav aria-label={navLabel} className="mt-3">
+          <p className="text-xs font-semibold text-ink-body">{heading}</p>
           <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
             {nearby.map((item) => (
-              <li key={item.zip}>
+              <li key={item.path}>
                 <Link href={item.path} className="underline hover:text-ink">
-                  {item.zip}
+                  {item.label}
                 </Link>
                 {` (${item.count.toLocaleString('en-US')})`}
               </li>

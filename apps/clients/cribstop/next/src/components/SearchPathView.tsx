@@ -4,9 +4,11 @@ import { type ParsedSearchPath, searchPath } from '@cribstop/property-contracts'
 import JsonLd from '@/components/JsonLd';
 import ListingsInfoPopover from '@/components/ListingsInfoPopover';
 import SearchExperience from '@/components/SearchExperience';
-import ZipLinks from '@/components/ZipLinks';
+import AreaLinks, { type NearbyLink } from '@/components/AreaLinks';
 import { loadCityStats } from '@/lib/api/city-stats';
+import { loadCityNeighborhoods } from '@/lib/api/neighborhood-groups';
 import { loadCityZips } from '@/lib/api/zip-groups';
+import { nearbyNeighborhoods, neighborhoodBreadcrumbs } from '@/lib/neighborhood-page';
 import { breadcrumbJsonLd, nearbyZips, zipBreadcrumbs } from '@/lib/zip-page';
 import { initialRequestFor, loadInitialResults } from '@/lib/api/listings-initial';
 import HydratedSearch from '@/lib/query/HydratedSearch';
@@ -41,23 +43,55 @@ export default async function SearchPathView({
   // the URL. An App Router page cannot set `Retry-After`, so the error boundary answers 500.
   if (props.status === 'error') throw new Error('Place lookup failed');
   const label = props.place.label;
-  // A bare ZIP page adds a breadcrumb trail and links to the city's other ZIPs (#973).
+  // A bare ZIP page or a neighborhood page adds a breadcrumb trail and links to the city's other
+  // ZIPs or neighborhoods (#973, #974).
   const zip = parsed.place?.kind === 'zip-only' ? parsed.place.zip : null;
-  const [initialResults, stats, cityZips] = await Promise.all([
+  const neighborhood =
+    parsed.place?.kind === 'neighborhood' && props.area && props.place.filters.neighborhood
+      ? { place: parsed.place, name: props.place.filters.neighborhood, area: props.area }
+      : null;
+  const listingType = parsed.segment === 'homes-for-rent' ? 'rent' : 'sale';
+  const [initialResults, stats, cityZips, cityNeighborhoods] = await Promise.all([
     loadInitialResults(props.initialQuery, props.place),
     label ? loadCityStats(props.initialQuery, props.place) : null,
-    zip && props.area
-      ? loadCityZips(
-          props.area.city,
-          props.area.state,
-          parsed.segment === 'homes-for-rent' ? 'rent' : 'sale',
-        )
+    zip && props.area ? loadCityZips(props.area.city, props.area.state, listingType) : null,
+    neighborhood
+      ? loadCityNeighborhoods(neighborhood.area.city, neighborhood.area.state, listingType)
       : null,
   ]);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
-  const crumbs = zip ? zipBreadcrumbs(zip, parsed.segment, props.area) : null;
-  const nearby =
-    zip && cityZips ? nearbyZips(cityZips, zip, parsed.segment, thinPageMinListings()) : [];
+  const crumbs = zip
+    ? zipBreadcrumbs(zip, parsed.segment, props.area)
+    : neighborhood
+      ? neighborhoodBreadcrumbs(
+          neighborhood.place,
+          neighborhood.name,
+          neighborhood.area,
+          parsed.segment,
+        )
+      : null;
+  const minListings = thinPageMinListings();
+  let nearby: NearbyLink[] = [];
+  let nearbyHeading = '';
+  let nearbyLabel = '';
+  if (zip && cityZips) {
+    nearby = nearbyZips(cityZips, zip, parsed.segment, minListings).map((item) => ({
+      label: item.zip,
+      count: item.count,
+      path: item.path,
+    }));
+    nearbyHeading = `${noun} in nearby ZIP codes`;
+    nearbyLabel = 'Nearby ZIP codes';
+  } else if (neighborhood && cityNeighborhoods) {
+    nearby = nearbyNeighborhoods(
+      cityNeighborhoods,
+      { name: neighborhood.name, ...neighborhood.area },
+      parsed.segment,
+      minListings,
+    ).map((item) => ({ label: item.name, count: item.count, path: item.path }));
+    nearbyHeading = `${noun} in other neighborhoods of ${neighborhood.area.city}`;
+    nearbyLabel = 'Other neighborhoods';
+  }
   // The markup must match the visible trail, and the trail shows only with the figures.
   const breadcrumbLd = crumbs && stats ? breadcrumbJsonLd(publishableOrigin(), crumbs) : null;
 
@@ -66,7 +100,12 @@ export default async function SearchPathView({
       <ListingsInfoPopover>
         {crumbs ? (
           <div className="mb-3">
-            <ZipLinks crumbs={crumbs} nearby={nearby} noun={noun} />
+            <AreaLinks
+              crumbs={crumbs}
+              nearby={nearby}
+              heading={nearbyHeading}
+              navLabel={nearbyLabel}
+            />
           </div>
         ) : null}
         <p className="text-sm text-ink-body">{citySummary(label, parsed.segment, stats)}</p>

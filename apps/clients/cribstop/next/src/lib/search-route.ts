@@ -11,7 +11,7 @@ export type SearchRouteProps =
       readonly status: 'found';
       readonly initialQuery: string;
       readonly place: SearchPathPlace;
-      /** The city a bare ZIP path maps to (#973). */
+      /** The city a bare ZIP or neighborhood path maps to (#973, #974). */
       readonly area?: { readonly city: string; readonly state: string };
     }
   /** An old drill-down link (#525). The page answers 308 to the neighborhood path (#533). */

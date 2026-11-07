@@ -22,12 +22,14 @@ jest.mock('@/lib/api/listings-initial', () => ({
 }));
 jest.mock('@/lib/api/city-stats', () => ({ loadCityStats: jest.fn() }));
 jest.mock('@/lib/api/zip-groups', () => ({ loadCityZips: jest.fn() }));
+jest.mock('@/lib/api/neighborhood-groups', () => ({ loadCityNeighborhoods: jest.fn() }));
 
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { makeTestQueryClient } from '@/test/renderWithClient';
 import { loadCityStats } from '@/lib/api/city-stats';
 import { loadCityZips } from '@/lib/api/zip-groups';
+import { loadCityNeighborhoods } from '@/lib/api/neighborhood-groups';
 import { loadInitialResults } from '@/lib/api/listings-initial';
 import { searchRouteProps } from '@/lib/search-route';
 
@@ -328,6 +330,91 @@ describe('a bare ZIP page (#973)', () => {
   it('answers noindex for a ZIP that resolves to nothing', async () => {
     (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'not-found' });
     const meta = await searchPathMetadata(zipPath as never, new URLSearchParams());
+    expect(meta.robots).toEqual({ index: false });
+  });
+});
+
+describe('a neighborhood page (#974)', () => {
+  const OLD = process.env.SITE_ORIGIN;
+  const path = parseSearchPath(['alexandria-va', 'del-ray-neighborhood', 'homes-for-sale']);
+  const hoodFound = {
+    status: 'found',
+    initialQuery: '',
+    place: {
+      label: 'Del Ray, Alexandria, VA',
+      filters: { neighborhood: 'Del Ray', city: 'Alexandria', state: 'VA' },
+      query: '',
+      searchPlace: { kind: 'neighborhood', name: 'Del Ray', city: 'Alexandria', state: 'VA' },
+    },
+    area: { city: 'Alexandria', state: 'VA' },
+  };
+  const hood = (name: string, total: number) => ({
+    key: `va|alexandria|${name.toLowerCase()}`,
+    name,
+    city: 'Alexandria',
+    state: 'VA',
+    total,
+  });
+  beforeEach(() => {
+    process.env.SITE_ORIGIN = 'https://cribstop.example';
+    (searchRouteProps as jest.Mock).mockResolvedValue(hoodFound);
+    (loadInitialResults as jest.Mock).mockResolvedValue(undefined);
+    (loadCityStats as jest.Mock).mockResolvedValue(stats);
+    (loadCityNeighborhoods as jest.Mock).mockResolvedValue([
+      hood('Del Ray', 40),
+      hood('Rosemont', 25),
+      hood('Old Town', 25),
+      hood('Seminary Hill', 4),
+    ]);
+  });
+  afterEach(() => {
+    process.env.SITE_ORIGIN = OLD;
+    jest.clearAllMocks();
+  });
+
+  const render = async () =>
+    renderToStaticMarkup(
+      await SearchPathView({ parsed: path as never, params: new URLSearchParams() }),
+    );
+
+  it('renders Home, City, Neighborhood breadcrumbs with BreadcrumbList JSON-LD', async () => {
+    const html = await render();
+    expect(html).toMatch(/<a[^>]*href="\/"[^>]*>Home<\/a>/);
+    expect(html).toMatch(/<a[^>]*href="\/alexandria-va\/homes-for-sale"[^>]*>Alexandria, VA<\/a>/);
+    expect(html).toMatch(/<span[^>]*aria-current="page"[^>]*>Del Ray<\/span>/);
+    expect(html).toContain('"@type":"BreadcrumbList"');
+  });
+
+  it('lists other neighborhoods at or above the threshold, by count then name', async () => {
+    const html = await render();
+    expect(html).toContain('Homes for sale in other neighborhoods of Alexandria');
+    const links = [
+      ...html.matchAll(/href="\/alexandria-va\/([a-z-]+)-neighborhood\/homes-for-sale"/g),
+    ].map((m) => m[1]);
+    // The current neighborhood and the one below the threshold are absent.
+    expect(links).toEqual(['old-town', 'rosemont']);
+    expect(loadCityNeighborhoods).toHaveBeenCalledWith('Alexandria', 'VA', 'sale');
+  });
+
+  it('keeps the page when the neighborhood read fails', async () => {
+    (loadCityNeighborhoods as jest.Mock).mockResolvedValue(null);
+    const html = await render();
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).not.toContain('Other neighborhoods');
+  });
+
+  it('answers noindex, follow below the threshold, canonical on the neighborhood path', async () => {
+    (loadCityStats as jest.Mock).mockResolvedValue({ ...stats, activeCount: 9 });
+    const meta = await searchPathMetadata(path as never, new URLSearchParams());
+    expect(meta.robots).toEqual({ index: false, follow: true });
+    expect(meta.alternates?.canonical).toBe(
+      'https://cribstop.example/alexandria-va/del-ray-neighborhood/homes-for-sale',
+    );
+  });
+
+  it('answers noindex for a neighborhood that resolves to nothing', async () => {
+    (searchRouteProps as jest.Mock).mockResolvedValue({ status: 'not-found' });
+    const meta = await searchPathMetadata(path as never, new URLSearchParams());
     expect(meta.robots).toEqual({ index: false });
   });
 });
