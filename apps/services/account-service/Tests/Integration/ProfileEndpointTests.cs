@@ -5,7 +5,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AccountService.Data;
+using AccountService.Models;
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 #pragma warning disable CA2234 // Pass Uri objects instead of strings
@@ -109,6 +114,21 @@ namespace AccountService.Tests.Integration
 
             var response = await client.DeleteAsync("/account/profile");
             response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        [Fact]
+        public async Task DeleteProfile_QueuesThePropertyDataErasure()
+        {
+            var email = $"delete-erasure-{Guid.NewGuid()}@example.com";
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(factory, email, Password);
+
+            (await client.DeleteAsync("/account/profile")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+            using var scope = factory.Services.CreateScope();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var db = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
+            var user = await users.FindByEmailAsync(email);
+            (await db.PendingPropertyErasures.AnyAsync(e => e.AccountId == user!.Id)).Should().BeTrue();
         }
 
         [Fact]

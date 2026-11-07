@@ -22,6 +22,7 @@ const { resolveDeployScope, describeProblems } = require('./deploy-scope');
 const { checkSecretDrift } = require('./secret-drift');
 const { checkServiceRegistries } = require('./service-registries');
 const { findProxyProtocolProblems } = require('./proxy-protocol');
+const { findMissingConfigMapProblems } = require('./configmap-mounts');
 
 const colors = {
   reset: '\x1b[0m',
@@ -111,7 +112,22 @@ function validateEnvironment(provider, env) {
   if (result.success) {
     logSuccess(`${provider}/${env}: Kustomize build successful`);
 
-    const proxyProblems = findProxyProtocolProblems(loadManifestDocuments(result.output), {
+    const documents = loadManifestDocuments(result.output);
+    const configMapProblems = findMissingConfigMapProblems(documents);
+    if (configMapProblems.length > 0) {
+      logError(`${provider}/${env}: a workload references a ConfigMap missing from its namespace`);
+      for (const problem of configMapProblems) {
+        for (const item of problem.items) {
+          log(`    - ${item}`, 'red');
+        }
+        for (const line of problem.detail) {
+          log(`    ${line}`, 'yellow');
+        }
+      }
+      return false;
+    }
+
+    const proxyProblems = findProxyProtocolProblems(documents, {
       provider,
     });
     if (proxyProblems.length > 0) {
