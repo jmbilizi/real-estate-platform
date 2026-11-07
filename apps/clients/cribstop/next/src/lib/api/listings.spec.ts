@@ -1,5 +1,6 @@
 import { aListingDetail } from '@/test/fixtures';
 import {
+  getListingsByIds,
   getListingsMeta,
   ListingsApiError,
   retryAfterMsOf,
@@ -294,5 +295,43 @@ describe('searchListingsBatch (#960)', () => {
       status: 429,
       code: 'rate_limited',
     });
+  });
+});
+
+describe('getListingsByIds (#76)', () => {
+  const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const envelope = (results: unknown[]) => ({
+    results,
+    total: results.length,
+    page: 1,
+    pageSize: 1,
+    pageCount: 1,
+    appliedFilters: {},
+  });
+
+  it('sends one comma-joined request and returns the rows', async () => {
+    mockFetchResponse(200, envelope([{ id: uuid(1) }]));
+
+    const rows = await getListingsByIds([uuid(1), uuid(2)]);
+
+    const [url] = (global.fetch as jest.Mock).mock.calls[0] as [string];
+    expect(url).toBe(`/api/listings/by-ids?ids=${encodeURIComponent(`${uuid(1)},${uuid(2)}`)}`);
+    expect(rows).toEqual([{ id: uuid(1) }]);
+  });
+
+  it('splits a list over the cap into requests of 50 and drops a value that is not an id', async () => {
+    mockFetchResponse(200, envelope([]));
+    const ids = Array.from({ length: 51 }, (_, i) => uuid(i + 1));
+
+    await getListingsByIds([...ids, 'not-an-id']);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends no request for an empty list', async () => {
+    mockFetchResponse(200, envelope([]));
+
+    expect(await getListingsByIds([])).toEqual([]);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
