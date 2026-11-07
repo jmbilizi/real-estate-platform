@@ -22,7 +22,7 @@ const STEPS = [
     id: 'preferences',
     emoji: '🏡',
     title: 'Stay in the loop',
-    subtitle: 'Get notified about homes you love',
+    subtitle: 'Choose how we email you',
   },
 ] as const;
 
@@ -33,7 +33,6 @@ export default function OnboardingModal({ open }: { open: boolean }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [emailNotifications, setEmailNotifications] = useState(false);
-  const [pushNotifications, setPushNotifications] = useState(true);
   const [saving, setSaving] = useState(false);
   const { wording, failed: wordingFailed } = useConsentWording(emailNotifications);
 
@@ -70,7 +69,6 @@ export default function OnboardingModal({ open }: { open: boolean }) {
         }
         await updateProfileApi({
           emailNotificationsEnabled: emailNotifications ? undefined : false,
-          pushNotificationsEnabled: pushNotifications,
         });
       }
       await queryClient.invalidateQueries({ queryKey: accountKeys.all });
@@ -138,9 +136,7 @@ export default function OnboardingModal({ open }: { open: boolean }) {
               emailNotifications={emailNotifications}
               wording={wording}
               wordingFailed={wordingFailed}
-              pushNotifications={pushNotifications}
               onEmailChange={setEmailNotifications}
-              onPushChange={setPushNotifications}
             />
           )}
         </div>
@@ -226,34 +222,23 @@ function PreferencesStep({
   emailNotifications,
   wording,
   wordingFailed,
-  pushNotifications,
   onEmailChange,
-  onPushChange,
 }: {
   emailNotifications: boolean;
   wording: ConsentWording | null;
   wordingFailed: boolean;
-  pushNotifications: boolean;
   onEmailChange: (v: boolean) => void;
-  onPushChange: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-3">
       <ToggleRow
         emoji="📧"
         label="Email updates"
-        description="Email with new listings matching your searches. Turn this off in your account at any time."
+        description="Email alerts are not live yet. Your choice is saved for when they launch. Turn this off in your account at any time."
         checked={emailNotifications}
         onChange={onEmailChange}
       />
       {emailNotifications && <EmailConsentNotice wording={wording} failed={wordingFailed} />}
-      <ToggleRow
-        emoji="🔔"
-        label="Push notifications"
-        description="Price drops and open house alerts"
-        checked={pushNotifications}
-        onChange={onPushChange}
-      />
     </div>
   );
 }

@@ -99,3 +99,30 @@ describe('account page email consent', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
   });
 });
+
+describe('account page coming-soon notifications', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockWording.mockResolvedValue({ consentWording: WORDING, preferences: [] });
+    mockUpdate.mockResolvedValue(undefined);
+  });
+
+  it('shows push and SMS as disabled Coming soon switches, even while editing', async () => {
+    await startEditing(false);
+    for (const name of ['Push notifications', 'SMS notifications']) {
+      const sw = screen.getByRole('switch', { name: new RegExp(`^${name}`) });
+      expect(sw).toBeDisabled();
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+    }
+    expect(screen.getAllByText('Coming soon')).toHaveLength(2);
+  });
+
+  it('sends no push or SMS fields on save', async () => {
+    await startEditing(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
+    const sent = mockUpdate.mock.calls[0][0];
+    expect(sent).not.toHaveProperty('pushNotificationsEnabled');
+    expect(sent).not.toHaveProperty('smsNotificationsEnabled');
+  });
+});

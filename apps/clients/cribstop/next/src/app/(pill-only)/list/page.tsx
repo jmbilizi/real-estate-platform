@@ -215,7 +215,7 @@ const STEPS = [
     description:
       'Your listing goes live on ' +
       BRAND.siteName +
-      ' and is indexed for search. Buyers find you through search, map, and saved alerts.',
+      ' and is indexed for search. Buyers find you through search and the map.',
   },
   {
     title: 'Manage leads and showings',
