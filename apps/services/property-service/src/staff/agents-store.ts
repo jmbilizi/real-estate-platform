@@ -200,9 +200,10 @@ export interface AgentErasureResult {
  * In the same transaction, each lead still `assigned` or `accepted` with this agent returns to
  * `verified` through `changeLeadStatusInTransaction`: system actor, end reason `returned`, one
  * appended event. Later statuses have no transition to `verified`, so they keep the assignment and
- * staff see `needsReassignment`. The profile update runs first, so a concurrent assign waits for it
- * and does not open an assignment on a profile this call missed. A second call finds no linked
- * profile and changes nothing.
+ * staff see `needsReassignment`. The open leads are locked before the profile update, the same
+ * order as staff assign. After the update, an assign that waited on the profile finds no
+ * `account_id` and fails, so no assignment opens on a profile this call missed. A second call finds
+ * no linked profile and changes nothing.
  */
 export async function eraseAccountAgent(
   pool: TransactionalPool,
@@ -212,6 +213,16 @@ export async function eraseAccountAgent(
   let releaseError: Error | undefined;
   try {
     await client.query('BEGIN');
+    // Lock order: lead rows (by id), then the profile. Staff assign locks the lead, then reads the
+    // profile `FOR SHARE`. The same order means the two never wait on each other in a cycle.
+    await client.query(
+      `SELECT i.id FROM listing_inquiries i
+        WHERE i.id IN (SELECT la.lead_id FROM lead_assignments la
+                         JOIN agent_profiles p ON p.id = la.agent_profile_id
+                        WHERE p.account_id = $1 AND la.ended_at IS NULL)
+        ORDER BY i.id FOR UPDATE`,
+      [accountId],
+    );
     const scrubbed = await client.query<{ id: string }>(
       `UPDATE agent_profiles
           SET account_id = NULL, active = false, deactivated_at = now()

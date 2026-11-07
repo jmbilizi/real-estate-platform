@@ -163,9 +163,12 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
     ]);
     const sql = recorded.map((r) => r.sql);
     expect(sql.filter((s) => s === 'COMMIT')).toHaveLength(1);
-    expect(sql.indexOf('BEGIN')).toBeLessThan(
-      sql.findIndex((s) => s.startsWith('UPDATE agent_profiles')),
-    );
+    // Lock order: lead rows first, then the profile (the same as staff assign).
+    const leadLock = sql.findIndex((s) => s.includes('ORDER BY i.id FOR UPDATE'));
+    const profileUpdate = sql.findIndex((s) => s.startsWith('UPDATE agent_profiles'));
+    expect(sql.indexOf('BEGIN')).toBeLessThan(leadLock);
+    expect(leadLock).toBeGreaterThan(-1);
+    expect(leadLock).toBeLessThan(profileUpdate);
     expect(sql.lastIndexOf('COMMIT')).toBeGreaterThan(
       sql.findIndex((s) => s.startsWith('INSERT INTO lead_status_events')),
     );
@@ -176,8 +179,9 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
     await request(app(pool)).delete(PATH).set('X-Internal-Key', KEY);
 
     const sql = recorded.map((r) => r.sql).join('\n');
+    // The agent lock reads `listing_inquiries` (#1007). No statement may write or delete a lead.
     expect(sql).not.toMatch(
-      /listing_inquiries|lead_notes|lead_status_events|DELETE FROM lead_assignments/,
+      /(DELETE FROM|INSERT INTO|UPDATE) (listing_inquiries|lead_notes|lead_status_events|lead_assignments)/,
     );
   });
 
