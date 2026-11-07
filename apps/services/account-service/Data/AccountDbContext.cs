@@ -46,6 +46,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
 
+    public DbSet<RecentlyViewedListing> RecentlyViewedListings => Set<RecentlyViewedListing>();
+
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
 
     public DbSet<NotificationPreferenceAudit> NotificationPreferenceAudits => Set<NotificationPreferenceAudit>();
@@ -358,6 +360,16 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.HasIndex(d => d.TokenHash).IsUnique();
             entity.HasIndex(d => d.UserId);
             entity.HasIndex(d => d.ExpiresAt);
+        });
+
+        // No FK to AspNetUsers. The row holds a listing id and a time only (#365).
+        builder.Entity<RecentlyViewedListing>(entity =>
+        {
+            entity.ToTable("RecentlyViewedListings");
+            entity.HasKey(r => new { r.UserId, r.ListingId });
+            entity.Property(r => r.UserId).IsRequired();
+            entity.Property(r => r.ListingId).IsRequired().HasMaxLength(RecentlyViewedListing.MaxListingIdLength);
+            entity.HasIndex(r => new { r.UserId, r.ViewedAt });
         });
     }
 }

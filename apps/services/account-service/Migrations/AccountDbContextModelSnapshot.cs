@@ -683,6 +683,25 @@ namespace AccountService.Migrations
                     b.ToTable("NotificationPreferenceAudits", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.RecentlyViewedListing", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ListingId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ViewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId", "ListingId");
+
+                    b.HasIndex("UserId", "ViewedAt");
+
+                    b.ToTable("RecentlyViewedListings", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.TrustedDevice", b =>
                 {
                     b.Property<Guid>("Id")

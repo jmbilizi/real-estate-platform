@@ -77,6 +77,8 @@ namespace AccountService.Tests.Integration
             ["POST /internal/account/notification-policy"] = false,
             ["GET /account/notification-preferences"] = false,
             ["PUT /account/notification-preferences"] = false,
+            ["GET /account/recently-viewed"] = false,
+            ["POST /account/recently-viewed"] = false,
             ["POST /notifications/unsubscribe"] = false,
             ["GET /openapi/{documentName}.json"] = false,
         };

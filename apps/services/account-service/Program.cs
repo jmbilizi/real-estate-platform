@@ -135,6 +135,7 @@ internal static class Program
             });
         builder.Services.AddSingleton<UnsubscribeTokenService>();
         builder.Services.AddScoped<NotificationPreferenceService>();
+        builder.Services.AddScoped<RecentlyViewedService>();
         builder.Services.AddDbContext<AccountDbContext>(options => options.UseNpgsql(connectionString));
         builder.Services.AddScoped<IClaimsTransformation, UserAppClaimsTransformation>();
 
@@ -367,6 +368,7 @@ internal static class Program
 
         // Notification consent: GET/PUT /account/notification-preferences, POST /notifications/unsubscribe (#694)
         app.MapNotificationPreferenceRoutes();
+        app.MapRecentlyViewedRoutes();
 
         // Internal identity resolution: forwarded cookie/bearer/api-key -> account id
         app.MapCredentialIntrospectionRoutes();
