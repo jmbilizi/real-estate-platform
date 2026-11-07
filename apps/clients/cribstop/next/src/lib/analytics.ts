@@ -25,6 +25,7 @@ export const BATCH_MAX = 50;
 const BATCHED_EVENTS: ReadonlySet<AnalyticsEventName> = new Set([
   'listing_impression',
   'feed_impression',
+  'web_vital',
 ]);
 
 let sessionId: string | null = null;
