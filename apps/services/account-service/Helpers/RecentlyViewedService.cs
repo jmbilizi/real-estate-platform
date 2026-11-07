@@ -24,6 +24,22 @@ internal sealed partial class RecentlyViewedService(AccountDbContext db, TimePro
     internal static bool IsValidListingId(string? listingId) =>
         listingId is not null && ListingIdPattern().IsMatch(listingId);
 
+    /// <summary>
+    /// Marks every viewed id of an account for removal without saving. The caller's next save removes
+    /// them with the account change, so a failed update leaves the rows in place (#996).
+    /// </summary>
+    /// <param name="userId">The deleted account id.</param>
+    /// <param name="cancellationToken">A token to cancel the call.</param>
+    /// <returns>A task that completes when the rows are marked.</returns>
+    internal async Task StagePurgeAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        var rows = await db.RecentlyViewedListings
+            .Where(r => r.UserId == userId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        db.RecentlyViewedListings.RemoveRange(rows);
+    }
+
     /// <summary>Records a view. The caller has already checked the id.</summary>
     /// <param name="userId">The account id.</param>
     /// <param name="listingId">The viewed listing id.</param>

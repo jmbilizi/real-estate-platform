@@ -217,7 +217,8 @@ internal static class Profile
             ClaimsPrincipal principal,
             UserManager<ApplicationUser> userManager,
             NotificationPreferenceService notificationPreferences,
-            PropertyErasureService propertyErasure) =>
+            PropertyErasureService propertyErasure,
+            RecentlyViewedService recentlyViewed) =>
         {
             var user = await userManager.GetUserAsync(principal).ConfigureAwait(false);
             if (user is null)
@@ -250,8 +251,9 @@ internal static class Profile
             user.DeletedByUserId = userManager.GetUserId(principal);
 
             // #803: UpdateAsync saves this row with the delete. A failed update returns below and
-            // the scope ends unsaved, so no erasure is queued for an account that still exists.
+            // the scope ends unsaved, so no erasure is queued and no viewed id is removed for an account that still exists.
             propertyErasure.Stage(user.Id);
+            await recentlyViewed.StagePurgeAsync(user.Id).ConfigureAwait(false);
 
             var result = await userManager.UpdateAsync(user).ConfigureAwait(false);
             if (!result.Succeeded)
