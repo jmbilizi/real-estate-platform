@@ -77,6 +77,9 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   `ValidateSecurityStampAsync` (cookie and `/account/refresh`). Do not move this behind
   `RequireConfirmedAccount`, which is a separate switch. Tests:
   `Tests/Integration/DeletedAccountSignInTests.cs`.
+- **Recently viewed (#365).** `GET`/`POST /account/recently-viewed` keep the 20 newest listing ids
+  per account (`Helpers/RecentlyViewedService.cs`). The row holds the id and a time only. The
+  service never holds listing data. The caller resolves ids against property-service.
 - CPM: versionless `<PackageReference>`; run `pnpm run nx:reset` after project structure changes.
 
 ## Identity surface (login, refresh, manage)

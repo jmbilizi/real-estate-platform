@@ -7,7 +7,7 @@ namespace AccountService.Tests.Helpers
     /// <summary>A <see cref="TimeProvider"/> a test moves by hand.</summary>
     internal sealed class FakeClock : TimeProvider
     {
-        private DateTimeOffset now = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
+        private DateTimeOffset now = TimeProvider.System.GetUtcNow();
 
         /// <inheritdoc/>
         public override DateTimeOffset GetUtcNow() => this.now;
