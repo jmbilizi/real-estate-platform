@@ -8189,6 +8189,68 @@ A signed-in request also gets \`isSaved\` and \`isFavorited\` on each result, re
         "summary": "Listing office groups",
       },
     },
+    "/listings/by-ids": {
+      "get": {
+        "description": "Card rows for the listing ids in \`ids\`, at most 50. The answer is a \`ListingsEnvelope\` with the same card row and the same attribution as \`GET /listings\`. The rows keep the order of \`ids\`, and a repeated id answers once. An id that is unknown, withdrawn or not consumer-visible is absent from \`results\`. It is never a 404 and never a placeholder row. More than 50 ids is a 400 \`invalid_request\`, never a silent cut. This is not a bulk-export surface (#65): the request must name its ids, and the cap is small. There is no field-selection parameter. The answer is public and non-personal: no row carries \`isSaved\`.",
+        "operationId": "getListingsByIds",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+              ],
+              "description": "Comma-separated or repeated listing ids (UUIDs). 1 to 50 ids. More than 50 is a 400, never a silent truncation.",
+            },
+            "style": "form",
+          },
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingsEnvelope",
+                },
+              },
+            },
+            "description": "The resolvable rows, in request order.",
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Missing, malformed or too many ids, or an unknown parameter.",
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody",
+                },
+              },
+            },
+            "description": "Unexpected server error. The body carries no detail by design.",
+          },
+        },
+        "summary": "Card rows for a set of listing ids",
+      },
+    },
     "/listings/city-stats": {
       "get": {
         "description": "Median list price, median days on market and median price per square foot of the active listings of one city. The count is one card per home. A listing whose seller withheld the price or the days on market never enters that median. A statistic with fewer than 5 inputs has a null \`value\` and its \`inputCount\`. The response has no listing row and no address.",

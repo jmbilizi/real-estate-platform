@@ -25,6 +25,7 @@ import {
   listingInquiryResponseSchema,
   listingsBatchRequestSchema,
   listingsBatchResponseSchema,
+  listingsByIdsRequestSchema,
   listingsEnvelopeSchema,
   listingsMetaSchema,
   lookingForInvalidBodySchema,
@@ -90,7 +91,7 @@ function searchParameters(requestSchema: z.ZodType = searchRequestSchema) {
       required: requestJsonSchema.required?.includes(name) ?? false,
       schema: propertySchema,
     };
-    if (name === 'amenities') {
+    if (name === 'amenities' || name === 'ids') {
       // `style`/`explode` are the only OpenAPI-level vocabulary for how an array-typed query
       // parameter serializes; `form`/`explode: false` documents the comma-list form
       // (`?amenities=Pool,Garage`) this schema's `anyOf` schema advertises but which is otherwise
@@ -757,6 +758,37 @@ export function toOpenApiDocument() {
                 'Rate limit exceeded for this client or this listing. Documented here — unlike ' +
                 'the read endpoints above — because this limit is enforced by the service ' +
                 'itself (keyed on the path parameter), not by the gateway.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
+              },
+            },
+            '500': serverErrorResponse,
+          },
+        },
+      },
+      '/listings/by-ids': {
+        get: {
+          operationId: 'getListingsByIds',
+          summary: 'Card rows for a set of listing ids',
+          description:
+            'Card rows for the listing ids in `ids`, at most 50. The answer is a ' +
+            '`ListingsEnvelope` with the same card row and the same attribution as `GET ' +
+            '/listings`. The rows keep the order of `ids`, and a repeated id answers once. An id ' +
+            'that is unknown, withdrawn or not consumer-visible is absent from `results`. It is ' +
+            'never a 404 and never a placeholder row. More than 50 ids is a 400 `invalid_request`, ' +
+            'never a silent cut. This is not a bulk-export surface (#65): the request must name its ' +
+            'ids, and the cap is small. There is no field-selection parameter. The answer is public ' +
+            'and non-personal: no row carries `isSaved`.',
+          parameters: searchParameters(listingsByIdsRequestSchema),
+          responses: {
+            '200': {
+              description: 'The resolvable rows, in request order.',
+              content: {
+                'application/json': { schema: { $ref: '#/components/schemas/ListingsEnvelope' } },
+              },
+            },
+            '400': {
+              description: 'Missing, malformed or too many ids, or an unknown parameter.',
               content: {
                 'application/json': { schema: { $ref: '#/components/schemas/ErrorBody' } },
               },
