@@ -72,15 +72,26 @@ internal sealed partial class PropertyErasureService(
             {
                 db.PendingPropertyErasures.Remove(row);
                 done++;
-                continue;
+            }
+            else
+            {
+                row.Attempts++;
+                row.NextAttemptAt = now + Backoff(row.Attempts, settings.MaxBackoff);
+                LogFailed(logger, row.Attempts, failure);
             }
 
-            row.Attempts++;
-            row.NextAttemptAt = now + Backoff(row.Attempts, settings.MaxBackoff);
-            LogFailed(logger, row.Attempts, failure);
+            // One save per row, so a stop or a clash with another replica loses at most one row's bookkeeping.
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Another sweep already removed the row. The call is idempotent, so nothing is lost.
+                db.Entry(row).State = EntityState.Detached;
+            }
         }
 
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return done;
     }
 
