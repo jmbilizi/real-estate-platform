@@ -396,8 +396,9 @@ export function createListingsRouter(
         return;
       }
       const request = parsed.value;
-      const stats = await shared(`city-stats:${JSON.stringify(request)}`, () =>
-        getCityStats(pool, request),
+      const stats = await shared(
+        `city-stats:${JSON.stringify({ ...request, city: request.city.trim().toLowerCase() })}`,
+        () => getCityStats(pool, request),
       );
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(stats);
     }),

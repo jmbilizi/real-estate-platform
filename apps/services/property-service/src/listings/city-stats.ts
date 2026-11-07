@@ -13,7 +13,8 @@ import type { ReadPool } from './repository';
  * #985. City medians over the consumer-visible active listings of one city.
  *
  * Reads `listings` directly, as `getNeighborhoods` does, because the stats need no open house
- * join. The #716 collapse keeps one card per home, so the count equals the search total.
+ * join. The #716 collapse keeps one card per home. Only `Active` listings count (Coming Soon and
+ * Pending do not), so the count can be below a default search total.
  * The display flags apply here in SQL: a row with the price (or days on market) withheld never
  * enters that median.
  */
