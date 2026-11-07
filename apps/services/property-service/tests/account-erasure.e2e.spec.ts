@@ -41,6 +41,21 @@ afterAll(async () => {
   await closePool();
 });
 
+interface ProfileRow {
+  account_id: string | null;
+  display_name: string;
+  licence_number: string;
+  licence_states: string[];
+  brokerage: string;
+  active: boolean;
+  deactivated_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+const PROFILE_SQL =
+  'SELECT account_id, display_name, licence_number, licence_states, brokerage, active, deactivated_at, created_at, updated_at FROM agent_profiles WHERE id = $1';
+
 describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
   it('rejects a call without the key', async () => {
     const res = await axios.delete(`/internal/account/${randomUUID()}/data`, {
@@ -49,9 +64,10 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('deletes links, unsent outbox rows and the agent profile, and keeps the lead history', async () => {
+  it('removes links and unsent outbox rows, and pseudonymises the agent with two assigned leads', async () => {
     const account = randomUUID();
-    const lead = await seedLead();
+    const leadOne = await seedLead();
+    const leadTwo = await seedLead();
     await pool().query(
       'INSERT INTO analytics_account_links (account_id, anon_id) VALUES ($1, $2)',
       [account, `anon-${account}`],
@@ -61,23 +77,26 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
        VALUES ($1, 'E2E Agent', 'E2E-1', ARRAY['ZZ']) RETURNING id`,
       [account],
     );
-    const profileId = profile?.id;
-    await pool().query(
-      `INSERT INTO lead_assignments (lead_id, agent_profile_id, assigned_by_account_id)
-       VALUES ($1, $2, $3)`,
-      [lead, profileId, randomUUID()],
-    );
-    await pool().query(
-      `INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role, agent_profile_id)
-       VALUES ($1, 'verified', 'assigned', 'staff', $2)`,
-      [lead, profileId],
-    );
+    const profileId = profile?.id ?? '';
+    const before = await one<ProfileRow>(PROFILE_SQL, [profileId]);
+    for (const lead of [leadOne, leadTwo]) {
+      await pool().query(
+        `INSERT INTO lead_assignments (lead_id, agent_profile_id, assigned_by_account_id)
+         VALUES ($1, $2, $3)`,
+        [lead, profileId, randomUUID()],
+      );
+      await pool().query(
+        `INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role, agent_profile_id)
+         VALUES ($1, 'verified', 'assigned', 'staff', $2)`,
+        [lead, profileId],
+      );
+    }
     for (const state of ['held', 'sent']) {
       await pool().query(
         `INSERT INTO notification_outbox
            (lead_id, event_type, recipient_kind, channel, recipient_account_id, template_key, state)
          VALUES ($1, 'lead.assigned', 'agent', 'email', $2, 'agent-lead-assigned', $3)`,
-        [lead, account, state],
+        [leadOne, account, state],
       );
     }
 
@@ -87,8 +106,8 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       analyticsAccountLinks: 1,
       notificationOutboxDeleted: 1,
       notificationOutboxAnonymised: 1,
-      agentProfiles: 1,
-      leadAssignmentsDetached: 1,
+      agentProfilesPseudonymised: 1,
+      leadAssignmentsKept: 2,
     });
 
     const links = await pool().query(
@@ -96,33 +115,39 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       [account],
     );
     expect(links.rows).toHaveLength(0);
-    const agents = await pool().query('SELECT 1 FROM agent_profiles WHERE account_id = $1', [
-      account,
-    ]);
-    expect(agents.rows).toHaveLength(0);
     const outbox = await pool().query<{ state: string; recipient_account_id: string | null }>(
       'SELECT state, recipient_account_id FROM notification_outbox WHERE lead_id = $1',
-      [lead],
+      [leadOne],
     );
     expect(outbox.rows).toEqual([{ state: 'sent', recipient_account_id: null }]);
-    const assignments = await pool().query<{ agent_profile_id: string | null }>(
-      'SELECT agent_profile_id FROM lead_assignments WHERE lead_id = $1',
-      [lead],
+
+    const after = await one<ProfileRow>(PROFILE_SQL, [profileId]);
+    expect(after).toMatchObject({
+      account_id: null,
+      display_name: 'E2E Agent',
+      licence_number: 'E2E-1',
+      licence_states: ['ZZ'],
+      brokerage: before?.brokerage,
+      active: false,
+    });
+    expect(after?.deactivated_at).toBeInstanceOf(Date);
+    expect(after?.created_at).toEqual(before?.created_at);
+    expect(after?.updated_at).toEqual(before?.updated_at);
+
+    const assignments = await pool().query<{ agent_profile_id: string }>(
+      'SELECT agent_profile_id FROM lead_assignments WHERE lead_id = ANY($1::uuid[])',
+      [[leadOne, leadTwo]],
     );
-    expect(assignments.rows).toEqual([{ agent_profile_id: null }]);
-    await expect(
-      pool().query(
-        `UPDATE lead_assignments SET ended_at = now(), end_reason = 'unassigned'
-          WHERE lead_id = $1 AND ended_at IS NULL`,
-        [lead],
-      ),
-    ).resolves.toMatchObject({ rowCount: 1 });
-    const events = await pool().query<{ agent_profile_id: string | null }>(
-      'SELECT agent_profile_id FROM lead_status_events WHERE lead_id = $1 AND to_status = $2',
-      [lead, 'assigned'],
+    expect(assignments.rows).toEqual([
+      { agent_profile_id: profileId },
+      { agent_profile_id: profileId },
+    ]);
+    const events = await pool().query<{ agent_profile_id: string }>(
+      'SELECT agent_profile_id FROM lead_status_events WHERE lead_id = ANY($1::uuid[]) AND to_status = $2',
+      [[leadOne, leadTwo], 'assigned'],
     );
-    expect(events.rows).toEqual([{ agent_profile_id: null }]);
-    const inquiry = await pool().query('SELECT 1 FROM listing_inquiries WHERE id = $1', [lead]);
+    expect(events.rows.map((row) => row.agent_profile_id)).toEqual([profileId, profileId]);
+    const inquiry = await pool().query('SELECT 1 FROM listing_inquiries WHERE id = $1', [leadOne]);
     expect(inquiry.rows).toHaveLength(1);
 
     const repeat = await erase(account);
@@ -131,12 +156,26 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
       analyticsAccountLinks: 0,
       notificationOutboxDeleted: 0,
       notificationOutboxAnonymised: 0,
-      agentProfiles: 0,
-      leadAssignmentsDetached: 0,
+      agentProfilesPseudonymised: 0,
+      leadAssignmentsKept: 0,
     });
+    expect(await one<ProfileRow>(PROFILE_SQL, [profileId])).toEqual(after);
   });
 
-  it('still refuses any other update of a status event or an ended assignment', async () => {
+  it('refuses to reactivate a pseudonymised profile', async () => {
+    const account = randomUUID();
+    const profile = await one<{ id: string }>(
+      `INSERT INTO agent_profiles (account_id, display_name, licence_number, licence_states)
+       VALUES ($1, 'E2E Agent', 'E2E-3', ARRAY['ZZ']) RETURNING id`,
+      [account],
+    );
+    expect((await erase(account)).status).toBe(200);
+    await expect(
+      pool().query('UPDATE agent_profiles SET active = true WHERE id = $1', [profile?.id]),
+    ).rejects.toThrow(/agent_profiles_pseudonymised_check/);
+  });
+
+  it('keeps the audit guards as strict as before', async () => {
     const lead = await seedLead();
     const event = await one<{ id: string }>(
       `INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role)
@@ -146,36 +185,5 @@ describeWithKey('account erasure of lead-adjacent tables (#992)', () => {
     await expect(
       pool().query("UPDATE lead_status_events SET note = 'edit' WHERE id = $1", [event?.id]),
     ).rejects.toThrow(/append-only/);
-  });
-
-  it('refuses a direct update that detaches the agent from a status event or an assignment', async () => {
-    const account = randomUUID();
-    const lead = await seedLead();
-    const profile = await one<{ id: string }>(
-      `INSERT INTO agent_profiles (account_id, display_name, licence_number, licence_states)
-       VALUES ($1, 'E2E Agent', 'E2E-2', ARRAY['ZZ']) RETURNING id`,
-      [account],
-    );
-    await pool().query(
-      `INSERT INTO lead_assignments (lead_id, agent_profile_id, assigned_by_account_id)
-       VALUES ($1, $2, $3)`,
-      [lead, profile?.id, randomUUID()],
-    );
-    await pool().query(
-      `INSERT INTO lead_status_events (lead_id, from_status, to_status, actor_role, agent_profile_id)
-       VALUES ($1, 'verified', 'assigned', 'staff', $2)`,
-      [lead, profile?.id],
-    );
-    await expect(
-      pool().query('UPDATE lead_assignments SET agent_profile_id = NULL WHERE lead_id = $1', [
-        lead,
-      ]),
-    ).rejects.toThrow(/keeps its history/);
-    await expect(
-      pool().query('UPDATE lead_status_events SET agent_profile_id = NULL WHERE lead_id = $1', [
-        lead,
-      ]),
-    ).rejects.toThrow(/append-only/);
-    expect((await erase(account)).status).toBe(200);
   });
 });

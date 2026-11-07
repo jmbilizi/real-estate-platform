@@ -73,8 +73,8 @@ const ZERO_COUNTS = {
   analyticsAccountLinks: 0,
   notificationOutboxDeleted: 0,
   notificationOutboxAnonymised: 0,
-  agentProfiles: 0,
-  leadAssignmentsDetached: 0,
+  agentProfilesPseudonymised: 0,
+  leadAssignmentsKept: 0,
 };
 
 describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
@@ -97,8 +97,8 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
       analyticsAccountLinks: 4,
       notificationOutboxDeleted: 5,
       notificationOutboxAnonymised: 6,
-      agentProfiles: 1,
-      leadAssignmentsDetached: 7,
+      agentProfilesPseudonymised: 1,
+      leadAssignmentsKept: 7,
     });
     expect(rows).toEqual(EMPTY);
     expect(recorded).toHaveLength(6);
@@ -112,6 +112,17 @@ describe('DELETE /internal/account/:accountId/data (#803, #992)', () => {
     const outbox = recorded.map((r) => r.sql).filter((sql) => sql.includes('notification_outbox'));
     expect(outbox.find((sql) => sql.startsWith('DELETE'))).toContain("state <> 'sent'");
     expect(outbox.find((sql) => sql.startsWith('UPDATE'))).toContain('recipient_account_id = NULL');
+  });
+
+  it('pseudonymises the agent profile and never deletes it', async () => {
+    const { pool, recorded } = createPool({ agentProfiles: 1 });
+    await request(app(pool)).delete(PATH).set('X-Internal-Key', KEY);
+
+    const sql = recorded.map((r) => r.sql).find((s) => s.includes('agent_profiles')) ?? '';
+    expect(sql).toContain('UPDATE agent_profiles');
+    expect(sql).toContain('account_id = NULL');
+    expect(sql).toContain('deactivated_at = now()');
+    expect(sql).not.toMatch(/DELETE FROM agent_profiles|licence_number|display_name/);
   });
 
   it('never touches a retained table', async () => {

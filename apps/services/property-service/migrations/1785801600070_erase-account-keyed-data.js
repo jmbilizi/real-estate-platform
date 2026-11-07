@@ -1,128 +1,44 @@
 exports.shorthands = undefined;
 
 /**
- * Account erasure (#992). Lets the erasure of an account keep the lead history without the agent.
+ * Account erasure (#992).
  *
  * - `notification_outbox.recipient_account_id` allows NULL. A sent row keeps its place with no
  *   recipient.
- * - `lead_assignments.agent_profile_id` and `lead_status_events.agent_profile_id` become
- *   `ON DELETE SET NULL`. Deleting an `agent_profiles` row detaches its history rows.
- * - The two guard triggers accept one extra change: `agent_profile_id` going from a value to NULL
- *   with every other column unchanged. The change needs `pg_trigger_depth() > 1` and a deleted
- *   profile row, so only the foreign key action passes. A direct UPDATE keeps its old rule.
- * - `lead_assignments_guard` compares `agent_profile_id` with `IS NOT DISTINCT FROM`, so staff can
- *   still end an open assignment after the agent is detached.
+ * - `agent_profiles.account_id` allows NULL and `deactivated_at` is new. Erasure pseudonymises the
+ *   profile and keeps the row, because the brokerage record names the licensee for 5 years. The
+ *   CHECK ties the two columns together: a row with no account is inactive and has a
+ *   `deactivated_at`, and a row with `deactivated_at` has no account.
+ * - `lead_assignments`, `lead_status_events` and their guard triggers do not change.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
 exports.up = (pgm) => {
   pgm.alterColumn('notification_outbox', 'recipient_account_id', { notNull: false });
-  pgm.alterColumn('lead_assignments', 'agent_profile_id', { notNull: false });
-
-  for (const table of ['lead_assignments', 'lead_status_events']) {
-    pgm.sql(`ALTER TABLE ${table} DROP CONSTRAINT ${table}_agent_profile_id_fkey`);
-    pgm.sql(
-      `ALTER TABLE ${table} ADD CONSTRAINT ${table}_agent_profile_id_fkey
-         FOREIGN KEY (agent_profile_id) REFERENCES agent_profiles (id) ON DELETE SET NULL`,
-    );
-  }
-
-  const detachOnly =
-    "pg_trigger_depth() > 1 AND OLD.agent_profile_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM agent_profiles WHERE id = OLD.agent_profile_id) AND NEW.agent_profile_id IS NULL AND (to_jsonb(NEW) - 'agent_profile_id') = (to_jsonb(OLD) - 'agent_profile_id')";
-
-  pgm.createFunction(
-    'lead_assignments_guard',
-    [],
-    { returns: 'trigger', language: 'plpgsql', replace: true },
-    `BEGIN
-       IF TG_OP = 'UPDATE' THEN
-         IF ${detachOnly} THEN
-           RETURN NEW;
-         END IF;
-         IF OLD.ended_at IS NULL
-            AND NEW.id = OLD.id AND NEW.lead_id = OLD.lead_id
-            AND NEW.agent_profile_id IS NOT DISTINCT FROM OLD.agent_profile_id
-            AND NEW.assigned_by_account_id = OLD.assigned_by_account_id
-            AND NEW.assigned_at = OLD.assigned_at THEN
-           RETURN NEW;
-         END IF;
-       ELSIF TG_OP = 'DELETE' THEN
-         IF NOT EXISTS (SELECT 1 FROM listing_inquiries WHERE id = OLD.lead_id) THEN
-           RETURN OLD;
-         END IF;
-       END IF;
-       RAISE EXCEPTION 'lead_assignments keeps its history' USING ERRCODE = 'integrity_constraint_violation';
-     END;`,
+  pgm.alterColumn('agent_profiles', 'account_id', { notNull: false });
+  pgm.addColumn('agent_profiles', { deactivated_at: { type: 'timestamptz' } });
+  // A re-run after a down finds erased rows that kept their NULL account and lost the column.
+  pgm.sql(
+    'UPDATE agent_profiles SET active = false, deactivated_at = now() WHERE account_id IS NULL',
   );
-  pgm.createFunction(
-    'lead_status_events_append_only',
-    [],
-    { returns: 'trigger', language: 'plpgsql', replace: true },
-    `BEGIN
-       IF TG_OP = 'UPDATE' THEN
-         IF ${detachOnly} THEN
-           RETURN NEW;
-         END IF;
-       ELSIF TG_OP = 'DELETE' THEN
-         IF NOT EXISTS (SELECT 1 FROM listing_inquiries WHERE id = OLD.lead_id) THEN
-           RETURN OLD;
-         END IF;
-       END IF;
-       RAISE EXCEPTION 'lead_status_events is append-only' USING ERRCODE = 'integrity_constraint_violation';
-     END;`,
-  );
+  pgm.addConstraint('agent_profiles', 'agent_profiles_pseudonymised_check', {
+    check:
+      '(account_id IS NOT NULL AND deactivated_at IS NULL) ' +
+      'OR (account_id IS NULL AND deactivated_at IS NOT NULL AND NOT active)',
+  });
 };
 
 /**
  * Restores each NOT NULL rule only while no erased row exists. An erased row keeps its NULL, so
- * the column stays nullable. The down never deletes audit rows.
+ * the column stays nullable. The down never deletes rows.
  *
  * @param {import('node-pg-migrate').MigrationBuilder} pgm
  */
 exports.down = (pgm) => {
-  pgm.createFunction(
-    'lead_status_events_append_only',
-    [],
-    { returns: 'trigger', language: 'plpgsql', replace: true },
-    `BEGIN
-       IF TG_OP = 'DELETE' THEN
-         IF NOT EXISTS (SELECT 1 FROM listing_inquiries WHERE id = OLD.lead_id) THEN
-           RETURN OLD;
-         END IF;
-       END IF;
-       RAISE EXCEPTION 'lead_status_events is append-only' USING ERRCODE = 'integrity_constraint_violation';
-     END;`,
-  );
-  pgm.createFunction(
-    'lead_assignments_guard',
-    [],
-    { returns: 'trigger', language: 'plpgsql', replace: true },
-    `BEGIN
-       IF TG_OP = 'UPDATE' THEN
-         IF OLD.ended_at IS NULL
-            AND NEW.id = OLD.id AND NEW.lead_id = OLD.lead_id
-            AND NEW.agent_profile_id = OLD.agent_profile_id
-            AND NEW.assigned_by_account_id = OLD.assigned_by_account_id
-            AND NEW.assigned_at = OLD.assigned_at THEN
-           RETURN NEW;
-         END IF;
-       ELSIF TG_OP = 'DELETE' THEN
-         IF NOT EXISTS (SELECT 1 FROM listing_inquiries WHERE id = OLD.lead_id) THEN
-           RETURN OLD;
-         END IF;
-       END IF;
-       RAISE EXCEPTION 'lead_assignments keeps its history' USING ERRCODE = 'integrity_constraint_violation';
-     END;`,
-  );
-  for (const table of ['lead_assignments', 'lead_status_events']) {
-    pgm.sql(`ALTER TABLE ${table} DROP CONSTRAINT ${table}_agent_profile_id_fkey`);
-    pgm.sql(
-      `ALTER TABLE ${table} ADD CONSTRAINT ${table}_agent_profile_id_fkey
-         FOREIGN KEY (agent_profile_id) REFERENCES agent_profiles (id)`,
-    );
-  }
+  pgm.dropConstraint('agent_profiles', 'agent_profiles_pseudonymised_check');
+  pgm.dropColumn('agent_profiles', 'deactivated_at');
   for (const [table, column] of [
-    ['lead_assignments', 'agent_profile_id'],
+    ['agent_profiles', 'account_id'],
     ['notification_outbox', 'recipient_account_id'],
   ]) {
     pgm.sql(

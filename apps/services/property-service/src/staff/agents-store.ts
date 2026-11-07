@@ -43,7 +43,8 @@ export async function listAgents(
   filters: StaffAgentsRequest,
 ): Promise<AgentProfile[]> {
   const params: unknown[] = [];
-  const where: string[] = [];
+  // A pseudonymised profile (#992) has no account and no place in the directory.
+  const where: string[] = ['account_id IS NOT NULL'];
   if (filters.active !== undefined) {
     params.push(filters.active === 'true');
     where.push(`active = $${params.length}`);
@@ -63,7 +64,7 @@ export async function listAgents(
 
 export async function getAgent(pool: Queryable, id: string): Promise<AgentProfile | null> {
   const { rows } = await pool.query<AgentRow>(
-    `SELECT ${COLUMNS} FROM agent_profiles WHERE id = $1`,
+    `SELECT ${COLUMNS} FROM agent_profiles WHERE id = $1 AND account_id IS NOT NULL`,
     [id],
   );
   const row = rows[0];
@@ -112,7 +113,7 @@ export async function updateAgent(
             licence_states = COALESCE($4, licence_states),
             active = COALESCE($5, active),
             updated_at = now()
-      WHERE id = $1
+      WHERE id = $1 AND account_id IS NOT NULL
       RETURNING ${COLUMNS}`,
     [
       id,
@@ -178,21 +179,31 @@ export async function hasOpenAssignment(client: Queryable, leadId: string): Prom
 }
 
 /**
- * Account deletion (#992). Deletes the agent profile of the account. The foreign keys of
- * `lead_assignments` and `lead_status_events` set `agent_profile_id` to NULL, so the lead history
- * stays. One statement gives the counts, so they match what the delete changed. Idempotent.
+ * Account deletion (#992). Pseudonymises the agent profile of the account and never deletes it.
+ * The brokerage record keeps the licensee for 5 years (MD BOP 17-507, VA 18VAC135-20-185). The row
+ * keeps `display_name`, `licence_number`, `licence_states`, `brokerage` and the dates. It loses
+ * the `account_id` link, so no login maps to it, and becomes inactive with `deactivated_at` set.
+ * `lead_assignments` and `lead_status_events` keep `agent_profile_id`. One statement gives the
+ * counts. A second call finds no linked profile and changes nothing.
  */
 export async function eraseAccountAgent(
   db: Queryable,
   accountId: string,
-): Promise<{ agentProfiles: number; leadAssignmentsDetached: number }> {
+): Promise<{ agentProfilesPseudonymised: number; leadAssignmentsKept: number }> {
   const result = await db.query<{ profiles: number; assignments: number }>(
-    `WITH gone AS (DELETE FROM agent_profiles WHERE account_id = $1 RETURNING id)
-     SELECT (SELECT count(*) FROM gone)::int AS profiles,
+    `WITH scrubbed AS (
+       UPDATE agent_profiles
+          SET account_id = NULL, active = false, deactivated_at = now()
+        WHERE account_id = $1
+        RETURNING id)
+     SELECT (SELECT count(*) FROM scrubbed)::int AS profiles,
             (SELECT count(*) FROM lead_assignments
-              WHERE agent_profile_id IN (SELECT id FROM gone))::int AS assignments`,
+              WHERE agent_profile_id IN (SELECT id FROM scrubbed))::int AS assignments`,
     [accountId],
   );
   const row = result.rows[0];
-  return { agentProfiles: row?.profiles ?? 0, leadAssignmentsDetached: row?.assignments ?? 0 };
+  return {
+    agentProfilesPseudonymised: row?.profiles ?? 0,
+    leadAssignmentsKept: row?.assignments ?? 0,
+  };
 }

@@ -12,12 +12,13 @@ import { eraseAccountOutbox } from './outbox-erasure';
 /**
  * `DELETE /internal/account/:accountId/data` (#803, #992). account-service calls it after an
  * account deletion. It removes the account's `saved_homes`, `looking_for_preferences` and
- * `analytics_account_links` rows, deletes its agent profile, and deletes its unsent
- * `notification_outbox` rows. Sent outbox rows and lead assignment and status rows lose the
- * account's reference and stay.
+ * `analytics_account_links` rows and its unsent `notification_outbox` rows. Sent outbox rows lose
+ * the recipient id and stay. The agent profile is pseudonymised, never deleted: it loses its
+ * account link and becomes inactive, and keeps name, licence and brokerage for the 5-year
+ * brokerage record (MD BOP 17-507, VA 18VAC135-20-185).
  *
- * Retained by PRD §6.4, not touched here: `listing_inquiries`, lead notes and lead audit
- * (`lead_status_events`). They record a regulated lead history.
+ * Retained by PRD §6.4, not touched here: `listing_inquiries`, lead notes, `lead_assignments` and
+ * lead audit (`lead_status_events`). They record a regulated lead history.
  *
  * In-cluster only: no gateway route reaches `/internal` (`InternalRoutesNotExposedTests`) and the
  * document at `/openapi.json` does not list it. The `X-Internal-Key` header carries the same
