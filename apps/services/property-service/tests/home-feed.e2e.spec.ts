@@ -20,8 +20,10 @@ import {
 const pool = getPool();
 const OFFICES = ['E2E Office A', 'E2E Office B', 'E2E Office C', 'E2E Office D', 'E2E Office E'];
 const NEAR = 30;
-// One fixed clock for every fixture date, so no assertion depends on the run date.
-const NOW = Date.parse('2026-09-18T12:00:00.000Z');
+// One clock per run for every fixture date. The service reads the real clock, so the 7-day and
+// 14-day freshness windows stay filled. Truncation to the UTC hour keeps the value stable in a run.
+const HOUR_MS = 3_600_000;
+const NOW = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
 const DAY_MS = 86_400_000;
 
 const near = (i: number): HomeInput => ({
@@ -82,19 +84,16 @@ beforeAll(async () => {
       );
     }
   }
-  // Three price cuts, so the price-drop row can fill.
-  for (const [i, street] of [
-    '1 Near Ln',
-    '2 Near Ln',
-    '3 Near Ln',
-    '4 Near Ln',
-    '5 Near Ln',
-  ].entries()) {
+  // Cut homes listed 8 to 14 days ago. They sit outside the 7-day new window, so the price-drop
+  // row, which builds after the fresh row, still finds them. The near row takes 8 first.
+  const cut = Array.from({ length: NEAR }, (_, i) => i).filter((i) => i % 15 >= 8);
+  for (const [n, i] of cut.entries()) {
+    const street = `${i + 1} Near Ln`;
     await repriceRecord(
       pool,
       seeded[street] as SeededHome,
       0,
-      200000 + i * 1000,
+      200000 + n * 1000,
       new Date(NOW).toISOString(),
     );
   }
@@ -122,10 +121,18 @@ describe('POST /home-feed (#835)', () => {
   it('keeps the radius, the photo rule and the address rule', async () => {
     const body = homeFeedResponseSchema.parse((await feed()).data);
     const shown = body.rows.flatMap((row) => row.listings.map((l) => l.listing.id));
-    // NOW is outside the 7-day and 14-day freshness windows, so the fresh rows hold fewer homes.
-    expect(shown.length).toBeGreaterThanOrEqual(8);
+    expect(shown.length).toBeGreaterThan(8);
     for (const id of [...idsOf(/Far Ln/), ...idsOf(/No Photo/), ...idsOf(/Hidden/)]) {
       expect(shown).not.toContain(id);
+    }
+  });
+
+  it('fills the fresh-window rows', async () => {
+    const body = homeFeedResponseSchema.parse((await feed()).data);
+    // A fixture clock outside the 7-day or 14-day window empties these rows without failing elsewhere.
+    for (const rowId of ['just-listed', 'price-drops']) {
+      const row = body.rows.find((r) => r.rowId === rowId);
+      expect(row?.listings.length ?? 0).toBeGreaterThan(0);
     }
   });
 

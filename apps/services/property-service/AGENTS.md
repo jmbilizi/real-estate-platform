@@ -683,7 +683,7 @@ pnpm exec nx run property-service:migrate
 PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
 ```
 
-Expected result: **34 suites, 414 tests, all passing.** The count grows with the suite. The run
+Expected result: **34 suites, 415 tests, all passing.** The count grows with the suite. The run
 needs no other env: `tests/support/e2e-serve-defaults.js` points every account-service URL at the
 introspection stub. `src/e2e-serve-defaults.spec.ts` fails if the app reads an
 `ACCOUNT_SERVICE_*_URL` variable that the defaults omit. Remove the container when done. The
