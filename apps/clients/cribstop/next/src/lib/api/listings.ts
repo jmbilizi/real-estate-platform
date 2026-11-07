@@ -1,5 +1,5 @@
 import { GATEWAY_ERROR_CODES, type GatewayErrorCode } from '@cribstop/gateway-contracts';
-import { errorBodySchema } from '@cribstop/property-contracts';
+import { errorBodySchema, idSchema, LISTINGS_BY_IDS_MAX } from '@cribstop/property-contracts';
 import type {
   BrokersResponse,
   DetailMedia,
@@ -499,6 +499,32 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
 /** One card row, the same shape search returns. A map popup for an off-page pin renders it. */
 export async function getListingCard(id: string, signal?: AbortSignal): Promise<ListingCardRow> {
   return getJson<ListingCardRow>(`/api/listings/${encodeURIComponent(id)}/card`, signal);
+}
+
+/**
+ * Card rows for a set of listing ids (#76). One request holds at most `LISTINGS_BY_IDS_MAX` ids,
+ * so a longer list goes out as several requests. The rows keep the order of `ids`. An id that no
+ * longer resolves is absent, so a withdrawn listing is not an error. A value that is not a listing
+ * id cannot resolve, so it is dropped before the request.
+ */
+export async function getListingsByIds(
+  ids: readonly string[],
+  signal?: AbortSignal,
+): Promise<ListingCardRow[]> {
+  const valid = [...new Set(ids)].filter((id) => idSchema.safeParse(id).success);
+  const chunks: string[][] = [];
+  for (let i = 0; i < valid.length; i += LISTINGS_BY_IDS_MAX) {
+    chunks.push(valid.slice(i, i + LISTINGS_BY_IDS_MAX));
+  }
+  const answers = await Promise.all(
+    chunks.map((chunk) =>
+      getJson<ListingsEnvelope>(
+        `/api/listings/by-ids?${new URLSearchParams({ ids: chunk.join(',') })}`,
+        signal,
+      ),
+    ),
+  );
+  return answers.flatMap((envelope) => envelope.results);
 }
 
 export async function getListing(id: string, signal?: AbortSignal): Promise<ListingDetailView> {
