@@ -2,13 +2,22 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { type NextFunction, type Request, type Response, Router } from 'express';
 
+import { eraseAccountAnalyticsLinks } from '../analytics/account-link';
 import type { ReadClient } from '../listings/repository';
 import { eraseAccountLookingFor } from '../looking-for/store';
 import { eraseAccountSavedHomes } from '../saved/store';
+import { eraseAccountAgent } from '../staff/agents-store';
+import { eraseAccountOutbox } from './outbox-erasure';
 
 /**
- * `DELETE /internal/account/:accountId/data` (#803). account-service calls it after an account
- * deletion. It removes the account's `saved_homes` and `looking_for_preferences` rows.
+ * `DELETE /internal/account/:accountId/data` (#803, #992). account-service calls it after an
+ * account deletion. It removes the account's `saved_homes`, `looking_for_preferences` and
+ * `analytics_account_links` rows, deletes its agent profile, and deletes its unsent
+ * `notification_outbox` rows. Sent outbox rows and lead assignment and status rows lose the
+ * account's reference and stay.
+ *
+ * Retained by PRD §6.4, not touched here: `listing_inquiries`, lead notes and lead audit
+ * (`lead_status_events`). They record a regulated lead history.
  *
  * In-cluster only: no gateway route reaches `/internal` (`InternalRoutesNotExposedTests`) and the
  * document at `/openapi.json` does not list it. The `X-Internal-Key` header carries the same
@@ -66,9 +75,19 @@ export function createAccountErasureRouter(deps: AccountErasureDeps): Router {
       Promise.all([
         eraseAccountSavedHomes(deps.pool, accountId),
         eraseAccountLookingFor(deps.pool, accountId),
+        eraseAccountAnalyticsLinks(deps.pool, accountId),
+        eraseAccountOutbox(deps.pool, accountId),
+        eraseAccountAgent(deps.pool, accountId),
       ])
-        .then(([savedHomes, lookingForPreferences]) => {
-          res.status(200).json({ savedHomes, lookingForPreferences });
+        .then(([savedHomes, lookingForPreferences, analyticsLinks, outbox, agent]) => {
+          res.status(200).json({
+            savedHomes,
+            lookingForPreferences,
+            analyticsAccountLinks: analyticsLinks,
+            notificationOutboxDeleted: outbox.deleted,
+            notificationOutboxAnonymised: outbox.anonymised,
+            ...agent,
+          });
         })
         .catch(next);
     },

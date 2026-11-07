@@ -133,10 +133,14 @@ export type StaffLeadNote = z.infer<typeof staffLeadNoteSchema>;
 
 export const ASSIGNMENT_END_REASONS = ['unassigned', 'returned', 'closed', 'declined'] as const;
 
-/** One row of the assignment history of a lead. `endedAt` is null for the open assignment. */
+/**
+ * One row of the assignment history of a lead. `endedAt` is null for the open assignment.
+ * `agentProfileId` is null after the agent deleted the account (#992). The display name is then
+ * `Former agent`.
+ */
 export const staffLeadAssignmentSchema = z.object({
   id: idSchema,
-  agentProfileId: idSchema,
+  agentProfileId: idSchema.nullable(),
   agentDisplayName: z.string(),
   assignedByAccountId: idSchema,
   assignedAt: z.iso.datetime(),

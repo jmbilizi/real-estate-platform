@@ -255,17 +255,17 @@ export async function readLeadDetail(
       : Promise.resolve({ rows: [] as { id: string }[] }),
     pool.query<{
       id: string;
-      agent_profile_id: string;
+      agent_profile_id: string | null;
       agent_display_name: string;
       assigned_by_account_id: string;
       assigned_at: Date;
       ended_at: Date | null;
       end_reason: StaffLeadAssignment['endReason'];
     }>(
-      `SELECT a.id, a.agent_profile_id, p.display_name AS agent_display_name,
+      `SELECT a.id, a.agent_profile_id, COALESCE(p.display_name, 'Former agent') AS agent_display_name,
               a.assigned_by_account_id, a.assigned_at, a.ended_at, a.end_reason
          FROM lead_assignments a
-         JOIN agent_profiles p ON p.id = a.agent_profile_id
+         LEFT JOIN agent_profiles p ON p.id = a.agent_profile_id
         WHERE a.lead_id = $1 ORDER BY a.assigned_at, a.id`,
       [leadId],
     ),

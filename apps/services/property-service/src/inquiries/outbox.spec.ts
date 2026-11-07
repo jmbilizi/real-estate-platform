@@ -63,7 +63,8 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return sourceFiles(path);
-    return /\.ts$/.test(name) && !/\.spec\.ts$/.test(name) ? [path] : [];
+    const skipped = /\.spec\.ts$/.test(name) || name === 'outbox-erasure.ts'; // #992 erasure only
+    return /\.ts$/.test(name) && !skipped ? [path] : [];
   });
 }
 

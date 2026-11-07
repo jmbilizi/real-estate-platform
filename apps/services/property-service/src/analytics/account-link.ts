@@ -65,3 +65,15 @@ export function createAccountLinkRouter(deps: AccountLinkDeps): Router {
 
   return router;
 }
+
+/** Account deletion (#992). Idempotent: an account with no links changes nothing. */
+export async function eraseAccountAnalyticsLinks(
+  db: ReadClient,
+  accountId: string,
+): Promise<number> {
+  const result = await db.query<{ anon_id: string }>(
+    'DELETE FROM analytics_account_links WHERE account_id = $1 RETURNING anon_id',
+    [accountId],
+  );
+  return result.rows.length;
+}

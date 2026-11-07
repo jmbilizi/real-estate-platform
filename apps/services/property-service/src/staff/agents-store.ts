@@ -176,3 +176,23 @@ export async function hasOpenAssignment(client: Queryable, leadId: string): Prom
   );
   return rows.length > 0;
 }
+
+/**
+ * Account deletion (#992). Deletes the agent profile of the account. The foreign keys of
+ * `lead_assignments` and `lead_status_events` set `agent_profile_id` to NULL, so the lead history
+ * stays. One statement gives the counts, so they match what the delete changed. Idempotent.
+ */
+export async function eraseAccountAgent(
+  db: Queryable,
+  accountId: string,
+): Promise<{ agentProfiles: number; leadAssignmentsDetached: number }> {
+  const result = await db.query<{ profiles: number; assignments: number }>(
+    `WITH gone AS (DELETE FROM agent_profiles WHERE account_id = $1 RETURNING id)
+     SELECT (SELECT count(*) FROM gone)::int AS profiles,
+            (SELECT count(*) FROM lead_assignments
+              WHERE agent_profile_id IN (SELECT id FROM gone))::int AS assignments`,
+    [accountId],
+  );
+  const row = result.rows[0];
+  return { agentProfiles: row?.profiles ?? 0, leadAssignmentsDetached: row?.assignments ?? 0 };
+}
