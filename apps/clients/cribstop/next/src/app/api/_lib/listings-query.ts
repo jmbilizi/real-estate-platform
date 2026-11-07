@@ -52,8 +52,34 @@ export const FORWARDABLE_SUGGEST_PARAMS: readonly string[] = Object.freeze(
 );
 
 /**
+ * The search parameters that the map, group and neighborhood endpoints do not take (#221). The
+ * client sends the full search query to them, so the proxy drops these on purpose. The upstream
+ * schemas are strict and answer 400 if the proxy forwards them.
+ */
+export const SEARCH_ONLY_PARAMS: readonly string[] = Object.freeze(
+  FORWARDABLE_LISTING_PARAMS.filter((key) => !FORWARDABLE_MAP_PARAMS.includes(key)),
+);
+
+/** Thrown when a request carries a parameter that the endpoint's contract does not define (#221). */
+export class UnknownListingParamsError extends Error {
+  constructor(readonly params: readonly string[]) {
+    super(
+      `Unknown query parameter: ${params
+        .slice(0, 5)
+        .map((p) => p.slice(0, 40))
+        .join(', ')}.`,
+    );
+    this.name = 'UnknownListingParamsError';
+  }
+}
+
+/**
  * Copies only allowlisted parameters onto the upstream query string, preserving repeats
  * (`amenities` may legitimately appear more than once).
+ *
+ * **An unknown parameter is rejected, not dropped (#221).** A silent drop answers a typo or a
+ * removed filter with a normal-looking, wider result. `ignored` names contract parameters that the
+ * endpoint does not take. Those are dropped. An empty value of a known parameter is dropped. An unknown parameter is rejected whatever its value, so an extra tracking parameter such as `utm_source` gets 400.
  *
  * **A place search never ANDs two location filters (#220).** `zip`, `street`, `city`,
  * `neighborhood` and `county` each pin a place more precisely than free-text `query` can, and a
@@ -72,7 +98,13 @@ export const FORWARDABLE_SUGGEST_PARAMS: readonly string[] = Object.freeze(
 export function buildListingsQuery(
   incoming: URLSearchParams,
   allowed: readonly string[] = FORWARDABLE_LISTING_PARAMS,
+  ignored: readonly string[] = [],
 ): string {
+  const unknown = [...new Set(incoming.keys())].filter(
+    (key) => !allowed.includes(key) && !ignored.includes(key),
+  );
+  if (unknown.length > 0) throw new UnknownListingParamsError(unknown);
+
   const forwarded = new URLSearchParams();
   const hasPlaceFilter = ['zip', 'street', 'city', 'neighborhood', 'county', 'boundary'].some(
     (key) => incoming.get(key),

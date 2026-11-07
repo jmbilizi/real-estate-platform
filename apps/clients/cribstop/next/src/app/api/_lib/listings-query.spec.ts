@@ -4,6 +4,8 @@ import {
   FORWARDABLE_LISTING_PARAMS,
   FORWARDABLE_MAP_PARAMS,
   FORWARDABLE_NEIGHBORHOODS_PARAMS,
+  SEARCH_ONLY_PARAMS,
+  UnknownListingParamsError,
 } from './listings-query';
 
 /**
@@ -61,19 +63,25 @@ describe('listings gateway query allowlist', () => {
     ]);
   });
 
-  it('drops any parameter the contract does not define', () => {
-    const query = buildListingsQuery(
-      new URLSearchParams({ query: 'Bethesda', fields: 'id', bed: '3', utm_source: 'email' }),
-    );
-    const forwarded = new URLSearchParams(query);
+  // #221
+  it('rejects a parameter the contract does not define, naming it', () => {
+    const incoming = new URLSearchParams({ query: 'Bethesda', bed: '3', utm_source: 'email' });
 
-    expect(forwarded.get('query')).toBe('Bethesda');
-    expect(forwarded.has('fields')).toBe(false);
-    expect(forwarded.has('bed')).toBe(false);
-    expect(forwarded.has('utm_source')).toBe(false);
+    expect(() => buildListingsQuery(incoming)).toThrow(UnknownListingParamsError);
+    try {
+      buildListingsQuery(incoming);
+    } catch (error) {
+      expect((error as UnknownListingParamsError).params).toEqual(['bed', 'utm_source']);
+    }
   });
 
-  it('drops empty values instead of forwarding a parameter the API would reject', () => {
+  it('rejects an unknown parameter even when its value is empty', () => {
+    expect(() => buildListingsQuery(new URLSearchParams({ bed: '' }))).toThrow(
+      UnknownListingParamsError,
+    );
+  });
+
+  it('drops empty values of known parameters instead of forwarding them', () => {
     expect(buildListingsQuery(new URLSearchParams({ query: '', neighborhood: '' }))).toBe('');
   });
 
@@ -189,19 +197,13 @@ describe('listings gateway query allowlist', () => {
       }
     });
 
-    it('drops occupancy values even when a caller explicitly supplies them', () => {
-      const incoming = new URLSearchParams({ query: 'Bethesda' });
-      for (const key of OCCUPANCY_KEYS) incoming.append(key, '2');
-
-      const forwarded = new URLSearchParams(buildListingsQuery(incoming));
-
-      expect(forwarded.get('query')).toBe('Bethesda');
+    it('rejects occupancy values when a caller explicitly supplies them', () => {
       for (const key of OCCUPANCY_KEYS) {
-        expect(forwarded.has(key)).toBe(false);
+        const incoming = new URLSearchParams({ query: 'Bethesda' });
+        incoming.append(key, '2');
+
+        expect(() => buildListingsQuery(incoming)).toThrow(UnknownListingParamsError);
       }
-      expect(buildListingsQuery(incoming)).not.toMatch(
-        /senior|adult|teen|child|infant|pet|occupan/i,
-      );
     });
   });
 });
@@ -212,14 +214,21 @@ describe('map query allowlist (#377)', () => {
       city: 'Washington',
       state: 'DC',
       bounds: '-77.12,38.79,-76.91,38.996',
-      zoom: '12',
       page: '2',
       pageSize: '20',
       sort: 'newest',
-      seniors: '1',
     });
-    const forwarded = new URLSearchParams(buildListingsQuery(incoming, FORWARDABLE_MAP_PARAMS));
+    const forwarded = new URLSearchParams(
+      buildListingsQuery(incoming, FORWARDABLE_MAP_PARAMS, SEARCH_ONLY_PARAMS),
+    );
     expect([...forwarded.keys()].sort()).toEqual(['bounds', 'city', 'state']);
+  });
+
+  it('rejects a parameter outside the map contract', () => {
+    const incoming = new URLSearchParams({ city: 'Washington', zoom: '12' });
+    expect(() => buildListingsQuery(incoming, FORWARDABLE_MAP_PARAMS, SEARCH_ONLY_PARAMS)).toThrow(
+      UnknownListingParamsError,
+    );
   });
 });
 
@@ -236,7 +245,7 @@ describe('neighborhoods query allowlist (#393)', () => {
       sort: 'newest',
     });
     const forwarded = new URLSearchParams(
-      buildListingsQuery(incoming, FORWARDABLE_NEIGHBORHOODS_PARAMS),
+      buildListingsQuery(incoming, FORWARDABLE_NEIGHBORHOODS_PARAMS, SEARCH_ONLY_PARAMS),
     );
     expect([...forwarded.keys()].sort()).toEqual([
       'city',
@@ -263,7 +272,7 @@ describe('neighborhoods query allowlist (#393)', () => {
       sort: 'newest',
     });
     const forwarded = new URLSearchParams(
-      buildListingsQuery(incoming, FORWARDABLE_NEIGHBORHOODS_PARAMS),
+      buildListingsQuery(incoming, FORWARDABLE_NEIGHBORHOODS_PARAMS, SEARCH_ONLY_PARAMS),
     );
     expect([...forwarded.keys()].sort()).toEqual([
       'beds',
@@ -279,7 +288,7 @@ describe('neighborhoods query allowlist (#393)', () => {
 });
 
 describe('group query allowlist (#722)', () => {
-  it('forwards the search filters and group paging, never listing paging, sort or slug', () => {
+  it('forwards the search filters and group paging, never listing paging or sort', () => {
     const incoming = new URLSearchParams({
       city: 'Bethesda',
       state: 'MD',
@@ -290,9 +299,10 @@ describe('group query allowlist (#722)', () => {
       order: 'name',
       page: '2',
       sort: 'newest',
-      slug: 'x',
     });
-    const forwarded = new URLSearchParams(buildListingsQuery(incoming, FORWARDABLE_GROUPS_PARAMS));
+    const forwarded = new URLSearchParams(
+      buildListingsQuery(incoming, FORWARDABLE_GROUPS_PARAMS, SEARCH_ONLY_PARAMS),
+    );
     expect([...forwarded.keys()].sort()).toEqual([
       'beds',
       'city',
