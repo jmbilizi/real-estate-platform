@@ -100,6 +100,8 @@ export const staffLeadListItemSchema = z.object({
    * buyer account or normalized phone. A hint for staff. The server never merges or drops a lead.
    */
   possibleDuplicate: z.boolean(),
+  /** True when the open assignment names an agent profile with `deactivated_at` set (#1007). */
+  needsReassignment: z.boolean(),
 });
 export type StaffLeadListItem = z.infer<typeof staffLeadListItemSchema>;
 
@@ -166,6 +168,8 @@ export const staffLeadDetailSchema = z.object({
   }),
   listing: staffLeadListingSchema,
   possibleDuplicate: z.boolean(),
+  /** True when the open assignment names an agent profile with `deactivated_at` set (#1007). */
+  needsReassignment: z.boolean(),
   /** Up to ten ids of the matching requests, newest first. Staff decide what to do. */
   duplicateLeadIds: z.array(idSchema),
   history: z.array(staffLeadStatusEventSchema),

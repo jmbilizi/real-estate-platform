@@ -644,10 +644,13 @@ jobs:
   # Detect which infrastructure workflows need to be triggered
   detect-infra-changes:
     needs: [node, python, dotnet, tools, validate-infra] # Wait for all quality checks to pass
+    # !cancelled(), not always(): always() runs this job after a newer push cancels the run, and a
+    # cancelled quality job is not a pass. Skipped (dotnet/python with no changes) stays allowed.
     if: |
-      always() &&
+      !cancelled() &&
       github.event_name == 'push' &&
-      !contains(needs.*.result, 'failure')
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     outputs:
       cluster-changed: ${{ steps.detect.outputs.cluster-changed }}
@@ -755,7 +758,7 @@ jobs:
   trigger-provision:
     needs: [detect-infra-changes]
     if: |
-      always() &&
+      !cancelled() &&
       needs.detect-infra-changes.result == 'success' &&
       needs.detect-infra-changes.outputs.cluster-changed == 'true'
     runs-on: ubuntu-latest
@@ -776,6 +779,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # gh workflow run --ref takes a branch, so the dispatched run uses the branch's head
+          # at dispatch time. If a newer push moved the branch, that head is not the commit this
+          # run validated. The newer push's own run dispatches for it, so stop here.
+          HEAD_NOW=$(gh api "repos/${{ github.repository }}/git/ref/heads/${{ github.ref_name }}" --jq .object.sha)
+          if [ "$HEAD_NOW" != "${{ github.sha }}" ]; then
+            echo "⏭️  ${{ github.ref_name }} moved from ${{ github.sha }} to $HEAD_NOW. The newer push's run owns this dispatch."
+            exit 0
+          fi
+
           echo "🚀 Triggering cluster provisioning for ${{ steps.env.outputs.environment }} environment..."
           gh workflow run provision-hetzner-k8s-cluster.yml \
             --repo ${{ github.repository }} \
@@ -788,7 +800,7 @@ jobs:
   trigger-image-build:
     needs: [detect-infra-changes]
     if: |
-      always() &&
+      !cancelled() &&
       needs.detect-infra-changes.result == 'success' &&
       needs.detect-infra-changes.outputs.images-changed == 'true'
     runs-on: ubuntu-latest
@@ -830,6 +842,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # gh workflow run --ref takes a branch, so the dispatched run uses the branch's head
+          # at dispatch time. If a newer push moved the branch, that head is not the commit this
+          # run validated. The newer push's own run dispatches for it, so stop here.
+          HEAD_NOW=$(gh api "repos/${{ github.repository }}/git/ref/heads/${{ github.ref_name }}" --jq .object.sha)
+          if [ "$HEAD_NOW" != "${{ github.sha }}" ]; then
+            echo "⏭️  ${{ github.ref_name }} moved from ${{ github.sha }} to $HEAD_NOW. The newer push's run owns this dispatch."
+            exit 0
+          fi
+
           echo "🐳 Triggering container image build for ${{ steps.env.outputs.environment }} environment..."
 
           BASE="${{ steps.base.outputs.base }}"
@@ -858,7 +879,7 @@ jobs:
   trigger-deploy:
     needs: [detect-infra-changes]
     if: |
-      always() &&
+      !cancelled() &&
       needs.detect-infra-changes.result == 'success' &&
       needs.detect-infra-changes.outputs.deploy-changed == 'true' &&
       needs.detect-infra-changes.outputs.cluster-changed != 'true' &&
@@ -1017,6 +1038,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # gh workflow run --ref takes a branch, so the dispatched run uses the branch's head
+          # at dispatch time. If a newer push moved the branch, that head is not the commit this
+          # run validated. The newer push's own run dispatches for it, so stop here.
+          HEAD_NOW=$(gh api "repos/${{ github.repository }}/git/ref/heads/${{ github.ref_name }}" --jq .object.sha)
+          if [ "$HEAD_NOW" != "${{ github.sha }}" ]; then
+            echo "⏭️  ${{ github.ref_name }} moved from ${{ github.sha }} to $HEAD_NOW. The newer push's run owns this dispatch."
+            exit 0
+          fi
+
           STRATEGY="${{ steps.detect-services.outputs.deploy_strategy }}"
           SERVICES="${{ steps.detect-services.outputs.services }}"
           ENV="${{ steps.detect-services.outputs.environment }}"

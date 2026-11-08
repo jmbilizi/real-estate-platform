@@ -83,6 +83,31 @@ export interface ReadPool extends ReadClient {
 }
 
 /**
+ * #1003. One read-only transaction with JIT off, for a single-statement read that the planner
+ * prices high. The cost of the collapse probes and of the search view crosses `jit_above_cost`, and
+ * the compile then takes longer than the query: 1.7 s of a 2 s state-wide neighborhoods read. The
+ * pool's `statement_timeout` still applies.
+ */
+async function readWithoutJit<T>(
+  pool: ReadPool,
+  work: (client: ReadClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN READ ONLY');
+    await client.query(DISABLE_JIT_SQL);
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * #53. THE media-suppression predicate, defined once so search and detail cannot disagree about
  * which photos a suppressed listing shows. When `media_display_allowed` is false, only the row
  * `retained_when_suppressed` marks can match at all — never falling back to `sort_order`/
@@ -326,9 +351,10 @@ export async function findListingCardById(
  * for exactly this reason, so this value cannot be advanced by anything we do locally and cannot be in
  * the future unless a feed says so.
  */
-export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
-  const result = await pool.query<ListingsMetaDbRow>(
-    `SELECT max(v.last_updated)                        AS data_updated_at,
+export async function getListingsMeta(pool: ReadPool): Promise<ListingsMeta> {
+  const result = await readWithoutJit(pool, (client) =>
+    client.query<ListingsMetaDbRow>(
+      `SELECT max(v.last_updated)                        AS data_updated_at,
             array_agg(DISTINCT v.source ORDER BY v.source) AS sources,
             count(*)::int                              AS listing_count,
             (
@@ -342,6 +368,7 @@ export async function getListingsMeta(pool: ReadClient): Promise<ListingsMeta> {
               LIMIT 1
             )                                          AS last_synced_at
      FROM listing_search_v v`,
+    ),
   );
   // An aggregate-only SELECT always returns exactly one row, even over zero input rows.
   const row = result.rows[0];
@@ -411,7 +438,7 @@ const NEIGHBORHOOD_OUTLIER_DEGREES = 0.25;
  * flag itself. A masked row is in no centroid and no bounds.
  */
 export async function getNeighborhoods(
-  pool: ReadClient,
+  pool: ReadPool,
   request: NeighborhoodsRequest,
 ): Promise<NeighborhoodsResponse> {
   const { place, minCount, limit, offset, order, slug, ...filters } = request;
@@ -479,8 +506,9 @@ export async function getNeighborhoods(
   const inlierSql = `abs(pts.la - med.lat) <= ${NEIGHBORHOOD_OUTLIER_DEGREES}
                   AND abs(pts.ln - med.lng) <= ${NEIGHBORHOOD_OUTLIER_DEGREES}`;
 
-  const result = await pool.query<NeighborhoodDbRow>(
-    `WITH grouped AS (
+  const result = await readWithoutJit(pool, (client) =>
+    client.query<NeighborhoodDbRow>(
+      `WITH grouped AS (
        SELECT
          mode() WITHIN GROUP (ORDER BY v.neighborhood)                        AS name,
          mode() WITHIN GROUP (ORDER BY v.city)                                AS city,
@@ -567,7 +595,8 @@ export async function getNeighborhoods(
            ) c
        ) pp ON true
       ORDER BY page.rn`,
-    params,
+      params,
+    ),
   );
 
   const rows = result.rows.filter((row) => row.name !== null);

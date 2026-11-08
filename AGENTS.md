@@ -119,6 +119,11 @@ guide.
     skaffold, and deploy-control. Everything is `"private": true`; internal dependencies are
     `workspace:*`.
 
+13. **Agents never send a request to a deployed host.** Dev, test and prod gateways, ingresses and
+    sites are off limits from the workstation (stakeholder rule, 2026-10-19; a SecOps hook blocks
+    it). Verify with specs, mocked data, or the local cluster. Read dev state only through GitHub
+    workflows on env branches, such as `.github/workflows/dev-service-logs.yml`.
+
 ## Writing Standard (ASD-STE100)
 
 Every agent writes in Simplified Technical English. The rules that matter most here:
@@ -167,7 +172,7 @@ pnpm run infra:local:cluster:setup     # Local cluster: also :delete | :reset:di
 pnpm run infra:local:registry:ensure   # Local registry: also :status | :delete
 pnpm run skaffold:services:deploy      # One-shot deploy (vs. skaffold:services watch loop)
 pnpm run infra:validate:dev            # Kustomize validation per env
-pnpm run cribstop:web                  # Frontend-only work: run against dev gateway, see cribstop AGENTS.md
+pnpm run cribstop:web                  # Frontend work: local gateway on localhost:8080, see cribstop AGENTS.md
 ```
 
 ## Layout
@@ -268,12 +273,13 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   reported out of scope, never confused with an unregistered one. Conflating the two is what made a
   single `auto_deploy: false` abort an entire deploy (#45).
 - **NetworkPolicy enforcement differs per cluster (#269).** `infra/k8s/base/networkpolicies/` limits
-  ingress to `property-service` (api-gateway only) and `account-service` (api-gateway and
-  property-service). The Hetzner K3s clusters enforce it: K3s ships an embedded policy controller
-  and no cluster config disables it. The local Kind cluster does not: Kind v1.28 uses kindnet, which
-  ignores NetworkPolicy. A policy that blocks a caller fails on Hetzner only. When a new in-cluster
-  caller reaches either service, add its `app` label to the policy. The policies set no egress rule,
-  so DNS egress is unchanged. Kubelet probes come from the node and the policy allows them.
+  ingress to `property-service` (api-gateway and account-service, #803) and `account-service`
+  (api-gateway and property-service). The Hetzner K3s clusters enforce it: K3s ships an embedded
+  policy controller and no cluster config disables it. The local Kind cluster does not: Kind v1.28
+  uses kindnet, which ignores NetworkPolicy. A policy that blocks a caller fails on Hetzner only.
+  When a new in-cluster caller reaches either service, add its `app` label to the policy. The
+  policies set no egress rule, so DNS egress is unchanged. Kubelet probes come from the node and the
+  policy allows them.
 - **Deploy lanes are phased, derived from the manifests, not hardcoded.** A service owning an
   admission webhook that intercepts writes to a resource another service owns runs in an earlier
   phase. Today that means the `ingress-nginx` lane completes before the jaeger / api-gateway /

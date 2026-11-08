@@ -204,7 +204,9 @@ export type SearchPlace =
       readonly state: string;
       readonly zip?: string | null;
     }
-  | { readonly kind: 'county'; readonly county: string; readonly state: string };
+  | { readonly kind: 'county'; readonly county: string; readonly state: string }
+  /** `/<zip5>/<segment>` (#973). The path names no city. The page resolves it from the feed. */
+  | { readonly kind: 'zip-only'; readonly zip: string };
 
 export interface ParsedSearchPath {
   /** `null` for a map-area search (`/homes-for-sale?boundary=...`). */
@@ -236,6 +238,7 @@ function words(slug: string): string {
  */
 export function searchPath(place: SearchPlace | null, segment: SearchPathSegment): string {
   if (place === null) return `/${segment}`;
+  if (place.kind === 'zip-only') return `/${place.zip}/${segment}`;
   if (place.kind === 'county') {
     return `/${slugify(countyBaseName(place.county))}-county-${slugify(place.state)}/${segment}`;
   }
@@ -266,6 +269,9 @@ export function parseSearchPath(segments: readonly string[]): ParsedSearchPath |
   if (head.length === 0) return { place: null, segment: listingSegment };
 
   const first = head[0] as string;
+  if (head.length === 1 && ZIP5.test(first)) {
+    return { place: { kind: 'zip-only', zip: first }, segment: listingSegment };
+  }
   const county = COUNTY_SEGMENT.exec(first);
   if (county && head.length === 1) {
     const place: SearchPlace = {

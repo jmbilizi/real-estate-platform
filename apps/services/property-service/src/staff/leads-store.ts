@@ -17,6 +17,12 @@ import type { Queryable } from '../inquiries/write';
 /** A lead is open until it reaches a final status or a bad-lead status. */
 const CLOSED_STATUSES_SQL = "('closed', 'lost', 'spam', 'rejected')";
 
+/** The open assignment names an agent profile that erasure or staff deactivated (#1007). */
+const NEEDS_REASSIGNMENT = (alias: string) => `EXISTS (
+  SELECT 1 FROM lead_assignments la
+    JOIN agent_profiles ap ON ap.id = la.agent_profile_id
+   WHERE la.lead_id = ${alias}.id AND la.ended_at IS NULL AND ap.deactivated_at IS NOT NULL)`;
+
 /** Normalized phone: the last ten digits. NULL when the phone holds no digits. */
 const PHONE_KEY = (alias: string) =>
   `NULLIF(right(regexp_replace(${alias}.phone, '\\D', '', 'g'), 10), '')`;
@@ -84,6 +90,7 @@ interface ListRow {
   phone: string | null;
   listing_id: string;
   possible_duplicate: boolean;
+  needs_reassignment: boolean;
 }
 
 export interface ListLeadsInput {
@@ -128,7 +135,8 @@ export async function listLeads(
               AS created_at_cursor,
             i.kind, i.status, i.account_id, i.phone, i.listing_id,
             EXISTS (SELECT 1 FROM listing_inquiries o WHERE ${duplicateCondition('i')})
-              AS possible_duplicate
+              AS possible_duplicate,
+            ${NEEDS_REASSIGNMENT('i')} AS needs_reassignment
        FROM listing_inquiries i
       ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY i.created_at DESC, i.id DESC
@@ -153,6 +161,7 @@ export async function listLeads(
         verifiedAccount: contact?.emailConfirmed ?? null,
         listingId: row.listing_id,
         possibleDuplicate: row.possible_duplicate,
+        needsReassignment: row.needs_reassignment,
       };
     }),
     next:
@@ -182,6 +191,7 @@ interface DetailRow {
   listing_price: string | number | null;
   listing_status: string | null;
   possible_duplicate: boolean;
+  needs_reassignment: boolean;
 }
 
 const DUPLICATE_IDS_LIMIT = 10;
@@ -206,7 +216,8 @@ export async function readLeadDetail(
             upper(btrim(p.state)) AS listing_state,
             l.list_price AS listing_price, l.consumer_status AS listing_status,
             EXISTS (SELECT 1 FROM listing_inquiries o WHERE ${duplicateCondition('i')})
-              AS possible_duplicate
+              AS possible_duplicate,
+            ${NEEDS_REASSIGNMENT('i')} AS needs_reassignment
        FROM listing_inquiries i
        JOIN listings l ON l.id = i.listing_id
        JOIN properties p ON p.id = l.property_id
@@ -298,6 +309,7 @@ export async function readLeadDetail(
       status: row.listing_status,
     },
     possibleDuplicate: row.possible_duplicate,
+    needsReassignment: row.needs_reassignment,
     duplicateLeadIds: duplicates.rows.map((r) => r.id),
     history: history.rows.map((h) => ({
       id: h.id,

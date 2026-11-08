@@ -228,6 +228,17 @@ internal static class Program
         builder.Services.AddScoped<PasswordChangeService>();
         builder.Services.AddHostedService<PendingRegistrationPurgeService>();
 
+        // Removes a deleted account's property-service rows (#803). The call carries the shared
+        // internal key. A failed call stays queued and the next sweep retries it.
+        builder.Services
+            .AddOptions<PropertyErasureOptions>()
+            .Bind(builder.Configuration.GetSection(PropertyErasureOptions.SectionName))
+            .Validate(options => options.Validate() is null, "PropertyErasure configuration is invalid. See PropertyErasureOptions.Validate.")
+            .ValidateOnStart();
+        builder.Services.AddHttpClient<PropertyErasureService>(
+            (sp, http) => http.Timeout = sp.GetRequiredService<IOptions<PropertyErasureOptions>>().Value.RequestTimeout);
+        builder.Services.AddHostedService<PropertyErasureSweepService>();
+
         // The Postmark transport: one background queue, resolved both as the delivery seam
         // (IOutboundEmailSender) and as the hosted service that drains it. Enqueuing never blocks
         // on the network, so no Identity handler's response time depends on the provider.

@@ -37,6 +37,21 @@ describe('waitlist routes', () => {
     expect((await GET(req())).status).toBe(401);
   });
 
+  it('forwards the list-property kind on POST and DELETE', async () => {
+    mockedFetch.mockResolvedValue(new Response(null, { status: 204 }));
+    await POST(req({ interest: 'list-property' }));
+    expect(mockedFetch).toHaveBeenLastCalledWith(expect.anything(), '/account/waitlist', {
+      method: 'POST',
+      body: { interest: 'list-property' },
+    });
+    await DELETE(req(), { params: Promise.resolve({ interest: 'list-property' }) });
+    expect(mockedFetch).toHaveBeenLastCalledWith(
+      expect.anything(),
+      '/account/waitlist/list-property',
+      { method: 'DELETE' },
+    );
+  });
+
   it('DELETE encodes the interest in the gateway path', async () => {
     mockedFetch.mockResolvedValue(new Response(null, { status: 204 }));
     const res = await DELETE(req(), { params: Promise.resolve({ interest: 'connect' }) });

@@ -1,10 +1,12 @@
 import { thinPageMinListings } from './seo-config';
 import {
+  cityMedianRows,
   cityRobots,
   type CityStats,
   citySummary,
   cityTitle,
   medianFromRanks,
+  statsSource,
 } from './city-summary';
 
 const stats: CityStats = {
@@ -81,5 +83,58 @@ describe('cityTitle (#842)', () => {
     expect(cityTitle('Alexandria, VA', 'homes-for-rent')).toBe(
       'Homes for rent in Alexandria, VA · Real Broker, LLC',
     );
+  });
+});
+
+describe('cityMedianRows (#986)', () => {
+  const stat = (value: number | null) => ({ value, inputCount: value === null ? 2 : 30 });
+  const medians = {
+    listingCount: 42,
+    medianListPrice: stat(525000),
+    medianDaysOnMarket: stat(18),
+    medianPricePerSqft: stat(312),
+    dataUpdatedAt: '2026-10-14T12:00:00.000Z',
+  };
+
+  it('formats the count and each median for a sale page', () => {
+    expect(cityMedianRows(medians, 'homes-for-sale')).toEqual([
+      { label: 'Active listings', value: '42' },
+      { label: 'Median list price', value: '$525,000' },
+      { label: 'Median days on market', value: '18' },
+      { label: 'Median price per sq ft', value: '$312' },
+    ]);
+  });
+
+  it('names rent and prints a monthly figure on a rent page', () => {
+    const rows = cityMedianRows(
+      { ...medians, medianListPrice: stat(2400), medianPricePerSqft: stat(3) },
+      'homes-for-rent',
+    );
+    expect(rows[1]).toEqual({ label: 'Median list rent', value: '$2,400/mo' });
+    expect(rows[3]).toEqual({ label: 'Median rent per sq ft', value: '$3/mo' });
+  });
+
+  it('gives a null figure no text, for each statistic', () => {
+    const rows = cityMedianRows(
+      {
+        ...medians,
+        medianListPrice: stat(null),
+        medianDaysOnMarket: stat(null),
+        medianPricePerSqft: stat(null),
+      },
+      'homes-for-sale',
+    );
+    expect(rows.map((row) => row.value)).toEqual(['42', null, null, null]);
+  });
+
+  it('keeps a zero median as a number', () => {
+    const rows = cityMedianRows({ ...medians, medianDaysOnMarket: stat(0) }, 'homes-for-sale');
+    expect(rows[2]?.value).toBe('0');
+  });
+});
+
+describe('statsSource (#986)', () => {
+  it('names Bright MLS when the feed carries it', () => {
+    expect(statsSource(['brightMLS'])).toBe('Bright MLS');
   });
 });

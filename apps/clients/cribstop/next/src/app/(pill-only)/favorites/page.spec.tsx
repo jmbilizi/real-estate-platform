@@ -1,8 +1,8 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithClient } from '@/test/renderWithClient';
 import type { SavedHome } from '@cribstop/property-contracts';
-import { aListingCardRow, aListingDetail } from '@/test/fixtures';
-import { getListing, ListingsApiError, toListingDetailView } from '@/lib/api/listings';
+import { aListingCardRow } from '@/test/fixtures';
+import { getListingsByIds, ListingsApiError } from '@/lib/api/listings';
 import { listAllSavedHomes, SavedHomesApiError } from '@/lib/api/saved-homes';
 import FavoritesPage from './page';
 
@@ -10,7 +10,7 @@ jest.mock('@/lib/api/listings', () => {
   const actual = jest.requireActual('@/lib/api/listings');
   return {
     ...actual,
-    getListing: jest.fn(),
+    getListingsByIds: jest.fn(),
   };
 });
 
@@ -43,7 +43,7 @@ jest.mock('@/lib/context', () => ({
 // react-redux Provider absent from these tests.
 jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast: jest.fn() }) }));
 
-const mockedGetListing = getListing as jest.Mock;
+const mockedByIds = getListingsByIds as jest.Mock;
 const mockedListAll = listAllSavedHomes as jest.Mock;
 
 const LISTED_HOME = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -192,31 +192,30 @@ describe('FavoritesPage, signed out', () => {
   });
 
   afterEach(() => {
-    mockedGetListing.mockReset();
+    mockedByIds.mockReset();
   });
 
-  it('falls back to the local list and keeps browsing open, with a sign-in prompt', async () => {
-    const survivor = toListingDetailView(
-      aListingDetail({ listing: { address: '9 Still Listed Ln' } }),
-    );
-    mockedGetListing.mockImplementation((id: string) =>
-      id.startsWith('aaaaaaaa')
-        ? Promise.resolve({ ...survivor, subjectId: LISTED_HOME })
-        : Promise.reject(
-            new ListingsApiError('This listing is no longer available.', 'not_found', 404),
-          ),
-    );
+  it('resolves the local list in one lookup, skips a withdrawn listing and keeps browsing open', async () => {
+    // The lookup answers only the listing that still resolves.
+    mockedByIds.mockResolvedValue([
+      aListingCardRow({ propertyId: LISTED_HOME, address: '9 Still Listed Ln' }),
+    ]);
 
     renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByText(/^9 Still Listed Ln,/)).toBeInTheDocument());
+    expect(mockedByIds).toHaveBeenCalledTimes(1);
+    expect(mockedByIds.mock.calls[0]?.[0]).toEqual([
+      'aaaaaaaa-1111-4000-8000-000000000001',
+      'bbbbbbbb-1111-4000-8000-000000000002',
+    ]);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
     expect(mockedListAll).not.toHaveBeenCalled();
   });
 
-  it('renders a retryable error state when every local listing fails for a real reason', async () => {
-    mockedGetListing.mockRejectedValue(
+  it('renders a retryable error state when the lookup fails', async () => {
+    mockedByIds.mockRejectedValue(
       new ListingsApiError('We could not load listings just now.', 'internal_error', 503),
     );
     renderWithClient(<FavoritesPage />);
@@ -224,10 +223,8 @@ describe('FavoritesPage, signed out', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
 
-  it('treats every local listing 404ing as a normal empty state', async () => {
-    mockedGetListing.mockRejectedValue(
-      new ListingsApiError('This listing is no longer available.', 'not_found', 404),
-    );
+  it('treats a lookup that answers no rows as a normal empty state', async () => {
+    mockedByIds.mockResolvedValue([]);
     renderWithClient(<FavoritesPage />);
 
     await waitFor(() => expect(screen.getByText('No saved homes yet')).toBeInTheDocument());
