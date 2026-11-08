@@ -10,7 +10,7 @@ namespace AccountService.Migrations
 {
     /// <inheritdoc />
     [DbContext(typeof(AccountDbContext))]
-    [Migration("20261107100000_AddRecentlyViewedListings")]
+    [Migration("20261101100000_AddRecentlyViewedListings")]
     public partial class AddRecentlyViewedListings : Migration
     {
         /// <inheritdoc />
