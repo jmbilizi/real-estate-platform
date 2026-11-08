@@ -709,6 +709,11 @@ runs:
               Deployment)
                 if deployment_is_ready "$ns" "$name"; then
                   echo "✅ $service: Deployment $name already Available - skipping rollout wait" >> "$log"
+                elif grep -qE "^deployment\.apps/$name unchanged$" "$log"; then
+                  # A mutable tag (:dev) leaves the spec unchanged, so a fixed image reaches a
+                  # broken Deployment only through the later restart step. Failing here would skip
+                  # that step on every deploy. "Wait for workload rollout" decides after it.
+                  echo "⏭️  $service: Deployment $name unchanged and not ready - restart step re-pulls, final rollout wait decides"
                 elif ! kubectl rollout status deployment/"$name" -n "$ns" \
                        --timeout=${{ inputs.deployment_timeout }} >> "$log" 2>&1; then
                   if deployment_is_ready "$ns" "$name"; then

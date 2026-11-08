@@ -1330,7 +1330,8 @@ export function toOpenApiDocument() {
             'account. They are null when the account contact is unavailable. A row has ' +
             '`possibleDuplicate` when ' +
             'another open request on the same listing came within seven days from the same buyer ' +
-            'account or phone. The server never merges leads. The response is `private, no-store`.',
+            'account or phone. The server never merges leads. A row has `needsReassignment` when ' +
+            'its open assignment names a deactivated agent. The response is `private, no-store`.',
           parameters: searchParameters(staffLeadsRequestSchema),
           responses: {
             '200': {

@@ -683,6 +683,27 @@ namespace AccountService.Migrations
                     b.ToTable("NotificationPreferenceAudits", (string)null);
                 });
 
+            modelBuilder.Entity("AccountService.Models.PendingPropertyErasure", b =>
+                {
+                    b.Property<string>("AccountId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AccountId");
+
+                    b.HasIndex("NextAttemptAt");
+
+                    b.ToTable("PendingPropertyErasures", (string)null);
+                });
+
             modelBuilder.Entity("AccountService.Models.TrustedDevice", b =>
                 {
                     b.Property<Guid>("Id")

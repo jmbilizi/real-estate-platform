@@ -63,7 +63,10 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) return sourceFiles(path);
-    return /\.ts$/.test(name) && !/\.spec\.ts$/.test(name) ? [path] : [];
+    // #992: only the erasure file may write the outbox, and only at this path.
+    const skipped =
+      /\.spec\.ts$/.test(name) || path.endsWith(join('account-erasure', 'outbox-erasure.ts'));
+    return /\.ts$/.test(name) && !skipped ? [path] : [];
   });
 }
 

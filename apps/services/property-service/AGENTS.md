@@ -683,7 +683,7 @@ pnpm exec nx run property-service:migrate
 PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
 ```
 
-Expected result: **25 suites, 319 tests, all passing.** The count grows with the suite. The run
+Expected result: **34 suites, 415 tests, all passing.** The count grows with the suite. The run
 needs no other env: `tests/support/e2e-serve-defaults.js` points every account-service URL at the
 introspection stub. `src/e2e-serve-defaults.spec.ts` fails if the app reads an
 `ACCOUNT_SERVICE_*_URL` variable that the defaults omit. Remove the container when done. The
@@ -797,6 +797,22 @@ the Property API document. Never publish a second document.
   including when account-service is down.
 - The read routes add `isSaved` and `isFavorited` only for a caller that resolves to an account.
   That response is `private, no-store`. An anonymous response stays public and byte-identical.
+
+## Account erasure (`src/account-erasure/`, #803)
+
+`DELETE /internal/account/:accountId/data`. account-service calls it after an account delete. It
+removes the account's `saved_homes` and `looking_for_preferences` rows through `eraseAccount*` in
+each table's `store.ts`.
+
+- It needs the `X-Internal-Key` header. The key is `ACCOUNT_SERVICE_INTERNAL_KEY`, the secret
+  account-service already holds. No usable key (unset, under 32 characters, or the placeholder)
+  means `401` for every call. A bad id answers `400`.
+- It is idempotent. A repeat call, or an account with no rows, answers `200` with zero counts.
+- It has no gateway route (`InternalRoutesNotExposedTests`) and is absent from `/openapi.json`.
+  `property-service.networkpolicy.yaml` admits `account-service` for it.
+- Other account-keyed data stays. `listing_inquiries`, lead notes and the lead audit are retained
+  under PRD §6.4 (3-year lead retention, then anonymize). `analytics_account_links`,
+  `agent_profiles`, agent assignments and `notification_outbox` need a follow-up ticket.
 
 ## Home feed (`src/home-feed/`)
 
@@ -943,6 +959,8 @@ home exists. It runs inside `buildSearchQuery`, on every query, with no flag and
   a default search.
 - Only live statuses count. An off-market record never wins and never counts. A hidden record still
   opens at `/listings/:id`. The detail response lists the other live records in `alsoListedAs`.
-- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first.
+- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first. `getNeighborhoods`
+  and `getListingsMeta` do it through `readWithoutJit`. `tests/listings-read-jit.e2e.spec.ts` fails
+  when a read compiles with JIT (#1003).
 - `listings.source_listing_id` holds the MLS number (`ListingId`). A value equal to the feed key is
   an older row and reads as unknown until the sync writes the row again.

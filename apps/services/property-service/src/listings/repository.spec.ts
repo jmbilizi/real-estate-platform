@@ -4,10 +4,11 @@ import {
 } from '@cribstop/property-contracts';
 import {
   getListingAttributes,
+  getListingsMeta,
   getNeighborhoods,
   getPropertyAttributes,
   listBrightListingIdentities,
-  type ReadClient,
+  type ReadPool,
 } from './repository';
 
 const baseNeighborhoodsRequest: NeighborhoodsRequest = neighborhoodsRequestSchema.parse({});
@@ -23,18 +24,39 @@ const baseNeighborhoodsRequest: NeighborhoodsRequest = neighborhoodsRequestSchem
  */
 
 function fakeClient(rows: unknown[] = []): {
-  client: ReadClient;
+  client: ReadPool;
   captured: { text: string; values: unknown[] }[];
+  /** Every statement in order, transaction control included. `captured` omits that control. */
+  statements: string[];
 } {
   const captured: { text: string; values: unknown[] }[] = [];
-  const client: ReadClient = {
-    query: <T>(text: string, values?: unknown[]) => {
+  const statements: string[] = [];
+  const query = <T>(text: string, values?: unknown[]) => {
+    statements.push(text);
+    if (!/^(BEGIN|SET LOCAL|COMMIT|ROLLBACK)/.test(text))
       captured.push({ text, values: values ?? [] });
-      return Promise.resolve({ rows: rows as T[] });
-    },
+    return Promise.resolve({ rows: rows as T[] });
   };
-  return { client, captured };
+  const client: ReadPool = {
+    query,
+    connect: () => Promise.resolve({ query, release: () => undefined }),
+  };
+  return { client, captured, statements };
 }
+
+describe('getListingsMeta', () => {
+  it('runs in a read-only transaction with JIT off (#1003)', async () => {
+    const { client, statements } = fakeClient([
+      { data_updated_at: null, sources: [], listing_count: 0, last_synced_at: null },
+    ]);
+
+    await getListingsMeta(client);
+
+    expect(statements[0]).toBe('BEGIN READ ONLY');
+    expect(statements[1]).toBe('SET LOCAL jit = off');
+    expect(statements.at(-1)).toBe('COMMIT');
+  });
+});
 
 describe('getListingAttributes', () => {
   it('joins listing_search_v on the listing itself, so suppression is derived, not passed in', async () => {
@@ -97,6 +119,16 @@ describe('getPropertyAttributes', () => {
 /** #390, #501. `getNeighborhoods()` binds the query's shape. The aggregate's actual filtering runs in
  *  `tests/listings-neighborhood-groups.e2e.spec.ts` against a real Postgres. */
 describe('getNeighborhoods', () => {
+  it('runs in a read-only transaction with JIT off (#1003)', async () => {
+    const { client, statements } = fakeClient();
+
+    await getNeighborhoods(client, baseNeighborhoodsRequest);
+
+    expect(statements[0]).toBe('BEGIN READ ONLY');
+    expect(statements[1]).toBe('SET LOCAL jit = off');
+    expect(statements.at(-1)).toBe('COMMIT');
+  });
+
   const dbRow = (overrides: Record<string, unknown> = {}) => ({
     group_total: 7,
     name: 'FISHTOWN',

@@ -382,6 +382,16 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   omitted. Each answer holds `allowed`, `suppressed` (the #664 list, email only), `emailConfirmed`
   and `unsubscribeToken` (only when asked, and only for email that needs consent). No gateway route.
   Hidden from OpenAPI.
+- **Account deletion removes property-service rows (#803).** `DELETE /account/profile` is the only
+  deletion today. It is a soft delete, and no restore route exists, so it is the trigger. No hard
+  delete or retention job exists. `PropertyErasureService.Stage` adds a `PendingPropertyErasures`
+  row to the same save as the delete. `PropertyErasureSweepService` runs every minute. It calls
+  `DELETE {PropertyErasure:BaseUrl}/internal/account/{id}/data` with `X-Internal-Key`
+  (`ACCOUNT_SERVICE_INTERNAL_KEY`, shared with property-service). A `2xx` removes the row. Any other
+  answer or a transport error keeps it and doubles the wait, up to six hours. An outage never blocks
+  the delete. The row has no foreign key, so a future hard delete keeps it. A future hard-delete job
+  needs no change here. Tests: `Tests/Helpers/PropertyErasureServiceTests.cs`,
+  `ProfileEndpointTests.DeleteProfile_QueuesThePropertyDataErasure`.
 - Tests: `Tests/Integration/NotificationPreferencesEndpointTests.cs`,
   `NotificationConsentEndpointTests.cs`, `Tests/Helpers/UnsubscribeTokenServiceTests.cs`,
   `UnsubscribeTokenEdgeCaseTests.cs`. Gateway: `AccountNotificationRoutesTests`,
