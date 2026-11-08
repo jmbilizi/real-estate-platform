@@ -35,6 +35,10 @@ export const UI_CLICK_ELEMENT_IDS = [
   'contact_cta',
 ] as const;
 
+/** `web_vital` (#987). `value` is milliseconds for LCP and INP, and a unitless score for CLS. */
+export const WEB_VITAL_METRICS = ['LCP', 'INP', 'CLS'] as const;
+export const WEB_VITAL_RATINGS = ['good', 'needs-improvement', 'poor'] as const;
+
 export const DWELL_BUCKETS = ['0-5', '5-30', '30-120', '120+'] as const;
 
 /** Acquisition channels derived from utm and referrer parameters (#830). */
@@ -231,6 +235,11 @@ export const EVENT_PROPS = {
   auth_fail: { ...auth },
   client_error: { ...errorFields },
   api_error: { ...errorFields },
+  web_vital: {
+    metric: z.enum(WEB_VITAL_METRICS),
+    value: z.number().min(0).max(600_000),
+    rating: z.enum(WEB_VITAL_RATINGS),
+  },
   feed_impression: { ...feedFields },
   feed_click: { ...feedFields },
 } satisfies Record<string, z.ZodRawShape>;

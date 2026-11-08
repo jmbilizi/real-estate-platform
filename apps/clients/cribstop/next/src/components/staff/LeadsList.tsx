@@ -12,7 +12,12 @@ import {
 import Button from '@/components/Button';
 import { fetchLeads, type LeadFilters, StaffApiError } from '@/lib/api/staff-leads';
 import { CONTACT_UNAVAILABLE, formatAge, KIND_LABEL, STATUS_LABEL } from '@/lib/staff-leads';
-import { DuplicateBadge, StatusBadge, VerifiedAccountBadge } from './LeadBadges';
+import {
+  DuplicateBadge,
+  NeedsReassignmentBadge,
+  StatusBadge,
+  VerifiedAccountBadge,
+} from './LeadBadges';
 import { LEAD_ROW_GRID, LeadsListSkeleton } from './LeadSkeletons';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -68,6 +73,7 @@ function LeadRow({ lead }: { lead: StaffLeadListItem }) {
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             <StatusBadge status={lead.status} />
             {lead.possibleDuplicate && <DuplicateBadge />}
+            {lead.needsReassignment && <NeedsReassignmentBadge />}
             {lead.verifiedAccount && <VerifiedAccountBadge />}
           </div>
         </div>

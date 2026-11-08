@@ -11,6 +11,10 @@ export function DuplicateBadge() {
   return <span className={`${PILL} bg-amber-100 text-amber-900`}>Possible duplicate</span>;
 }
 
+export function NeedsReassignmentBadge() {
+  return <span className={`${PILL} bg-red-100 text-red-900`}>Needs reassignment</span>;
+}
+
 export function VerifiedAccountBadge() {
   return (
     <span className={`${PILL} border border-surface-border bg-white text-ink-body`}>

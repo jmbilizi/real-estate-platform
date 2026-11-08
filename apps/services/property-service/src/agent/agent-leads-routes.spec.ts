@@ -49,7 +49,7 @@ function fakePool(world: Partial<World> = {}) {
     calls.push({ sql, params });
     if (/FROM agent_profiles/.test(sql))
       return Promise.resolve({ rows: w.profile ? [{ id: PROFILE }] : [] });
-    if (/SELECT 1 FROM lead_assignments/.test(sql))
+    if (/SELECT 1 FROM lead_assignments\s+WHERE/.test(sql))
       return Promise.resolve({ rows: w.owned ? [{}] : [] });
     if (/FROM lead_assignments a/.test(sql)) {
       return Promise.resolve({ rows: w.owned ? [leadRow(w.status)] : [] });
@@ -161,7 +161,7 @@ describe('agent routes access', () => {
     // The staff list answers for the Moderator role and does not filter on the agent profile.
     pool.calls.length = 0;
     expect((await request(app).get('/staff/leads')).status).toBe(200);
-    expect(sqlOf(pool)).not.toMatch(/lead_assignments/);
+    expect(sqlOf(pool)).not.toMatch(/agent_profile_id = \$\d/);
   });
 });
 

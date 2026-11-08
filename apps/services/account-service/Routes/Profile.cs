@@ -216,7 +216,8 @@ internal static class Profile
         app.MapDelete("/account/profile", async (
             ClaimsPrincipal principal,
             UserManager<ApplicationUser> userManager,
-            NotificationPreferenceService notificationPreferences) =>
+            NotificationPreferenceService notificationPreferences,
+            PropertyErasureService propertyErasure) =>
         {
             var user = await userManager.GetUserAsync(principal).ConfigureAwait(false);
             if (user is null)
@@ -247,6 +248,10 @@ internal static class Profile
 
             user.DeletedAt = DateTime.UtcNow;
             user.DeletedByUserId = userManager.GetUserId(principal);
+
+            // #803: UpdateAsync saves this row with the delete. A failed update returns below and
+            // the scope ends unsaved, so no erasure is queued for an account that still exists.
+            propertyErasure.Stage(user.Id);
 
             var result = await userManager.UpdateAsync(user).ConfigureAwait(false);
             if (!result.Succeeded)

@@ -93,6 +93,22 @@ Columns: sessions per step (`search`, `listing_impression`, `listing_click`, `li
 `listing_save`, `lead_start`, `lead_submit`) and four step rates. A rate is `NULL` when its divisor
 is zero.
 
+## Web vitals (#987)
+
+The web app sends one `web_vital` event per LCP, INP and CLS value. Properties: `metric`, `value`,
+`rating`, `path_template` and `device`. `value` is milliseconds for LCP and INP and a score for CLS.
+The event holds no URL, listing id or query string.
+
+```sql
+-- p75 mobile LCP for the detail and search routes, last 28 days
+SELECT surface, path_template, samples, p75 AS p75_lcp_ms
+FROM analytics_web_vitals_p75_28d_v
+WHERE metric = 'LCP' AND device = 'mobile' AND surface IN ('detail', 'search')
+ORDER BY surface, path_template;
+```
+
+`analytics_web_vitals_p75_daily_v` has the same columns plus `day`. Never average daily p75 values.
+
 ## Retention
 
 ```sql

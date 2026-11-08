@@ -44,6 +44,8 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
 
     public DbSet<SecureAccountToken> SecureAccountTokens => Set<SecureAccountToken>();
 
+    public DbSet<PendingPropertyErasure> PendingPropertyErasures => Set<PendingPropertyErasure>();
+
     public DbSet<TrustedDevice> TrustedDevices => Set<TrustedDevice>();
 
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
@@ -346,6 +348,14 @@ internal class AccountDbContext(DbContextOptions<AccountDbContext> options)
             entity.HasIndex(t => t.TokenHash).IsUnique();
             entity.HasIndex(t => t.ExpiresAt);
             entity.HasIndex(t => t.UserId);
+        });
+
+        // No FK to AspNetUsers, so the row outlives a hard delete of the account (#803).
+        builder.Entity<PendingPropertyErasure>(entity =>
+        {
+            entity.ToTable("PendingPropertyErasures");
+            entity.HasKey(e => e.AccountId);
+            entity.HasIndex(e => e.NextAttemptAt);
         });
 
         // No FK to AspNetUsers. Only the token hash is stored (#818).

@@ -1,18 +1,31 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { type ParsedSearchPath, searchPath } from '@cribstop/property-contracts';
+import JsonLd from '@/components/JsonLd';
 import ListingsInfoPopover from '@/components/ListingsInfoPopover';
 import SearchExperience from '@/components/SearchExperience';
-import { loadCityStats } from '@/lib/api/city-stats';
+import AreaLinks, { type NearbyLink } from '@/components/AreaLinks';
+import CityMediansTable from '@/components/CityMediansTable';
+import { loadCityMedians, loadCityStats } from '@/lib/api/city-stats';
+import { loadCityNeighborhoods } from '@/lib/api/neighborhood-groups';
+import { loadCityZips } from '@/lib/api/zip-groups';
+import { nearbyNeighborhoods, neighborhoodBreadcrumbs } from '@/lib/neighborhood-page';
+import { breadcrumbJsonLd, nearbyZips, zipBreadcrumbs } from '@/lib/zip-page';
 import { initialRequestFor, loadInitialResults } from '@/lib/api/listings-initial';
 import HydratedSearch from '@/lib/query/HydratedSearch';
 import { BRAND } from '@/lib/brand';
-import { cityRobots, citySummary, cityTitle } from '@/lib/city-summary';
+import {
+  cityMedianRows,
+  cityRobots,
+  citySummary,
+  cityTitle,
+  statsSource,
+} from '@/lib/city-summary';
 import { formatDate } from '@/lib/format';
 import { timeZoneForState } from '@/lib/time-zone';
 import { publishableOrigin } from '@/lib/publishable-origin';
 import { searchRouteProps } from '@/lib/search-route';
-import { thinPageMinListings } from '@/lib/seo-config';
+import { searchCanonical, searchUrlKind, thinPageMinListings } from '@/lib/seo-config';
 
 /**
  * A search path page (#350), for a place (`/alexandria-va/homes-for-sale`) or a map area
@@ -39,17 +52,91 @@ export default async function SearchPathView({
   if (props.status === 'error') throw new Error('Place lookup failed');
   const label = props.place.label;
   const timeZone = timeZoneForState(props.place.filters.state);
-  const [initialResults, stats] = await Promise.all([
+  // A bare ZIP page or a neighborhood page adds a breadcrumb trail and links to the city's other
+  // ZIPs or neighborhoods (#973, #974).
+  const zip = parsed.place?.kind === 'zip-only' ? parsed.place.zip : null;
+  const neighborhood =
+    parsed.place?.kind === 'neighborhood' && props.area && props.place.filters.neighborhood
+      ? { place: parsed.place, name: props.place.filters.neighborhood, area: props.area }
+      : null;
+  const listingType = parsed.segment === 'homes-for-rent' ? 'rent' : 'sale';
+  // A city page adds the medians table (#986).
+  const cityPlace =
+    props.place.searchPlace?.kind === 'city' &&
+    props.place.filters.city &&
+    props.place.filters.state
+      ? { city: props.place.filters.city, state: props.place.filters.state }
+      : null;
+  const [initialResults, stats, cityZips, cityNeighborhoods, medians] = await Promise.all([
     loadInitialResults(props.initialQuery, props.place),
     label ? loadCityStats(props.initialQuery, props.place) : null,
+    zip && props.area ? loadCityZips(props.area.city, props.area.state, listingType) : null,
+    neighborhood
+      ? loadCityNeighborhoods(neighborhood.area.city, neighborhood.area.state, listingType)
+      : null,
+    cityPlace ? loadCityMedians(cityPlace.city, cityPlace.state, listingType) : null,
   ]);
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
+  const crumbs = zip
+    ? zipBreadcrumbs(zip, parsed.segment, props.area)
+    : neighborhood
+      ? neighborhoodBreadcrumbs(
+          neighborhood.place,
+          neighborhood.name,
+          neighborhood.area,
+          parsed.segment,
+        )
+      : null;
+  const minListings = thinPageMinListings();
+  let nearby: NearbyLink[] = [];
+  let nearbyHeading = '';
+  let nearbyLabel = '';
+  if (zip && cityZips) {
+    nearby = nearbyZips(cityZips, zip, parsed.segment, minListings).map((item) => ({
+      label: item.zip,
+      count: item.count,
+      path: item.path,
+    }));
+    nearbyHeading = `${noun} in nearby ZIP codes`;
+    nearbyLabel = 'Nearby ZIP codes';
+  } else if (neighborhood && cityNeighborhoods) {
+    nearby = nearbyNeighborhoods(
+      cityNeighborhoods,
+      { name: neighborhood.name, ...neighborhood.area },
+      parsed.segment,
+      minListings,
+    ).map((item) => ({ label: item.name, count: item.count, path: item.path }));
+    nearbyHeading = `${noun} in other neighborhoods of ${neighborhood.area.city}`;
+    nearbyLabel = 'Other neighborhoods';
+  }
+  // The markup must match the visible trail, and the trail shows only with the figures.
+  const breadcrumbLd = crumbs && stats ? breadcrumbJsonLd(publishableOrigin(), crumbs) : null;
+
   const about =
     label && stats ? (
       <ListingsInfoPopover>
+        {crumbs ? (
+          <div className="mb-3">
+            <AreaLinks
+              crumbs={crumbs}
+              nearby={nearby}
+              heading={nearbyHeading}
+              navLabel={nearbyLabel}
+            />
+          </div>
+        ) : null}
         <p className="text-sm text-ink-body">
           {citySummary(label, parsed.segment, stats, timeZone)}
         </p>
+        {medians ? (
+          <CityMediansTable
+            rows={cityMedianRows(medians, parsed.segment)}
+            asOf={medians.dataUpdatedAt ?? stats.asOf}
+            source={statsSource(stats.sources)}
+            caption={`${label} market figures`}
+            timeZone={timeZone}
+          />
+        ) : null}
         <p className="mt-2 text-xs text-ink-muted">
           <span className="text-sm font-semibold text-ink-body">{BRAND.brokerage}</span>
           {' · '}
@@ -65,7 +152,12 @@ export default async function SearchPathView({
   );
   return (
     <>
-      {label ? <h1 className="sr-only">{`${noun} in ${label}`}</h1> : null}
+      {label ? (
+        <>
+          <h1 className="sr-only">{`${noun} in ${label}`}</h1>
+          {breadcrumbLd ? <JsonLd data={breadcrumbLd} /> : null}
+        </>
+      ) : null}
       {initialResults ? (
         <HydratedSearch
           request={initialRequestFor(props.initialQuery, props.place)}
@@ -85,7 +177,17 @@ export async function searchPathMetadata(
   params: URLSearchParams,
 ): Promise<Metadata> {
   const noun = parsed.segment === 'homes-for-rent' ? 'Homes for rent' : 'Homes for sale';
-  if (parsed.place === null) return { title: `${noun} · ${BRAND.brokerage}` };
+  const urlKind = searchUrlKind(params);
+  const origin = publishableOrigin();
+  if (parsed.place === null) {
+    // The map-area path. Only its clean form is an index candidate (#847).
+    const canonical = searchCanonical(origin, searchPath(null, parsed.segment), urlKind);
+    return {
+      title: `${noun} · ${BRAND.brokerage}`,
+      ...(urlKind.kind === 'clean' ? {} : { robots: { index: false, follow: true } }),
+      ...(canonical ? { alternates: { canonical } } : {}),
+    };
+  }
   const props = await searchRouteProps(parsed, params);
   if (props.status !== 'found') {
     return { title: `${BRAND.brokerage} — ${BRAND.titleSuffix}`, robots: { index: false } };
@@ -97,13 +199,14 @@ export async function searchPathMetadata(
   const description = stats
     ? citySummary(label, parsed.segment, stats, timeZone)
     : `${noun} in ${label}, brokered by ${BRAND.brokerage}.`;
-  // The canonical link names the path without the visitor's query. See `publishable-origin.ts`.
-  const origin = publishableOrigin();
-  const url = origin === null ? null : `${origin}${searchPath(parsed.place, parsed.segment)}`;
+  // The canonical link names the path without the visitor's query, except for a page of 2 or more
+  // (#847). See `publishable-origin.ts`.
+  const url = searchCanonical(origin, searchPath(parsed.place, parsed.segment), urlKind);
+  const cityIndex = cityRobots(stats?.activeCount ?? null, thinPageMinListings());
   return {
     title,
     description,
-    robots: cityRobots(stats?.activeCount ?? null, thinPageMinListings()),
+    robots: { index: cityIndex.index && urlKind.kind === 'clean', follow: true },
     ...(url ? { alternates: { canonical: url } } : {}),
     openGraph: {
       type: 'website',

@@ -55,6 +55,7 @@ describe('analytics event contract v2 (#824)', () => {
         'api_error',
         'feed_impression',
         'feed_click',
+        'web_vital',
         'listing_view',
       ].sort(),
     );
@@ -98,6 +99,27 @@ describe('analytics event contract v2 (#824)', () => {
     const base = { event: 'ui_click', surface: 'search', session_id: SESSION };
     expect(schema.safeParse({ ...base, element_id: 'filter_open' }).success).toBe(true);
     expect(schema.safeParse({ ...base, element_id: 'Buy now for Jane' }).success).toBe(false);
+  });
+
+  it('accepts a web vital and rejects a URL, a listing id or a bad metric (#987)', () => {
+    const vital = {
+      event: 'web_vital',
+      surface: 'detail',
+      session_id: SESSION,
+      path_template: '/listing/[id]',
+      device: 'mobile',
+      metric: 'LCP',
+      value: 2300,
+      rating: 'good',
+    };
+    expect(schema.safeParse(vital).success).toBe(true);
+    expect(schema.safeParse({ ...vital, metric: 'CLS', value: 0.12 }).success).toBe(true);
+    expect(schema.safeParse({ ...vital, metric: 'FCP' }).success).toBe(false);
+    expect(schema.safeParse({ ...vital, rating: 'fine' }).success).toBe(false);
+    expect(schema.safeParse({ ...vital, value: -1 }).success).toBe(false);
+    expect(schema.safeParse({ ...vital, url: 'https://x.test/listing/1' }).success).toBe(false);
+    expect(schema.safeParse({ ...vital, listing_id: LISTING }).success).toBe(false);
+    expect(schema.safeParse({ ...vital, path_template: '/listing/1?a=b' }).success).toBe(false);
   });
 
   it('accepts a coarse map cell and rejects an exact point', () => {

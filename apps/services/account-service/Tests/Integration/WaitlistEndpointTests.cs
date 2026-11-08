@@ -114,6 +114,43 @@ namespace AccountService.Tests.Integration
         }
 
         [Fact]
+        public async Task ListProperty_CanBeJoinedListedRepeatedAndLeft()
+        {
+            var client = await this.AuthenticateAsync("waitlist-list-property");
+
+            var join = await client.PostAsJsonAsync("/account/waitlist", new { interest = "list-property" });
+            var repeat = await client.PostAsJsonAsync("/account/waitlist", new { interest = "list-property" });
+
+            join.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            repeat.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            (await ReadInterestsAsync(client)).Should().Equal("list-property");
+
+            var leave = await client.DeleteAsync("/account/waitlist/list-property");
+
+            leave.StatusCode.Should().Be(HttpStatusCode.NoContent);
+            (await ReadInterestsAsync(client)).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task ListProperty_IsHeldTogetherWithEveryOtherKind()
+        {
+            var client = await this.AuthenticateAsync("waitlist-list-property-all");
+
+            await client.PostAsJsonAsync("/account/waitlist", new { interest = "services-consumer" });
+            await client.PostAsJsonAsync("/account/waitlist", new { interest = "services-provider" });
+            await client.PostAsJsonAsync("/account/waitlist", new { interest = "connect" });
+            await client.PostAsJsonAsync("/account/waitlist", new { interest = "list-property" });
+
+            (await ReadInterestsAsync(client)).Should().BeEquivalentTo(
+                "services-consumer", "services-provider", "connect", "list-property");
+
+            await client.DeleteAsync("/account/waitlist/list-property");
+
+            (await ReadInterestsAsync(client)).Should().BeEquivalentTo(
+                "services-consumer", "services-provider", "connect");
+        }
+
+        [Fact]
         public async Task DeleteWaitlist_WithdrawsOnlyTheNamedInterest()
         {
             var client = await this.AuthenticateAsync("waitlist-withdraw-one");
@@ -169,6 +206,7 @@ namespace AccountService.Tests.Integration
         [InlineData("homes")]
         [InlineData("Connect")]
         [InlineData("services_consumer")]
+        [InlineData("list_property")]
         public async Task PostWaitlist_WithUnknownInterest_ReturnsValidationProblem(string interest)
         {
             var client = await this.AuthenticateAsync($"waitlist-bad-post-{interest}");

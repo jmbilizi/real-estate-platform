@@ -65,7 +65,7 @@ export default function ListingsInfoPopover({ children }: { children: ReactNode 
         aria-label="About these listings"
         className={
           open
-            ? 'absolute inset-x-5 top-full z-30 mt-1 whitespace-normal rounded-xl border border-surface-border bg-white p-4 text-left shadow-lg md:inset-x-auto md:left-0 md:w-80'
+            ? 'absolute inset-x-5 top-full z-30 mt-1 max-h-[30dvh] overflow-y-auto whitespace-normal rounded-xl border border-surface-border bg-white p-4 text-left shadow-lg md:inset-x-auto md:left-0 md:w-80'
             : 'sr-only'
         }
       >
