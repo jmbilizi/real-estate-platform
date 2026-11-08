@@ -13,6 +13,7 @@ import OnboardingListener from '@/components/OnboardingListener';
 import Toast from '@/components/Toast';
 import { BRAND } from '@/lib/brand';
 import AnalyticsTracker from '@/components/AnalyticsTracker';
+import WebVitalsReporter from '@/components/WebVitalsReporter';
 import SiteOriginWarmer from '@/components/SiteOriginWarmer';
 
 export const metadata: Metadata = {
@@ -45,6 +46,7 @@ export default function RootLayout({
         <NextTopLoader color="#FF385C" showSpinner={false} height={3} />
         <SiteOriginWarmer />
         <AnalyticsTracker />
+        <WebVitalsReporter />
         <QueryProvider>
           <AppProvider>
             <SiteHeader />
