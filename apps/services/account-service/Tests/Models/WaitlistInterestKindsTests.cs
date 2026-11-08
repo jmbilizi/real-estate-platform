@@ -14,9 +14,9 @@ namespace AccountService.Tests.Models
     public class WaitlistInterestKindsTests
     {
         [Fact]
-        public void All_ContainsExactlyTheThreePillarInterests()
+        public void All_ContainsExactlyTheFourInterests()
         {
-            var expected = new[] { "connect", "services-consumer", "services-provider" };
+            var expected = new[] { "connect", "list-property", "services-consumer", "services-provider" };
             WaitlistInterestKinds.All.Should().BeEquivalentTo(expected);
         }
 
@@ -24,6 +24,7 @@ namespace AccountService.Tests.Models
         [InlineData("services-consumer")]
         [InlineData("services-provider")]
         [InlineData("connect")]
+        [InlineData("list-property")]
         public void IsValid_ReturnsTrue_ForVocabularyValues(string interest)
         {
             WaitlistInterestKinds.IsValid(interest).Should().BeTrue();
@@ -33,6 +34,7 @@ namespace AccountService.Tests.Models
         [InlineData("homes")]
         [InlineData("Connect")]
         [InlineData("services_consumer")]
+        [InlineData("list_property")]
         [InlineData("")]
         [InlineData(null)]
         public void IsValid_ReturnsFalse_ForUnknownValues(string? interest)
@@ -46,7 +48,7 @@ namespace AccountService.Tests.Models
             // Services consumer and Services provider are separate rows a single account may both
             // hold. A vocabulary that merged them would force a persona (PRD §11.2).
             WaitlistInterestKinds.ServicesConsumer.Should().NotBe(WaitlistInterestKinds.ServicesProvider);
-            WaitlistInterestKinds.All.Should().HaveCount(3);
+            WaitlistInterestKinds.All.Should().HaveCount(4);
         }
     }
 }

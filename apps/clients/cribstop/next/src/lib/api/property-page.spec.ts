@@ -32,6 +32,17 @@ describe('loadPropertyPage', () => {
     });
   });
 
+  it('lets Next keep the gateway response for a short time (#890)', async () => {
+    fetchGateway.mockResolvedValue(mockUpstream(200, aPropertyPage()));
+
+    await loadPropertyPage('listing-cache-1');
+
+    expect(fetchGateway).toHaveBeenCalledWith(
+      '/property/listings/listing-cache-1/page',
+      expect.objectContaining({ next: { revalidate: 60 } }),
+    );
+  });
+
   it('returns not-found on the contract 404', async () => {
     fetchGateway.mockResolvedValue(
       mockUpstream(404, { error: { code: 'not_found', message: 'Property not found.' } }),

@@ -9,8 +9,11 @@ resources:
   - workspace-ca-env.configmap.yaml
 
 patches:
+  # ingress-nginx runs in its own namespace, where the ConfigMaps do not exist, and makes no
+  # outbound TLS calls (#971). Any other namespace needs its own copy of both ConfigMaps.
   - target:
       kind: Deployment
+      labelSelector: app.kubernetes.io/name!=ingress-nginx
     patch: |-
       - op: add
         path: /spec/template/spec/volumes

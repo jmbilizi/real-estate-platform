@@ -39,6 +39,73 @@ function isLeadStatus(value: unknown): value is LeadStatus {
 }
 
 /**
+ * The change itself, on a client that already holds an open transaction. It writes nothing until
+ * every check passes, so a caller that gets `ok: false` has nothing to roll back. A caller that
+ * owns a larger transaction (the agent erasure) uses this. Everyone else uses `changeLeadStatus`.
+ */
+export async function changeLeadStatusInTransaction(
+  client: Queryable,
+  input: ChangeLeadStatusInput,
+): Promise<ChangeLeadStatusResult> {
+  const current = await client.query<{ status: unknown }>(
+    'SELECT status FROM listing_inquiries WHERE id = $1 FOR UPDATE',
+    [input.leadId],
+  );
+  const from = current.rows[0]?.status;
+  if (!isLeadStatus(from)) return { ok: false, reason: 'not_found' };
+  if (!canTransition(from, input.to)) return { ok: false, reason: 'invalid_transition', from };
+
+  if (input.precheck !== undefined) {
+    const rejection = await input.precheck(client, from);
+    if (rejection !== null) return { ok: false, reason: 'rejected', code: rejection };
+  }
+
+  // A return to `verified` or a final status ends the open assignment, so none outlives its lead.
+  let agentProfileId = input.agentProfileId ?? null;
+  const endReason =
+    input.to === 'verified'
+      ? (input.assignmentEndReason ?? 'returned')
+      : input.to === 'lost' || input.to === 'closed'
+        ? 'closed'
+        : null;
+  if (endReason !== null) {
+    const ended = await client.query<{ agent_profile_id: string }>(
+      `UPDATE lead_assignments SET ended_at = now(), end_reason = $2
+        WHERE lead_id = $1 AND ended_at IS NULL
+        RETURNING agent_profile_id`,
+      [input.leadId, endReason],
+    );
+    agentProfileId = ended.rows[0]?.agent_profile_id ?? agentProfileId;
+  }
+
+  await client.query('UPDATE listing_inquiries SET status = $2 WHERE id = $1', [
+    input.leadId,
+    input.to,
+  ]);
+  await client.query(
+    `INSERT INTO lead_status_events
+       (lead_id, from_status, to_status, actor_account_id, actor_role, note, agent_profile_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      input.leadId,
+      from,
+      input.to,
+      input.actorAccountId,
+      input.actorRole,
+      input.note ?? null,
+      agentProfileId,
+    ],
+  );
+
+  const event = outboxEventFor(from, input.to);
+  if (event !== null) {
+    await enqueueLeadNotifications(client, { leadId: input.leadId, event, agentProfileId });
+  }
+
+  return { ok: true, from, to: input.to };
+}
+
+/**
  * Moves a lead to a new status and appends the audit event in ONE transaction. The row lock
  * makes two concurrent changes run one after the other, so the second sees the first status.
  */
@@ -50,73 +117,9 @@ export async function changeLeadStatus(
   let releaseError: Error | undefined;
   try {
     await client.query('BEGIN');
-
-    const current = await client.query<{ status: unknown }>(
-      'SELECT status FROM listing_inquiries WHERE id = $1 FOR UPDATE',
-      [input.leadId],
-    );
-    const from = current.rows[0]?.status;
-    if (!isLeadStatus(from)) {
-      await client.query('ROLLBACK');
-      return { ok: false, reason: 'not_found' };
-    }
-    if (!canTransition(from, input.to)) {
-      await client.query('ROLLBACK');
-      return { ok: false, reason: 'invalid_transition', from };
-    }
-
-    if (input.precheck !== undefined) {
-      const rejection = await input.precheck(client, from);
-      if (rejection !== null) {
-        await client.query('ROLLBACK');
-        return { ok: false, reason: 'rejected', code: rejection };
-      }
-    }
-
-    // A return to `verified` or a final status ends the open assignment, so none outlives its lead.
-    let agentProfileId = input.agentProfileId ?? null;
-    const endReason =
-      input.to === 'verified'
-        ? (input.assignmentEndReason ?? 'returned')
-        : input.to === 'lost' || input.to === 'closed'
-          ? 'closed'
-          : null;
-    if (endReason !== null) {
-      const ended = await client.query<{ agent_profile_id: string }>(
-        `UPDATE lead_assignments SET ended_at = now(), end_reason = $2
-          WHERE lead_id = $1 AND ended_at IS NULL
-          RETURNING agent_profile_id`,
-        [input.leadId, endReason],
-      );
-      agentProfileId = ended.rows[0]?.agent_profile_id ?? agentProfileId;
-    }
-
-    await client.query('UPDATE listing_inquiries SET status = $2 WHERE id = $1', [
-      input.leadId,
-      input.to,
-    ]);
-    await client.query(
-      `INSERT INTO lead_status_events
-         (lead_id, from_status, to_status, actor_account_id, actor_role, note, agent_profile_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        input.leadId,
-        from,
-        input.to,
-        input.actorAccountId,
-        input.actorRole,
-        input.note ?? null,
-        agentProfileId,
-      ],
-    );
-
-    const event = outboxEventFor(from, input.to);
-    if (event !== null) {
-      await enqueueLeadNotifications(client, { leadId: input.leadId, event, agentProfileId });
-    }
-
-    await client.query('COMMIT');
-    return { ok: true, from, to: input.to };
+    const result = await changeLeadStatusInTransaction(client, input);
+    await client.query(result.ok ? 'COMMIT' : 'ROLLBACK');
+    return result;
   } catch (error) {
     // A failed ROLLBACK means a broken connection. Release it with the error so the pool drops it.
     releaseError = await client.query('ROLLBACK').then(

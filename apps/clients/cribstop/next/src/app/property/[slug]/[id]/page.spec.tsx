@@ -28,7 +28,10 @@ jest.mock('@/components/listing/PropertyPageView', () => ({
   PropertyHistory: () => null,
 }));
 
+jest.mock('react-dom', () => ({ ...jest.requireActual('react-dom'), preload: jest.fn() }));
+
 const mockedLoad = loadPropertyPage as jest.Mock;
+const mockedPreload = jest.requireMock('react-dom').preload as jest.Mock;
 const ID = '11111111-1111-4111-8111-111111111111';
 
 async function render(page: ReturnType<typeof aPropertyPage>) {
@@ -52,6 +55,17 @@ describe('PropertyRoute hard load', () => {
     expect(query.get('city')).toBe(hydrated.props.listing.city);
     expect(query.get('state')).toBe(hydrated.props.listing.state);
     expect(element.props.statusLabel).toBe('Active');
+  });
+
+  it('preloads the first photo as a high priority image (#890)', async () => {
+    const wrapper = await render(aPropertyPage());
+    const listing = wrapper.props.children[1].props.listing;
+
+    expect(listing.media.length).toBeGreaterThan(0);
+    expect(mockedPreload).toHaveBeenCalledWith(listing.media[0].url, {
+      as: 'image',
+      fetchPriority: 'high',
+    });
   });
 
   it('keeps the full page for an off-market property', async () => {

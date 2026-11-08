@@ -1,6 +1,8 @@
 import { cache } from 'react';
 import { headers } from 'next/headers';
 import {
+  type CityStats as CityMedians,
+  cityStatsSchema,
   type ListingsEnvelope,
   type ListingsMeta,
   type SearchRequest,
@@ -90,4 +92,34 @@ export function loadCityStats(
     sort: 'price-asc',
   };
   return compute(initialQueryFor(request));
+}
+
+/**
+ * City medians (#986), read from `GET /listings/city-stats` (#985). The service applies the
+ * display and suppression flags and returns `null` for a figure with too few inputs, so this
+ * module formats nothing and filters nothing. Only a `sale` or `rent` city page reads it.
+ *
+ * Returns `null` on any failure. The page then hides the table and shows no error.
+ */
+const computeMedians = cache(
+  async (city: string, state: string, type: 'sale' | 'rent'): Promise<CityMedians | null> => {
+    try {
+      const clientIp = clientIpOf(await headers());
+      const query = new URLSearchParams({ city, state, listingType: type }).toString();
+      const response = await proxyListingsRead('/city-stats', query, { cache: true, clientIp });
+      if (!response.ok) return null;
+      const parsed = cityStatsSchema.safeParse(await response.json().catch(() => null));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  },
+);
+
+export function loadCityMedians(
+  city: string,
+  state: string,
+  type: 'sale' | 'rent',
+): Promise<CityMedians | null> {
+  return computeMedians(city, state, type);
 }

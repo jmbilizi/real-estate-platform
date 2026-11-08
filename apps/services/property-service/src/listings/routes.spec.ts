@@ -185,8 +185,10 @@ describe('GET /listings/neighborhoods', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(query).toHaveBeenCalledTimes(1);
-    const calls = query.mock.calls as unknown as [string, unknown[]][];
+    const calls = (query.mock.calls as unknown as [string, unknown[]][]).filter(
+      ([text]) => !/^(BEGIN|SET LOCAL|COMMIT|ROLLBACK)/.test(text),
+    );
+    expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toContain('unnest(');
     expect(calls[0]?.[1]).toEqual(
       expect.arrayContaining([

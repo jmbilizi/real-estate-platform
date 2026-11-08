@@ -15,6 +15,13 @@ const PROPERTY_LISTING = '/property/listings';
 const PROPERTY_LOOKUP = '/property/properties/lookup';
 const PROPERTY_HOME = '/property/properties';
 
+/**
+ * How long Next keeps a property page response (#890). A cold gateway call took 2.4 s on the detail
+ * page. Next stores only a 200, so a 404 or a failure is never kept. A price or status change shows
+ * within this window.
+ */
+export const PROPERTY_PAGE_REVALIDATE_SECONDS = 60;
+
 const UNAVAILABLE = 'We could not load this property just now. Please try again.';
 
 export type PropertyPageState =
@@ -26,6 +33,7 @@ async function fetchPage(path: string): Promise<PropertyPageState> {
   const upstream = await fetchGateway(path, {
     method: 'GET',
     headers: { Accept: 'application/json' },
+    next: { revalidate: PROPERTY_PAGE_REVALIDATE_SECONDS },
   }).catch(() => null);
 
   if (!upstream) return { status: 'error', message: UNAVAILABLE };

@@ -6,7 +6,7 @@ jest.mock('@/app/api/_lib/listings-gateway', () => ({
 }));
 
 import { proxyListingsRead } from '@/app/api/_lib/listings-gateway';
-import { loadCityStats } from './city-stats';
+import { loadCityMedians, loadCityStats } from './city-stats';
 
 const reply = (body: unknown, ok = true) => ({ ok, json: async () => body });
 
@@ -83,5 +83,41 @@ describe('loadCityStats (#842)', () => {
   it('returns null when the feed fails', async () => {
     (proxyListingsRead as jest.Mock).mockResolvedValue(reply({}, false));
     await expect(loadCityStats('', place)).resolves.toBeNull();
+  });
+});
+
+describe('loadCityMedians (#986)', () => {
+  const body = {
+    listingCount: 42,
+    medianListPrice: { value: 525000, inputCount: 40 },
+    medianDaysOnMarket: { value: null, inputCount: 3 },
+    medianPricePerSqft: { value: 312, inputCount: 35 },
+    dataUpdatedAt: '2026-10-14T12:00:00.000Z',
+  };
+  afterEach(() => jest.clearAllMocks());
+
+  it('reads the endpoint with the city, state and type, and keeps a null figure', async () => {
+    (proxyListingsRead as jest.Mock).mockResolvedValue(reply(body));
+    await expect(loadCityMedians('Alexandria', 'VA', 'rent')).resolves.toEqual(body);
+    expect(proxyListingsRead).toHaveBeenCalledWith(
+      '/city-stats',
+      'city=Alexandria&state=VA&listingType=rent',
+      expect.objectContaining({ cache: true }),
+    );
+  });
+
+  it('returns null on a failed response', async () => {
+    (proxyListingsRead as jest.Mock).mockResolvedValue(reply({}, false));
+    await expect(loadCityMedians('Alexandria', 'VA', 'sale')).resolves.toBeNull();
+  });
+
+  it('returns null on a body that breaks the contract', async () => {
+    (proxyListingsRead as jest.Mock).mockResolvedValue(reply({ listingCount: 'many' }));
+    await expect(loadCityMedians('Alexandria', 'VA', 'sale')).resolves.toBeNull();
+  });
+
+  it('returns null when the call throws', async () => {
+    (proxyListingsRead as jest.Mock).mockRejectedValue(new Error('down'));
+    await expect(loadCityMedians('Alexandria', 'VA', 'sale')).resolves.toBeNull();
   });
 });

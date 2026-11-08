@@ -20,6 +20,7 @@ const item = (n: number, over: Partial<StaffLeadListItem> = {}): StaffLeadListIt
   verifiedAccount: false,
   listingId: '22222222-2222-4222-8222-222222222222',
   possibleDuplicate: false,
+  needsReassignment: false,
   ...over,
 });
 
@@ -27,7 +28,10 @@ beforeEach(() => fetchLeads.mockReset());
 
 it('shows a skeleton, then masked rows with badges', async () => {
   fetchLeads.mockResolvedValue({
-    results: [item(1, { possibleDuplicate: true }), item(2, { phoneMasked: null })],
+    results: [
+      item(1, { possibleDuplicate: true }),
+      item(2, { phoneMasked: null, needsReassignment: true }),
+    ],
     nextCursor: null,
   });
   render(<LeadsList />);
@@ -37,6 +41,7 @@ it('shows a skeleton, then masked rows with badges', async () => {
   expect(screen.getByText('***-***-0100')).toBeInTheDocument();
   expect(screen.getByText('No phone')).toBeInTheDocument();
   expect(screen.getAllByText('Possible duplicate')).toHaveLength(1);
+  expect(screen.getAllByText('Needs reassignment')).toHaveLength(1);
   expect(screen.getByRole('link', { name: /Buyer 1/ })).toHaveAttribute(
     'href',
     '/admin/leads/00000000-0000-4000-8000-000000000001',

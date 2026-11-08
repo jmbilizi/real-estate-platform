@@ -557,6 +557,15 @@ jobs:
           GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
         shell: bash
         run: |
+          # gh workflow run --ref takes a branch, so the dispatched run uses the branch's head
+          # at dispatch time. If a newer push moved the branch, that head is not the commit this
+          # run validated. The newer push's own run dispatches for it, so stop here.
+          HEAD_NOW=$(gh api "repos/${{ github.repository }}/git/ref/heads/${{ github.ref_name }}" --jq .object.sha)
+          if [ "$HEAD_NOW" != "${{ github.sha }}" ]; then
+            echo "⏭️  ${{ github.ref_name }} moved from ${{ github.sha }} to $HEAD_NOW. The newer push's run owns this dispatch."
+            exit 0
+          fi
+
           ENV="${{ needs.detect-affected.outputs.environment }}"
 
           echo "🚀 Images built successfully, triggering deployment to $ENV..."
