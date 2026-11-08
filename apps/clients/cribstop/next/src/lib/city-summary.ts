@@ -1,6 +1,6 @@
-import type { ListingSource } from '@cribstop/property-contracts';
+import type { CityStats as CityMedians, ListingSource } from '@cribstop/property-contracts';
 import { BRAND } from '@/lib/brand';
-import { formatDate, formatPrice } from '@/lib/format';
+import { formatDate, formatNumber, formatPrice } from '@/lib/format';
 
 /** Figures for a place page (#842). Every figure carries `asOf`. */
 export interface CityStats {
@@ -61,4 +61,49 @@ export function citySummary(label: string, segment: PathSegment, stats: CityStat
     ? 'Source: Bright MLS.'
     : `Source: listings published on ${BRAND.siteDomain}.`;
   return [first, median, source].filter(Boolean).join(' ');
+}
+
+/** The source name beside a figure. Bright MLS when the feed carries it. */
+export function statsSource(sources: readonly ListingSource[]): string {
+  return sources.includes('brightMLS') ? 'Bright MLS' : BRAND.siteDomain;
+}
+
+/** One row of the medians table (#986). `value` is `null` when the service had too few inputs. */
+export interface CityMedianRow {
+  readonly label: string;
+  readonly value: string | null;
+}
+
+/** Shown in place of a figure the service withheld. Never a number. */
+export const NOT_ENOUGH_DATA = 'Not enough data';
+
+/**
+ * The rows of the medians table: the count and three medians (#986). A `null` figure has no text,
+ * so the table never prints a number the service did not give. Labels name the measure only.
+ */
+export function cityMedianRows(medians: CityMedians, segment: PathSegment): CityMedianRow[] {
+  const rent = segment === 'homes-for-rent';
+  const kind = rent ? 'rent' : 'price';
+  const { medianListPrice, medianDaysOnMarket, medianPricePerSqft } = medians;
+  return [
+    { label: 'Active listings', value: formatNumber(medians.listingCount) },
+    {
+      label: `Median list ${kind}`,
+      value:
+        medianListPrice.value === null
+          ? null
+          : formatPrice(medianListPrice.value, rent ? 'rent' : 'sale'),
+    },
+    {
+      label: 'Median days on market',
+      value: medianDaysOnMarket.value === null ? null : formatNumber(medianDaysOnMarket.value),
+    },
+    {
+      label: `Median ${kind} per sq ft`,
+      value:
+        medianPricePerSqft.value === null
+          ? null
+          : formatPrice(medianPricePerSqft.value, rent ? 'rent' : 'sale'),
+    },
+  ];
 }

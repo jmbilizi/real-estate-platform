@@ -209,6 +209,7 @@ describe('searchPath / parseSearchPath (#350)', () => {
       { kind: 'county', county: "Prince George's", state: 'MD' },
       '/prince-george-s-county-md/homes-for-sale',
     ],
+    [{ kind: 'zip-only', zip: '22314' }, '/22314/homes-for-sale'],
     [null, '/homes-for-sale'],
   ];
 
@@ -230,6 +231,24 @@ describe('searchPath / parseSearchPath (#350)', () => {
       state: 'VA',
     });
   });
+
+  it('parses a bare ZIP path for sale and for rent (#973)', () => {
+    expect(parseSearchPath(['22314', 'homes-for-sale'])).toEqual({
+      place: { kind: 'zip-only', zip: '22314' },
+      segment: 'homes-for-sale',
+    });
+    expect(parseSearchPath(['02134', 'homes-for-rent'])?.place).toEqual({
+      kind: 'zip-only',
+      zip: '02134',
+    });
+  });
+
+  it.each([['2231'], ['223144'], ['22314-1234'], ['2231a'], ['abcde']])(
+    'refuses %s as a ZIP (#973)',
+    (zip) => {
+      expect(parseSearchPath([zip, 'homes-for-sale'])).toBeNull();
+    },
+  );
 
   it('refuses shapes that are not search paths', () => {
     expect(parseSearchPath(['alexandria-va', '118-baggett-place-alexandria-va'])).toBeNull();

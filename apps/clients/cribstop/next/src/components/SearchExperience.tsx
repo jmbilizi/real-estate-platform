@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import ListingCard from '@/components/ListingCard';
 import ListingsMap from '@/components/ListingsMap';
 import type { NeighborhoodBounds } from '@/components/ListingsMapInner';
@@ -67,6 +67,7 @@ import {
   type ViewType,
 } from '@/lib/neighborhood-url';
 import { trackEvent } from '@/lib/analytics';
+import { searchUrlKind } from '@/lib/seo-config';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
 
 export interface SearchExperienceProps {
@@ -166,6 +167,10 @@ export default function SearchExperience({
     setSearchListingType,
   } = useApp();
   const router = useRouter();
+  const pathname = usePathname();
+  // The pager hrefs read the URL after mount. The first render matches the server markup.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
 
   /**
    * Follows the Back and Forward buttons, but only while this instance owns the URL.
@@ -670,6 +675,24 @@ export default function SearchExperience({
     else params.set('page', String(next));
     writeUrl(params);
   };
+
+  /**
+   * The URL of a results page, as a crawlable link (#847). Only the clean path offers links. A
+   * filtered result set keeps buttons, so a crawler does not walk a page chain for every filter
+   * combination.
+   */
+  const pageBase = new URLSearchParams(hydrated ? window.location.search : initialQuery);
+  new URLSearchParams(place?.query).forEach((value, key) => pageBase.set(key, value));
+  pageBase.delete('page');
+  const pageHref =
+    pathname && searchUrlKind(pageBase).kind === 'clean'
+      ? (target: number) => {
+          const params = new URLSearchParams(pageBase);
+          if (target > 1) params.set('page', String(target));
+          const qs = params.toString();
+          return `${pathname}${qs ? `?${qs}` : ''}`;
+        }
+      : undefined;
 
   /**
    * Commits a filter set: state, URL and paging together.
@@ -1256,7 +1279,12 @@ export default function SearchExperience({
                       onActive={activateFromCard}
                     />
                   )}
-                  <ResultsPager page={page} pageCount={reachableGroupPages} onPage={pushPage} />
+                  <ResultsPager
+                    page={page}
+                    pageCount={reachableGroupPages}
+                    onPage={pushPage}
+                    hrefFor={pageHref}
+                  />
                   {groupPageCount > reachableGroupPages && (
                     <p className="mt-4 text-center text-xs text-ink-muted" role="status">
                       Showing the first {(reachableGroupPages * GROUP_PAGE_SIZE).toLocaleString()}{' '}
@@ -1316,7 +1344,12 @@ export default function SearchExperience({
                     </div>
                   ))}
                 </div>
-                <ResultsPager page={page} pageCount={reachablePageCount} onPage={pushPage} />
+                <ResultsPager
+                  page={page}
+                  pageCount={reachablePageCount}
+                  onPage={pushPage}
+                  hrefFor={pageHref}
+                />
                 {isPagerCapped && (
                   <p className="mt-4 text-center text-xs text-ink-muted" role="status">
                     Showing the first {reachableResultCount.toLocaleString()} of{' '}

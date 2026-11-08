@@ -683,7 +683,7 @@ pnpm exec nx run property-service:migrate
 PROPERTY_SERVICE_E2E_FIXTURES=1 pnpm exec nx e2e property-service
 ```
 
-Expected result: **25 suites, 319 tests, all passing.** The count grows with the suite. The run
+Expected result: **34 suites, 415 tests, all passing.** The count grows with the suite. The run
 needs no other env: `tests/support/e2e-serve-defaults.js` points every account-service URL at the
 introspection stub. `src/e2e-serve-defaults.spec.ts` fails if the app reads an
 `ACCOUNT_SERVICE_*_URL` variable that the defaults omit. Remove the container when done. The
@@ -959,6 +959,8 @@ home exists. It runs inside `buildSearchQuery`, on every query, with no flag and
   a default search.
 - Only live statuses count. An off-market record never wins and never counts. A hidden record still
   opens at `/listings/:id`. The detail response lists the other live records in `alsoListedAs`.
-- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first.
+- Every transaction that reads `collapseCondition` runs `DISABLE_JIT_SQL` first. `getNeighborhoods`
+  and `getListingsMeta` do it through `readWithoutJit`. `tests/listings-read-jit.e2e.spec.ts` fails
+  when a read compiles with JIT (#1003).
 - `listings.source_listing_id` holds the MLS number (`ListingId`). A value equal to the feed key is
   an older row and reads as unknown until the sync writes the row again.
