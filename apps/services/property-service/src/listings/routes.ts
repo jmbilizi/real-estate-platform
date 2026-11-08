@@ -1,5 +1,7 @@
 import { type NextFunction, type Request, type Response, Router } from 'express';
 import {
+  type CityStatsRequest,
+  cityStatsRequestSchema,
   type ErrorBody,
   exceedsResultWindow,
   idSchema,
@@ -28,6 +30,7 @@ import {
 import { PRIVATE_CACHE_CONTROL, type SavedStateReader, withSavedFlags } from '../saved/identity';
 import { withReadTimeout } from '../home-feed/candidates';
 import type { GalleryLoader } from './gallery-loader';
+import { getCityStats } from './city-stats';
 import { getBrokerGroups, getZipGroups } from './group-counts';
 import { findMapPins } from './map-query';
 import { resolvedSearchRequest } from './on-demand';
@@ -117,12 +120,17 @@ function parseQuery(
   query: unknown,
 ): ParseResult<ListingGroupsRequest>;
 function parseQuery(
+  schema: typeof cityStatsRequestSchema,
+  query: unknown,
+): ParseResult<CityStatsRequest>;
+function parseQuery(
   schema: typeof listingsByIdsRequestSchema,
   query: unknown,
 ): ParseResult<ListingsByIdsRequest>;
 function parseQuery(
   schema:
     | typeof searchRequestSchema
+    | typeof cityStatsRequestSchema
     | typeof mapRequestSchema
     | typeof neighborhoodsRequestSchema
     | typeof listingGroupsRequestSchema
@@ -134,8 +142,9 @@ function parseQuery(
   | MapRequest
   | NeighborhoodsRequest
   | ListingGroupsRequest
-  | ListingsByIdsRequest
   | SuggestRequest
+  | CityStatsRequest
+  | ListingsByIdsRequest
 > {
   const parsed = schema.safeParse(query);
   if (parsed.success) {
@@ -384,6 +393,24 @@ export function createListingsRouter(
     asyncRoute(async (_req: Request, res: Response) => {
       const meta = await shared('meta', () => getListingsMeta(pool));
       res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(meta);
+    }),
+  );
+
+  // #985. Registered before `/listings/:id` for the same reason as `/listings/meta`.
+  router.get(
+    '/listings/city-stats',
+    asyncRoute(async (req: Request, res: Response) => {
+      const parsed = parseQuery(cityStatsRequestSchema, req.query);
+      if (!parsed.ok) {
+        res.status(400).json(parsed.body);
+        return;
+      }
+      const request = parsed.value;
+      const stats = await shared(
+        `city-stats:${JSON.stringify({ ...request, city: request.city.trim().toLowerCase() })}`,
+        () => getCityStats(pool, request),
+      );
+      res.set('Cache-Control', META_CACHE_CONTROL).status(200).json(stats);
     }),
   );
 

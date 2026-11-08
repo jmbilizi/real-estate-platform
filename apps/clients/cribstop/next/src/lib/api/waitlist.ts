@@ -1,5 +1,9 @@
 /** Early-access interest kinds. Same vocabulary as account-service `WaitlistInterestKinds`. */
-export type WaitlistInterest = 'services-consumer' | 'services-provider' | 'connect';
+export type WaitlistInterest =
+  | 'services-consumer'
+  | 'services-provider'
+  | 'connect'
+  | 'list-property';
 
 export class WaitlistAuthError extends Error {
   constructor() {

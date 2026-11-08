@@ -1005,6 +1005,7 @@ describe('GET /openapi.json', () => {
       '/listings/batch',
       '/listings/brokers',
       '/listings/by-ids',
+      '/listings/city-stats',
       '/listings/map',
       '/listings/meta',
       '/listings/neighborhoods',

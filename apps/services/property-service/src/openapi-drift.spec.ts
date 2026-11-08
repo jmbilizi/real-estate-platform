@@ -10,7 +10,7 @@ import type { ReadPool } from './listings/repository';
  */
 
 /** Routes that are not part of the Property API contract. */
-const UNDOCUMENTED = [/^\/health(\/|$)/, /^\/openapi\.json$/, /^\/admin\//];
+const UNDOCUMENTED = [/^\/health(\/|$)/, /^\/openapi\.json$/, /^\/admin\//, /^\/internal\//];
 
 interface Layer {
   route?: { path: string; methods: Record<string, boolean> };

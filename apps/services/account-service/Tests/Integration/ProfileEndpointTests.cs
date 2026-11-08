@@ -5,7 +5,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using AccountService.Data;
+using AccountService.Models;
 using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 #pragma warning disable CA2234 // Pass Uri objects instead of strings
@@ -109,6 +114,46 @@ namespace AccountService.Tests.Integration
 
             var response = await client.DeleteAsync("/account/profile");
             response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        [Fact]
+        public async Task DeleteProfile_QueuesThePropertyDataErasure()
+        {
+            var email = $"delete-erasure-{Guid.NewGuid()}@example.com";
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(factory, email, Password);
+
+            (await client.DeleteAsync("/account/profile")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+            using var scope = factory.Services.CreateScope();
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var db = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
+            var user = await users.FindByEmailAsync(email);
+            (await db.PendingPropertyErasures.AnyAsync(e => e.AccountId == user!.Id)).Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task DeleteProfile_RemovesTheRecentlyViewedRows()
+        {
+            var email = $"delete-viewed-{Guid.NewGuid()}@example.com";
+            var client = await AuthHelper.CreateAuthenticatedClientAsync(factory, email, Password);
+            (await client.PostAsJsonAsync("/account/recently-viewed", new { listingId = "DEL-1" })).EnsureSuccessStatusCode();
+            (await client.PostAsJsonAsync("/account/recently-viewed", new { listingId = "DEL-2" })).EnsureSuccessStatusCode();
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                var db = scope.ServiceProvider.GetRequiredService<AccountDbContext>();
+                var user = await users.FindByEmailAsync(email);
+                (await db.RecentlyViewedListings.CountAsync(r => r.UserId == user!.Id)).Should().Be(2);
+            }
+
+            (await client.DeleteAsync("/account/profile")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+            using var after = factory.Services.CreateScope();
+            var afterUsers = after.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var afterDb = after.ServiceProvider.GetRequiredService<AccountDbContext>();
+            var deleted = await afterUsers.FindByEmailAsync(email);
+            (await afterDb.RecentlyViewedListings.AnyAsync(r => r.UserId == deleted!.Id)).Should().BeFalse();
         }
 
         [Fact]

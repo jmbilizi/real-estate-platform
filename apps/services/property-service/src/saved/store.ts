@@ -77,3 +77,12 @@ export async function listSavedHomeRows(
   );
   return result.rows;
 }
+
+/** Account deletion (#803). Idempotent: an account with no saves changes nothing. */
+export async function eraseAccountSavedHomes(db: ReadClient, accountId: string): Promise<number> {
+  const result = await db.query<{ id: string }>(
+    'DELETE FROM saved_homes WHERE account_id = $1 RETURNING id',
+    [accountId],
+  );
+  return result.rows.length;
+}

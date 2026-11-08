@@ -32,6 +32,8 @@ async function suggest(params: Record<string, unknown>) {
 beforeAll(async () => {
   const seeded = await seedHomes(pool, HOMES);
   await takeDown(pool, seeded['4 Zeb Rd']?.ids[0] as string);
+  // An index-only scan needs a current visibility map. Run outside any transaction.
+  await pool.query('VACUUM (ANALYZE) listings');
 });
 
 afterAll(async () => {
