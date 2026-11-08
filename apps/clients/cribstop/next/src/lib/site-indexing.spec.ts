@@ -12,7 +12,13 @@ import {
   robotsFor,
   SITEMAP_CHUNK_SIZE,
 } from './site-indexing';
-import { allEntries, sitemapChunk, sitemapChunkIds, sitemapIndexXml } from './sitemap-entries';
+import {
+  allEntries,
+  placeEntries,
+  sitemapChunk,
+  sitemapChunkIds,
+  sitemapIndexXml,
+} from './sitemap-entries';
 
 function card(over: Partial<ListingCardRow> = {}): ListingCardRow {
   return {
@@ -150,5 +156,48 @@ describe('sitemap entries', () => {
     expect(sitemapChunk(PRODUCTION_ORIGIN, listings, 0)).toHaveLength(50_000);
     expect(sitemapChunk(PRODUCTION_ORIGIN, listings, 1).length).toBeGreaterThan(0);
     expect(sitemapIndexXml(PRODUCTION_ORIGIN, 2)).toContain(`${PRODUCTION_ORIGIN}/sitemap/1.xml`);
+  });
+});
+
+describe('place entries (#845)', () => {
+  const place = (over: Record<string, unknown> = {}) => ({
+    city: 'Reston',
+    state: 'VA',
+    segment: 'homes-for-sale' as const,
+    activeCount: 12,
+    lastUpdated: '2026-10-01T08:00:00.000Z',
+    ...over,
+  });
+
+  it('lists a city at or above the threshold with the newest listing update as lastmod', () => {
+    expect(placeEntries(PRODUCTION_ORIGIN, [place()], 10)).toEqual([
+      {
+        url: `${PRODUCTION_ORIGIN}/reston-va/homes-for-sale`,
+        lastModified: new Date('2026-10-01T08:00:00.000Z'),
+      },
+    ]);
+    expect(placeEntries(PRODUCTION_ORIGIN, [place({ activeCount: 10 })], 10)).toHaveLength(1);
+  });
+
+  it('drops a city below the threshold, which its page marks noindex', () => {
+    expect(placeEntries(PRODUCTION_ORIGIN, [place({ activeCount: 9 })], 10)).toEqual([]);
+  });
+
+  it('uses the rent path for a rent place', () => {
+    const [entry] = placeEntries(PRODUCTION_ORIGIN, [place({ segment: 'homes-for-rent' })], 1);
+    expect(entry?.url).toBe(`${PRODUCTION_ORIGIN}/reston-va/homes-for-rent`);
+  });
+
+  it('puts city pages between the static pages and the listings', () => {
+    const entries = allEntries(PRODUCTION_ORIGIN, [card()], [place()]);
+    expect(entries[0]).toEqual({ url: PRODUCTION_ORIGIN });
+    expect(entries.map((entry) => entry.url)).toContain(
+      `${PRODUCTION_ORIGIN}/reston-va/homes-for-sale`,
+    );
+    expect(entries.at(-1)?.url).toContain('/property/');
+  });
+
+  it('adds no city page off the production origin', () => {
+    expect(allEntries('https://dev.cribstop.com', [], [place()])).toEqual([]);
   });
 });

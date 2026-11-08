@@ -49,9 +49,14 @@ export type PlaceResolution =
        * make the tile link work without one.
        */
       readonly suggestion?: SearchSuggestionValue;
+      /** The city a bare ZIP or neighborhood path maps to (#973, #974). Absent for other places. */
+      readonly area?: { readonly city: string; readonly state: string };
     }
   | { readonly status: 'not-found' }
   | { readonly status: 'error' };
+
+/** A place that names its city and state in the path. A bare ZIP path does not. */
+type NamedPlace = Exclude<SearchPlace, { kind: 'zip-only' }>;
 
 const NEIGHBORHOOD_TYPES = ['suburb', 'neighbourhood', 'quarter'];
 
@@ -101,7 +106,7 @@ export const gatewaySuggestLookup: SuggestLookup = async (q) => {
  * geocoder. It never means "not found": a place with no listing may still exist.
  */
 async function resolveFromOurData(
-  place: SearchPlace,
+  place: NamedPlace,
   lookupSuggest: SuggestLookup,
 ): Promise<PlaceResolution | undefined> {
   if (place.kind === 'zip') {
@@ -173,17 +178,48 @@ export async function resolvePlace(
   const kept = resolved.get(key);
   if (kept && kept.expiresAt > Date.now()) return kept.value;
 
+  if (place.kind === 'zip-only') {
+    const zipResult = await resolveZipOnly(place.zip, lookupSuggest);
+    if (zipResult.status === 'found') keep(key, zipResult);
+    return zipResult;
+  }
   const ours = await resolveFromOurData(place, lookupSuggest);
   const result = ours ?? (await resolveWithGeocoder(place, geocode, lookupNeighborhoods));
-  if (result.status === 'found') {
-    if (resolved.size >= RESOLVED_MAX) resolved.delete(resolved.keys().next().value as string);
-    resolved.set(key, { value: result, expiresAt: Date.now() + RESOLVED_TTL_MS });
-  }
+  if (result.status === 'found') keep(key, result);
   return result;
 }
 
+function keep(key: string, value: PlaceResolution): void {
+  if (resolved.size >= RESOLVED_MAX) resolved.delete(resolved.keys().next().value as string);
+  resolved.set(key, { value, expiresAt: Date.now() + RESOLVED_TTL_MS });
+}
+
+/**
+ * A bare ZIP path (#973) resolves from our own listing data only. The path has no state, so the
+ * geocoder cannot check it. A ZIP with no suggestion has no listing and is "not found". A failed
+ * lookup is an error, never "not found".
+ *
+ * `area` is the one city the feed maps the ZIP to. It is absent when the feed maps the ZIP to more
+ * than one city, because the breadcrumb and the nearby links then have no single parent.
+ */
+async function resolveZipOnly(zip: string, lookupSuggest: SuggestLookup): Promise<PlaceResolution> {
+  const suggestions = await lookupSuggest(zip);
+  if (suggestions === null) return { status: 'error' };
+  const hits = suggestions.filter((s) => s.kind === 'zip' && s.zip === zip);
+  const first = hits[0];
+  if (!first) return { status: 'not-found' };
+  const cities = new Set(hits.map((s) => `${s.state}|${slugify(s.city)}`));
+  if (cities.size > 1) return { status: 'found', filters: { zip }, label: `ZIP code ${zip}` };
+  return {
+    status: 'found',
+    filters: { zip },
+    label: placeLabel({ kind: 'zip', zip, city: first.city, state: first.state }),
+    area: { city: first.city, state: first.state },
+  };
+}
+
 async function resolveWithGeocoder(
-  place: SearchPlace,
+  place: NamedPlace,
   geocode: Geocoder,
   lookupNeighborhoods: NeighborhoodsLookup,
 ): Promise<PlaceResolution> {
@@ -314,7 +350,9 @@ async function resolveWithGeocoder(
       (sameSlug(r.name, match.name) ||
         NEIGHBORHOOD_TYPES.some((key) => sameSlug(r.address?.[key], match.name))),
   );
+  // `area` is the neighborhood's own city, from our own data (#974).
+  const area = { city: match.city, state };
   return hit
-    ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label) }
-    : { status: 'found', filters, label };
+    ? { status: 'found', filters, label, suggestion: suggestionOf(hit, label), area }
+    : { status: 'found', filters, label, area };
 }
