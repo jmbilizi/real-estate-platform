@@ -75,6 +75,7 @@ export function scopeOf(
     citySegment(city, state) === citySegment(target.city, target.state);
   if (place) {
     if (place.kind === 'county') return bareScope(place);
+    if (place.kind === 'zip-only') return SCOPE_NONE;
     return sameCity(place.city, place.state) ? '' : SCOPE_NONE;
   }
   if (filters.city && filters.state && sameCity(filters.city, filters.state)) return '';

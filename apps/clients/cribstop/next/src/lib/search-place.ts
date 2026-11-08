@@ -199,6 +199,8 @@ export function placeLabel(place: SearchPlace): string {
       return `${place.city}, ${place.state} ${place.zip}`;
     case 'county':
       return `${countyBaseName(place.county)} County, ${place.state}`;
+    case 'zip-only':
+      return `ZIP code ${place.zip}`;
     default:
       return `${place.name}, ${place.zip ?? `${place.city}, ${place.state}`}`;
   }

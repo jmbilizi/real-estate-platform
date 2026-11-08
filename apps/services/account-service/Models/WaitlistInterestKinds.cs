@@ -25,12 +25,16 @@ internal static class WaitlistInterestKinds
     /// <summary>The account wants access to the Connect community when it opens.</summary>
     public const string Connect = "connect";
 
+    /// <summary>The account wants to list a property when listing tools open.</summary>
+    public const string ListProperty = "list-property";
+
     /// <summary>Gets the complete fixed vocabulary of valid interest kinds.</summary>
     public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         ServicesConsumer,
         ServicesProvider,
         Connect,
+        ListProperty,
     };
 
     /// <summary>

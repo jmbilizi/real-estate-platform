@@ -232,7 +232,8 @@ describe('SearchExperience never offers a page the API will refuse', () => {
 
   const pageButtonLabels = () =>
     screen
-      .getAllByRole('button')
+      .getAllByRole('navigation', { name: 'Pagination' })
+      .flatMap((nav) => [...nav.querySelectorAll('a, button')])
       .filter((button) => !button.getAttribute('aria-label')?.startsWith('Open filters'))
       .map((button) => button.textContent?.trim())
       .filter((label) => label !== undefined && /^\d+$/.test(label));
