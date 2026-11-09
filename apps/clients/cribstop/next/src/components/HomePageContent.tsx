@@ -7,10 +7,12 @@ import type {
 } from '@cribstop/property-contracts';
 import { useApp } from '@/lib/context';
 import { listRecentSavedHomes } from '@/lib/api/saved-homes';
+import { getRecentlyViewedIds } from '@/lib/api/recently-viewed';
+import { getListingsByIds } from '@/lib/api/listings';
 import ListingRow from '@/components/ListingRow';
 import NeighborhoodRow, { type Neighborhood } from '@/components/NeighborhoodRow';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { searchKeys } from '@/lib/query/keys';
+import { recentlyViewedKeys, searchKeys } from '@/lib/query/keys';
 import {
   listingsMetaOptions,
   neighborhoodsOptions,
@@ -694,6 +696,37 @@ function SavedLikeRow({
 }
 
 /**
+ * "Recently viewed" (#366): the cards of the listings the signed-in visitor opened, newest first.
+ * One id read and one by-ids lookup. A listing that no longer resolves is absent from the lookup,
+ * so it never shows broken. The row hides while empty or after a failure.
+ */
+function RecentlyViewedRow({ account }: { account: string }) {
+  const { data, isPending } = useQuery({
+    queryKey: recentlyViewedKeys.row(account),
+    queryFn: async ({ signal }) => {
+      const ids = await getRecentlyViewedIds(signal);
+      return ids.length === 0 ? [] : getListingsByIds(ids, signal);
+    },
+    // A visit to a listing changes the list, so a return to the home page reads it again.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    retry: false,
+  });
+  if (!isPending && (data === undefined || data.length === 0)) return null;
+
+  return (
+    <ListingRow
+      title="Recently viewed"
+      listings={data ?? []}
+      loading={isPending}
+      max={ROW_MAX}
+      rowId="recently-viewed"
+      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+    />
+  );
+}
+
+/**
  * Per-side "coming soon" copy (#416, #418): a short, concrete call to action — the good feeling
  * of being first, without claiming exclusivity the product doesn't have. "Be the first to see"
  * means "before the general market listing", never "before other visitors": Coming Soon listings
@@ -1037,6 +1070,10 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
     />
   ) : null;
 
+  const recentlyViewed = user ? (
+    <RecentlyViewedRow key="recently-viewed" account={user.email} />
+  ) : null;
+
   const nearYouSale = (
     <NearYouRow key="near-you-sale" side="sale" region={region} regionLoading={regionLoading} />
   );
@@ -1067,6 +1104,7 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
     ? [
         nearYouRent,
         nearYouSale,
+        recentlyViewed,
         savedLike,
         justListedSale,
         justListedRent,
@@ -1077,6 +1115,7 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
     : [
         nearYouSale,
         nearYouRent,
+        recentlyViewed,
         savedLike,
         justListedSale,
         comingSoonSale,
@@ -1091,6 +1130,7 @@ export default function HomePageContent({ homeFeed }: { homeFeed?: HomeFeedFlags
     feedState.status === 'ready' ? (
       <>
         <FeedRows feed={feedState.feed} />
+        {recentlyViewed}
         {savedLike}
       </>
     ) : feedState.status === 'pending' ? (

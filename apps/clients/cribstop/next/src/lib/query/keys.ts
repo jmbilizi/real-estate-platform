@@ -32,6 +32,11 @@ export const searchKeys = {
   homeBatch: (request: string) => [...searchKeys.all, 'home-batch', request] as const,
 };
 
+/** The signed-in "Recently viewed" row (#366). Keyed on the account so no row shows another's list. */
+export const recentlyViewedKeys = {
+  row: (account: string) => ['recently-viewed', account] as const,
+};
+
 /** Homes near one listing. Separate from `listingKeys` so parallel tickets do not collide. */
 export const nearbyKeys = {
   forListing: (id: string) => [...listingKeys.all, 'nearby', id] as const,
