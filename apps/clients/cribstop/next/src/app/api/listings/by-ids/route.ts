@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { clientIpOf, proxyListingsRead } from '@/app/api/_lib/listings-gateway';
+import { clientIpOf, proxyListingsQuery } from '@/app/api/_lib/listings-gateway';
 import { buildListingsQuery, FORWARDABLE_BY_IDS_PARAMS } from '@/app/api/_lib/listings-query';
 
 /**
@@ -7,9 +7,9 @@ import { buildListingsQuery, FORWARDABLE_BY_IDS_PARAMS } from '@/app/api/_lib/li
  * id set is one visitor's saved list, so the shared read cache does not hold the answer.
  */
 export async function GET(req: NextRequest) {
-  return proxyListingsRead(
+  return proxyListingsQuery(
     '/by-ids',
-    buildListingsQuery(req.nextUrl.searchParams, FORWARDABLE_BY_IDS_PARAMS),
+    () => buildListingsQuery(req.nextUrl.searchParams, FORWARDABLE_BY_IDS_PARAMS),
     { clientIp: clientIpOf(req.headers) },
   );
 }

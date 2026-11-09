@@ -20,15 +20,23 @@ describe('GET /api/listings/by-ids (#76)', () => {
   beforeEach(() => clearListingsReadCache());
   afterEach(() => fetchGateway.mockReset());
 
-  it('relays only the ids parameter to the gateway and drops any other', async () => {
+  it('relays the ids parameter to the gateway', async () => {
     fetchGateway.mockResolvedValue(upstream({ results: [] }));
 
-    const res = await GET(
-      new NextRequest(`http://localhost/api/listings/by-ids?ids=${ID}&fields=id`),
-    );
+    const res = await GET(new NextRequest(`http://localhost/api/listings/by-ids?ids=${ID}`));
 
     expect(res.status).toBe(200);
     const [path] = fetchGateway.mock.calls[0] as [string];
     expect(path).toBe(`/property/listings/by-ids?ids=${ID}`);
+  });
+
+  it('answers 400 to an unknown parameter and does not call the gateway (#221)', async () => {
+    const res = await GET(
+      new NextRequest(`http://localhost/api/listings/by-ids?ids=${ID}&fields=id`),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: 'invalid_request' } });
+    expect(fetchGateway).not.toHaveBeenCalled();
   });
 });
