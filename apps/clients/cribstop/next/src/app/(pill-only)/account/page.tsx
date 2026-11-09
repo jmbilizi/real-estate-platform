@@ -194,10 +194,6 @@ function ProfileSection() {
   const [emailWasOn, setEmailWasOn] = useState(user?.emailNotificationsEnabled ?? false);
   const turningEmailOn = editing && emailNotifications && !emailWasOn;
   const { wording, failed: wordingFailed } = useConsentWording(turningEmailOn);
-  const [pushNotifications, setPushNotifications] = useState(
-    user?.pushNotificationsEnabled ?? true,
-  );
-  const [smsNotifications, setSmsNotifications] = useState(user?.smsNotificationsEnabled ?? false);
   const [marketingOptIn, setMarketingOptIn] = useState(user?.marketingOptIn ?? false);
 
   // Fill the form from the server profile. `profileStamp` changes on each new fetch.
@@ -211,8 +207,6 @@ function ProfileSection() {
     setDateOfBirth(profile.dateOfBirth || '');
     setEmailNotifications(profile.emailNotificationsEnabled ?? false);
     setEmailWasOn(profile.emailNotificationsEnabled ?? false);
-    setPushNotifications(profile.pushNotificationsEnabled ?? true);
-    setSmsNotifications(profile.smsNotificationsEnabled ?? false);
     setMarketingOptIn(profile.marketingOptIn ?? false);
   }, [editing, profileStamp]);
 
@@ -252,8 +246,6 @@ function ProfileSection() {
           bio: bio.trim() || undefined,
           dateOfBirth: dateOfBirth || undefined,
           emailNotificationsEnabled: emailNotifications ? undefined : false,
-          smsNotificationsEnabled: smsNotifications,
-          pushNotificationsEnabled: pushNotifications,
           marketingOptIn,
         },
       });
@@ -298,8 +290,6 @@ function ProfileSection() {
     setDateOfBirth(user?.dateOfBirth || '');
     setEmailNotifications(user?.emailNotificationsEnabled ?? false);
     setEmailWasOn(user?.emailNotificationsEnabled ?? false);
-    setPushNotifications(user?.pushNotificationsEnabled ?? true);
-    setSmsNotifications(user?.smsNotificationsEnabled ?? false);
     setMarketingOptIn(user?.marketingOptIn ?? false);
   };
 
@@ -381,26 +371,14 @@ function ProfileSection() {
           <div className="space-y-3">
             <ToggleField
               label="Email notifications"
-              description="Email with new listings, price drops and saved search alerts. Turn this off here at any time."
+              description="Email alerts are not live yet. Your choice is saved for when they launch. Turn this off here at any time."
               checked={emailNotifications}
               onChange={setEmailNotifications}
               disabled={!editing}
             />
             {turningEmailOn && <EmailConsentNotice wording={wording} failed={wordingFailed} />}
-            <ToggleField
-              label="Push notifications"
-              description="Real-time alerts on your device"
-              checked={pushNotifications}
-              onChange={setPushNotifications}
-              disabled={!editing}
-            />
-            <ToggleField
-              label="SMS notifications"
-              description="Text messages for urgent updates"
-              checked={smsNotifications}
-              onChange={setSmsNotifications}
-              disabled={!editing}
-            />
+            <ComingSoonToggle label="Push notifications" />
+            <ComingSoonToggle label="SMS notifications" />
             <ToggleField
               label="Marketing emails"
               description="Tips, market reports, and promotions"
@@ -506,6 +484,28 @@ function ToggleField({
   );
 }
 
+/** A switch with no state and no handler. It promises nothing until delivery exists (#123). */
+function ComingSoonToggle({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-ink">{label}</p>
+        <p className="text-xs text-ink-muted">Coming soon</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={false}
+        aria-label={`${label}, coming soon`}
+        disabled
+        className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-not-allowed rounded-full border-2 border-transparent bg-gray-200 opacity-50"
+      >
+        <span className="pointer-events-none inline-block h-5 w-5 translate-x-0 rounded-full bg-white shadow ring-0" />
+      </button>
+    </div>
+  );
+}
+
 const ACCOUNT_SECTIONS = [
   {
     title: 'Profile',
@@ -587,49 +587,6 @@ const ACCOUNT_SECTIONS = [
               strokeLinecap="round"
               strokeLinejoin="round"
               d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    title: 'Notifications',
-    items: [
-      {
-        label: 'Alert preferences',
-        description: 'Price drops, new listings, open houses',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-            />
-          </svg>
-        ),
-      },
-      {
-        label: 'Email & push settings',
-        description: 'Control how we reach you',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
             />
           </svg>
         ),
