@@ -5,7 +5,13 @@
  * default `jsdom` environment does not provide. Node 20 has them built in, so this file alone runs
  * under the `node` environment rather than adding a polyfill every other spec would also load.
  */
-import { clearListingsReadCache, clientIpOf, proxyListingsRead } from './listings-gateway';
+import {
+  clearListingsReadCache,
+  clientIpOf,
+  proxyListingsQuery,
+  proxyListingsRead,
+} from './listings-gateway';
+import { buildListingsQuery } from './listings-query';
 import { READ_CACHE_MAX_BODY_CHARS, READ_CACHE_MAX_ENTRIES } from './read-cache';
 
 /**
@@ -405,5 +411,34 @@ describe('clientIpOf (#755)', () => {
 
   it('returns null without the header', () => {
     expect(clientIpOf(new Headers())).toBeNull();
+  });
+});
+
+describe('proxyListingsQuery (#221)', () => {
+  afterEach(() => {
+    fetchGateway.mockReset();
+  });
+
+  it('answers 400 in the Property API invalid_request shape and skips the upstream call', async () => {
+    const response = await proxyListingsQuery('', () =>
+      buildListingsQuery(new URLSearchParams({ bed: '3' })),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: 'invalid_request', message: 'Unknown query parameter: bed.' },
+    });
+    expect(fetchGateway).not.toHaveBeenCalled();
+  });
+
+  it('forwards a known parameter', async () => {
+    fetchGateway.mockResolvedValue(mockUpstream(200, { total: 1 }));
+
+    const response = await proxyListingsQuery('', () =>
+      buildListingsQuery(new URLSearchParams({ beds: '3' })),
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchGateway.mock.calls[0]?.[0]).toContain('beds=3');
   });
 });

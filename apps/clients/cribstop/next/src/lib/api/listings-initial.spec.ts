@@ -66,10 +66,9 @@ describe('the query round trip (#841)', () => {
     }
   });
 
-  it('drops a parameter that is not in the contract', () => {
-    const sent = new URLSearchParams(
-      initialQueryFor({ city: 'Alexandria', occupants: 4 } as never),
+  it('rejects a parameter that is not in the contract (#221)', () => {
+    expect(() => initialQueryFor({ city: 'Alexandria', occupants: 4 } as never)).toThrow(
+      'Unknown query parameter: occupants.',
     );
-    expect(sent.has('occupants')).toBe(false);
   });
 });

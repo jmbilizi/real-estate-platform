@@ -7,6 +7,7 @@ import {
   READ_CACHE_MAX_BODY_CHARS,
 } from '@/app/api/_lib/read-cache';
 import { isGatewayErrorBody } from '@cribstop/gateway-contracts';
+import { UnknownListingParamsError } from '@/app/api/_lib/listings-query';
 import { errorBodySchema } from '@cribstop/property-contracts';
 
 /**
@@ -285,4 +286,25 @@ export async function proxyListingsRead(
     };
   });
   return toResponse(read);
+}
+
+/**
+ * `proxyListingsRead` for a query built from the request (#221). An unknown parameter answers 400
+ * with the Property API's own `invalid_request` shape, so the client has one error path.
+ */
+export async function proxyListingsQuery(
+  path: string,
+  buildQuery: () => string,
+  options: ProxyListingsOptions = {},
+): Promise<NextResponse> {
+  let query: string;
+  try {
+    query = buildQuery();
+  } catch (error) {
+    if (error instanceof UnknownListingParamsError) {
+      return NextResponse.json(errorBody('invalid_request', error.message), { status: 400 });
+    }
+    throw error;
+  }
+  return proxyListingsRead(path, query, options);
 }
