@@ -363,6 +363,8 @@ export interface ListingDetailView {
   listedAt: string | null;
   comingSoonDate: string | null;
   listedAtPrecise: string | null;
+  /** #983. IANA zone, present only where the property lies outside the zone of its state. */
+  timeZone?: string;
   description: string | null;
   /** #600. `caption` is already resolved: long description, else a real short description. */
   media: DetailMedia[];
@@ -467,6 +469,7 @@ export function toListingDetailView(detail: ListingDetail): ListingDetailView {
     listedAt: listing.listedAt,
     comingSoonDate: listing.comingSoonDate,
     listedAtPrecise: listing.listedAtPrecise,
+    timeZone: listing.timeZone,
     description: listing.description,
     media: listing.media.map((photo) => ({
       ...photo,

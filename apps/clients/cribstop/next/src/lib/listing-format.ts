@@ -1,6 +1,7 @@
 import type { ListingSource, ListingType, OpenHouse } from '@cribstop/property-contracts';
 import { BRAND } from '@/lib/brand';
-import { formatNumber, formatPrice, formatPriceShort, PROPERTY_TIME_ZONE } from '@/lib/format';
+import { formatNumber, formatPrice, formatPriceShort } from '@/lib/format';
+import { PROPERTY_TIME_ZONE } from '@/lib/time-zone';
 
 /**
  * Null-safe presentation of listing fields.
@@ -220,7 +221,7 @@ export function hasMapCoordinates(listing: {
  * drift: every rule below is a bug that was fixed in one place and would have to be re-fixed in the
  * other.
  */
-function openHouseTimeRange(starts: Date, ends: Date): string {
+function openHouseTimeRange(starts: Date, ends: Date, timeZone: string): string {
   // Lowercase, unspaced meridiem ("9am") is both the listing-sheet convention and materially
   // narrower — the badge sits on the image next to the save control and has little room.
   //
@@ -232,7 +233,7 @@ function openHouseTimeRange(starts: Date, ends: Date): string {
       .toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: PROPERTY_TIME_ZONE,
+        timeZone,
       })
       .replace(':00', '')
       .replace(/\s/g, '')
@@ -282,11 +283,14 @@ function openHouseTimeRange(starts: Date, ends: Date): string {
  * `numeric` rather than `2-digit` throughout: "9/5", not "09/05" — the padding buys nothing at this
  * size and costs two characters in the one place characters are scarce.
  */
-export function formatOpenHouseDate(openHouse: OpenHouse): string {
+export function formatOpenHouseDate(
+  openHouse: OpenHouse,
+  timeZone: string = PROPERTY_TIME_ZONE,
+): string {
   return new Date(openHouse.startsAt).toLocaleDateString('en-US', {
     month: 'numeric',
     day: 'numeric',
-    timeZone: PROPERTY_TIME_ZONE,
+    timeZone,
   });
 }
 
@@ -297,22 +301,28 @@ export function formatOpenHouseDate(openHouse: OpenHouse): string {
  * only part that carries no information the rest does not: `8/16` already determines it. The time
  * only goes at the narrowest widths, where even this does not fit.
  */
-export function formatOpenHouseTimeAndDate(openHouse: OpenHouse): string {
+export function formatOpenHouseTimeAndDate(
+  openHouse: OpenHouse,
+  timeZone: string = PROPERTY_TIME_ZONE,
+): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
 
-  return `${openHouseTimeRange(starts, ends)} (${formatOpenHouseDate(openHouse)})`;
+  return `${openHouseTimeRange(starts, ends, timeZone)} (${formatOpenHouseDate(openHouse, timeZone)})`;
 }
 
-export function formatOpenHouseBadge(openHouse: OpenHouse): string {
+export function formatOpenHouseBadge(
+  openHouse: OpenHouse,
+  timeZone: string = PROPERTY_TIME_ZONE,
+): string {
   const starts = new Date(openHouse.startsAt);
 
   const weekday = starts.toLocaleDateString('en-US', {
     weekday: 'short',
-    timeZone: PROPERTY_TIME_ZONE,
+    timeZone,
   });
 
-  return `${weekday} ${formatOpenHouseTimeAndDate(openHouse)}`;
+  return `${weekday} ${formatOpenHouseTimeAndDate(openHouse, timeZone)}`;
 }
 
 /**
@@ -321,7 +331,10 @@ export function formatOpenHouseBadge(openHouse: OpenHouse): string {
  * Kept for surfaces with room to spell it out. The card no longer uses it: see
  * `formatOpenHouseBadge` for why a tile cannot afford this string.
  */
-export function formatOpenHouseWhen(openHouse: OpenHouse): string {
+export function formatOpenHouseWhen(
+  openHouse: OpenHouse,
+  timeZone: string = PROPERTY_TIME_ZONE,
+): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
 
@@ -329,13 +342,16 @@ export function formatOpenHouseWhen(openHouse: OpenHouse): string {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    timeZone: PROPERTY_TIME_ZONE,
+    timeZone,
   });
 
-  return `${day} · ${openHouseTimeRange(starts, ends)}`;
+  return `${day} · ${openHouseTimeRange(starts, ends, timeZone)}`;
 }
 
-export function formatOpenHouse(openHouse: OpenHouse): string {
+export function formatOpenHouse(
+  openHouse: OpenHouse,
+  timeZone: string = PROPERTY_TIME_ZONE,
+): string {
   const starts = new Date(openHouse.startsAt);
   const ends = new Date(openHouse.endsAt);
 
@@ -343,14 +359,14 @@ export function formatOpenHouse(openHouse: OpenHouse): string {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-    timeZone: PROPERTY_TIME_ZONE,
+    timeZone,
   });
   const time = (d: Date) =>
     d
       .toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: PROPERTY_TIME_ZONE,
+        timeZone,
       })
       .replace(':00', '');
 

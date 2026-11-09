@@ -10,6 +10,7 @@ import { SampleBadge } from '@/components/listing/ListingBadges';
 import { toListingDetailView } from '@/lib/api/listings';
 import { formatDate, formatNumber } from '@/lib/format';
 import { formatClosePrice, formatListingPrice } from '@/lib/listing-format';
+import { listingTimeZone, timeZoneForState } from '@/lib/time-zone';
 
 /**
  * The property page (#382): one page per home, in its current market status.
@@ -23,7 +24,17 @@ import { formatClosePrice, formatListingPrice } from '@/lib/listing-format';
  */
 export default function PropertyPageView({ page }: { page: PropertyPage }) {
   const { propertyRecord, latestListing, marketStatus, history, nearby } = page;
-  const historyPanel = history.length > 0 ? <PropertyHistory entries={history} /> : undefined;
+  const historyPanel =
+    history.length > 0 ? (
+      <PropertyHistory
+        entries={history}
+        timeZone={
+          latestListing
+            ? listingTimeZone(toListingDetailView(latestListing))
+            : timeZoneForState(propertyRecord.state)
+        }
+      />
+    ) : undefined;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -55,7 +66,13 @@ function historyEvent(entry: PropertyHistoryEntry): string {
   return `${entry.marketStatus} · ${formatListingPrice(entry.price, listingType).text}`;
 }
 
-export function PropertyHistory({ entries }: { entries: PropertyHistoryEntry[] }) {
+export function PropertyHistory({
+  entries,
+  timeZone,
+}: {
+  entries: PropertyHistoryEntry[];
+  timeZone?: string;
+}) {
   return (
     <section className="px-6 py-6" data-testid="property-history">
       <h2 className="text-xl font-semibold tracking-tight text-ink">Listing history</h2>
@@ -64,7 +81,7 @@ export function PropertyHistory({ entries }: { entries: PropertyHistoryEntry[] }
           <li key={entry.listingId} className="flex items-baseline justify-between gap-4 py-3">
             <span className="text-sm text-ink">{historyEvent(entry)}</span>
             <span className="shrink-0 text-sm text-ink-muted">
-              Updated {formatDate(entry.lastUpdated)}
+              Updated {formatDate(entry.lastUpdated, timeZone)}
             </span>
           </li>
         ))}

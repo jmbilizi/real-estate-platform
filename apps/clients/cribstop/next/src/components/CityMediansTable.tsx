@@ -10,11 +10,13 @@ export default function CityMediansTable({
   asOf,
   source,
   caption,
+  timeZone,
 }: {
   rows: readonly CityMedianRow[];
   asOf: string;
   source: string;
   caption: string;
+  timeZone?: string;
 }) {
   return (
     <table className="mt-3 w-full text-left text-xs">
@@ -30,7 +32,7 @@ export default function CityMediansTable({
                 {row.value ?? NOT_ENOUGH_DATA}
               </span>
               <span className="block text-ink-muted">
-                <time dateTime={asOf}>{formatDate(asOf)}</time>
+                <time dateTime={asOf}>{formatDate(asOf, timeZone)}</time>
                 {` · ${source}`}
               </span>
             </td>

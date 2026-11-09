@@ -74,6 +74,7 @@ type ExpectedCardKeys =
   | 'listedAt'
   | 'comingSoonDate'
   | 'listedAtPrecise'
+  | 'timeZone'
   | 'listingAgentName'
   | 'brokerName'
   | 'brokerPhone'

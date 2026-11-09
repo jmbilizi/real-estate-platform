@@ -82,6 +82,10 @@ export const listingCardSchema = z
     // #459. The instant the listing was listed, only when the feed proves it: the status change is
     // on the list date and is not a date-only midnight. Null otherwise. Never a guess.
     listedAtPrecise: z.iso.datetime().nullable(),
+    // #983. The IANA zone of the property, present only where the property lies outside the zone
+    // the web app holds for its state (El Paso in Texas, the western Florida panhandle). Absent
+    // elsewhere, so a reader falls back to its state table. Derived from the coordinates, else the ZIP.
+    timeZone: z.string().min(1).optional(),
     // #23. Present only on an authenticated request, omitted for a signed-out caller. This is the one
     // field a card may omit: a per-user value cannot live in a shared-cache response. Both names
     // carry the same value, resolved by home id, so every listing of a saved home reads as saved.

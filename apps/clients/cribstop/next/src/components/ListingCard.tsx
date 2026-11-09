@@ -11,6 +11,7 @@ import { openListingPanel } from '@/lib/listing-panel';
 import { usePrefetchListing } from '@/lib/query/usePrefetchListing';
 import { copyToClipboard } from '@/lib/clipboard';
 import { formatNewListingBadge, formatTimeOnMarket } from '@/lib/format';
+import { listingTimeZone } from '@/lib/time-zone';
 import { useMinuteClock } from '@/lib/useMinuteClock';
 import { buildListingShare, listingShareUrl } from '@/lib/listing-share';
 import { shareOrigin } from '@/lib/site-origin';
@@ -94,16 +95,17 @@ export default function ListingCard({
   const minuteNow = useMinuteClock(!isComingSoon && listing.listedAtPrecise !== null);
   const now = minuteNow ?? Date.now();
   const precise = minuteNow === null ? null : listing.listedAtPrecise;
+  const timeZone = listingTimeZone(listing);
 
   /**
    * #542. Under 7 days the age moves into a new-listing badge, so the footer slot stays empty to
    * avoid repeating it. Coming Soon wins outright and a sold row never gets the badge.
    */
   const newListingBadge =
-    isComingSoon || isSold ? null : formatNewListingBadge(listing.listedAt, now, precise);
+    isComingSoon || isSold ? null : formatNewListingBadge(listing.listedAt, now, precise, timeZone);
   const isNew = newListingBadge !== null;
   const timeOnMarket =
-    isComingSoon || isNew ? null : formatTimeOnMarket(listing.listedAt, now, precise);
+    isComingSoon || isNew ? null : formatTimeOnMarket(listing.listedAt, now, precise, timeZone);
 
   /**
    * #433. Share this listing: the Web Share API on a device that has one, the clipboard (with a
@@ -357,9 +359,11 @@ export default function ListingCard({
                  * rather than visual hiding, so a screen reader is never handed the date twice.
                  */}
                 <span className="font-bold">Open:</span>{' '}
-                <span className="open-house-full">{formatOpenHouseBadge(openHouse)}</span>
-                <span className="open-house-no-day">{formatOpenHouseTimeAndDate(openHouse)}</span>
-                <span className="open-house-date">{formatOpenHouseDate(openHouse)}</span>
+                <span className="open-house-full">{formatOpenHouseBadge(openHouse, timeZone)}</span>
+                <span className="open-house-no-day">
+                  {formatOpenHouseTimeAndDate(openHouse, timeZone)}
+                </span>
+                <span className="open-house-date">{formatOpenHouseDate(openHouse, timeZone)}</span>
               </span>
             )}
           </div>
