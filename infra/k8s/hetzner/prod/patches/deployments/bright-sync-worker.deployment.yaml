@@ -4,10 +4,6 @@
 # WHICH FEED: the one this environment's `bright-mls-secret` declares in BRIGHT_MLS_ENV. The
 # production credential authenticates Real Broker, LLC's MLS participation against real licensed
 # inventory (PRD §6.2).
-#
-# `infra/deploy-control.yaml` keeps this service `enabled: false` for prod, same reasoning the
-# removed CronJobs carried: #102 chooses the production hostnames and #117 item 6 confirms
-# display-URL registration, and neither is settled.
 
 apiVersion: apps/v1
 kind: Deployment

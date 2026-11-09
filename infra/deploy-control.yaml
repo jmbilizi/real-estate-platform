@@ -253,29 +253,26 @@ environments:
         rollback_on_failure: false # Manual review recommended for production
 
       account-service:
-        enabled: false # Not yet deployed to production
+        enabled: true # First Homes production deploy
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
 
       property-service:
-        enabled: false # Not yet deployed to production
+        enabled: true # First Homes production deploy
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
 
       bright-sync-worker:
-        # Deliberately shut. #117's rollout order is dev first and prod as a SEPARATE confirmation,
-        # never an assumption carried over from a green dev run — the credential here authenticates
-        # against real licensed inventory, and #102/#117 item 6 (production display-URL
-        # registration) is not settled.
-        enabled: false # Not yet deployed to production
+        # The prod credential reads real licensed inventory. The deploy is manual and needs approval.
+        enabled: true # First Homes production deploy
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production
 
       cribstop-web:
-        enabled: false # Not yet deployed to production
+        enabled: true # First Homes production deploy
         auto_deploy: false # Manual deployment only
         require_approval: true # Always require approval
         rollback_on_failure: false # Manual review recommended for production

@@ -14,7 +14,7 @@ metadata:
     app: postgres
 spec:
   serviceName: postgres-hl
-  # replicas: Defined in environment patches (1 local/dev, 2 test, 3 prod)
+  # replicas: Defined in environment patches (1 in every environment, because no replication exists)
   selector:
     matchLabels:
       app: postgres
