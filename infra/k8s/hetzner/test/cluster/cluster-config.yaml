@@ -83,8 +83,25 @@ worker_node_pools:
 
 protect_against_deletion: true
 
-embedded_registry_mirror:
-  enabled: true # Enables fast p2p distribution of container images between nodes for faster pod startup
+# Add-on manifests are pinned to the versions hetzner-k3s v2.4.1 installed, so an upgrade
+# of the hetzner-k3s binary changes no add-on. Upgrade add-ons in a separate change:
+# CCM v1.28+ needs a manual ClusterRoleBinding cleanup.
+addons:
+  cloud_controller_manager:
+    enabled: true
+    manifest_url: "https://github.com/hetznercloud/hcloud-cloud-controller-manager/releases/download/v1.26.0/ccm-networks.yaml"
+  csi_driver:
+    enabled: true
+    manifest_url: "https://raw.githubusercontent.com/hetznercloud/csi-driver/v2.17.0/deploy/kubernetes/hcloud-csi.yml"
+  system_upgrade_controller:
+    enabled: true
+    deployment_manifest_url: "https://github.com/rancher/system-upgrade-controller/releases/download/v0.16.0/system-upgrade-controller.yaml"
+    crd_manifest_url: "https://github.com/rancher/system-upgrade-controller/releases/download/v0.16.0/crd.yaml"
+  cluster_autoscaler:
+    enabled: true
+    container_image_tag: "v1.33.0"
+  embedded_registry_mirror:
+    enabled: true # Enables fast p2p distribution of container images between nodes for faster pod startup
 
 k3s_upgrade_concurrency: 1 # how many nodes to upgrade at the same time
 

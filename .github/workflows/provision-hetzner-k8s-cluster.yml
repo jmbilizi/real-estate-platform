@@ -71,6 +71,8 @@ jobs:
   update-dev-cluster:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
     runs-on: ubuntu-latest
+    # 3 create attempts of up to 41 minutes each, plus setup and checks.
+    timeout-minutes: 150
     environment: dev
     steps:
       - uses: actions/checkout@v4
@@ -92,6 +94,8 @@ jobs:
   update-test-cluster:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'test'
     runs-on: ubuntu-latest
+    # 3 create attempts of up to 41 minutes each, plus setup and checks.
+    timeout-minutes: 150
     environment: test
     steps:
       - uses: actions/checkout@v4
@@ -113,6 +117,8 @@ jobs:
   update-prod-cluster:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
     runs-on: ubuntu-latest
+    # 3 create attempts of up to 41 minutes each, plus setup and checks.
+    timeout-minutes: 150
     environment: prod
     steps:
       - uses: actions/checkout@v4
