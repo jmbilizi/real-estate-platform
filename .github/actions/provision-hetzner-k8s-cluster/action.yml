@@ -59,8 +59,18 @@ runs:
     - name: Install hetzner-k3s CLI
       if: steps.check-enabled.outputs.enabled == 'true'
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        wget https://github.com/vitobotta/hetzner-k3s/releases/download/v2.4.1/hetzner-k3s-linux-amd64
+        # v2.6.0+ reports a failed add-on install. v2.4.1 hung until the 6-hour job limit
+        # after a GitHub 504 (provision run 42568813423). The cluster configs pin the
+        # add-on manifests, so an upgrade of this binary does not change add-on versions.
+        for attempt in 1 2 3; do
+          gh release download v2.7.0 -R vitobotta/hetzner-k3s -p hetzner-k3s-linux-amd64 --clobber && break
+          [ "$attempt" = 3 ] && exit 1
+          echo "⚠️  hetzner-k3s download attempt $attempt failed"
+          sleep 10
+        done
         chmod +x hetzner-k3s-linux-amd64
         sudo mv hetzner-k3s-linux-amd64 /usr/local/bin/hetzner-k3s
         hetzner-k3s version
@@ -97,8 +107,19 @@ runs:
       shell: bash
       run: |
         echo "🔨 Creating/updating ${{ inputs.environment }} cluster..."
-        hetzner-k3s create --config cluster-config-processed.yaml
-        echo "cluster_updated=true" >> $GITHUB_OUTPUT
+        # create is idempotent: a second run resumes from the current cluster state. The
+        # time limit turns a hang into a failure, and the retry covers transient errors
+        # such as a GitHub 504 on an add-on manifest.
+        for attempt in 1 2 3; do
+          if timeout --kill-after=1m 40m hetzner-k3s create --config cluster-config-processed.yaml; then
+            echo "cluster_updated=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "⚠️  hetzner-k3s create attempt $attempt failed or timed out"
+          [ "$attempt" = 3 ] || sleep 30
+        done
+        echo "❌ hetzner-k3s create failed 3 times"
+        exit 1
 
     - name: Wait for cluster to be ready
       if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
@@ -135,7 +156,12 @@ runs:
           echo "✅ cert-manager $CURRENT_VERSION already installed"
         else
           echo "📦 Installing cert-manager v1.13.3..."
-          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+          for attempt in 1 2 3 4 5; do
+            kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml && break
+            [ "$attempt" = 5 ] && exit 1
+            echo "⚠️  cert-manager apply attempt $attempt failed"
+            sleep 15
+          done
           
           echo "⏳ Waiting for cert-manager to be ready..."
           kubectl wait --for=condition=Available --timeout=180s \
