@@ -9,7 +9,7 @@
 #   - Cluster provisioning: .github/workflows/hetzner-k8s.yml (reads this file)
 #   - Resource deployment: .github/workflows/deploy-k8s-resources.yml (reads deploy-control.yaml)
 
-auto_deploy: false # Set to true to enable automatic deployment (NOT recommended for prod)
+auto_deploy: true # Prod cluster provisioning requires explicit manual dispatch of the provisioning workflow
 hetzner_token: HETZNER_TOKEN # Will be replaced by GitHub Actions from secrets
 cluster_name: hetzner-prod-cluster
 kubeconfig_path: "./kubeconfig"
