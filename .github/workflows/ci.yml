@@ -745,9 +745,17 @@ jobs:
           images=false
           manifest_services=""
 
-          if echo "$CLUSTER_FILES" | grep -E -q '^infra/k8s/hetzner/.*/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/'; then
+          # Provision only this branch's environment, and only when its own cluster folder
+          # or the shared provisioning code changed. A prod-only config change on dev
+          # otherwise re-provisions the dev cluster.
+          case "${{ github.ref_name }}" in
+            main) CLUSTER_ENV=prod ;;
+            test) CLUSTER_ENV=test ;;
+            *) CLUSTER_ENV=dev ;;
+          esac
+          if echo "$CLUSTER_FILES" | grep -E -q "^infra/k8s/hetzner/${CLUSTER_ENV}/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/"; then
             cluster=true
-            echo "✅ Cluster configuration changes detected"
+            echo "✅ ${CLUSTER_ENV} cluster configuration changes detected"
           fi
 
           if echo "$DEPLOY_FILES_ALL" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/'; then
