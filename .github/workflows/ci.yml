@@ -575,8 +575,9 @@ jobs:
 
           # deploy-control.yaml and the resolver under tools/infra/ are as much a part of
           # this validation as the manifests: a commit touching only deploy-control.yaml is
-          # precisely the change that can strand a workload with no entry.
-          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$|^tools/infra/.*\.js$'; then
+          # precisely the change that can strand a workload with no entry. ci.yml is listed so
+          # a change to this job runs the job.
+          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -qE '^infra/k8s/.*\.(yaml|yml)$|^infra/deploy-control\.yaml$|^infra/smart-deployment-config\.yaml$|^tools/infra/.*\.js$|^\.github/workflows/ci\.yml$'; then
             echo "infra-changed=true" >> $GITHUB_OUTPUT
             echo "✅ Infrastructure files changed — running Kustomize validation"
           else
@@ -608,12 +609,31 @@ jobs:
 
       - name: Install kustomize
         if: steps.detect.outputs.infra-changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Authenticated download. The anonymous release URL returned a non-archive body
+          # from runners three times on 2026-11-09 (run 42566875469).
           KUSTOMIZE_VERSION="v5.4.3"
-          curl -sSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
-            -o /tmp/kustomize.tar.gz
-          tar xzf /tmp/kustomize.tar.gz -C /tmp
-          sudo install -o root -g root -m 0755 /tmp/kustomize /usr/local/bin/kustomize
+          ASSET="kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          installed=false
+          for attempt in 1 2 3; do
+            if gh release download "kustomize/${KUSTOMIZE_VERSION}" -R kubernetes-sigs/kustomize \
+                 -p "$ASSET" -O /tmp/kustomize.tar.gz --clobber \
+               && tar xzf /tmp/kustomize.tar.gz -C /tmp; then
+              sudo install -o root -g root -m 0755 /tmp/kustomize /usr/local/bin/kustomize
+              installed=true
+              break
+            fi
+            echo "⚠️  kustomize download attempt $attempt failed. First bytes received:"
+            head -c 300 /tmp/kustomize.tar.gz 2>/dev/null || true
+            echo
+            sleep 5
+          done
+          if [ "$installed" != true ]; then
+            command -v kustomize >/dev/null || { echo "❌ No kustomize available"; exit 1; }
+            echo "::warning::Pinned kustomize ${KUSTOMIZE_VERSION} download failed. Using the runner's preinstalled kustomize."
+          fi
           kustomize version
 
       # `pnpm run infra:validate`, not four bare `kustomize build` calls. The wrapper
