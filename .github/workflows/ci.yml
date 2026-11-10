@@ -753,12 +753,15 @@ jobs:
             test) CLUSTER_ENV=test ;;
             *) CLUSTER_ENV=dev ;;
           esac
-          if echo "$CLUSTER_FILES" | grep -E -q "^infra/k8s/hetzner/${CLUSTER_ENV}/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/"; then
+          # Here-strings, not `echo | grep -q`: grep -q exits at the first match, echo of a large
+          # file list then dies of SIGPIPE, and pipefail turns a match into "no change". That
+          # skipped the dev provision on the #1026 merge.
+          if grep -E -q "^infra/k8s/hetzner/${CLUSTER_ENV}/cluster/|^\.github/workflows/provision-hetzner-k8s-cluster\.yml|^\.github/actions/provision-hetzner-k8s-cluster/" <<<"$CLUSTER_FILES"; then
             cluster=true
             echo "✅ ${CLUSTER_ENV} cluster configuration changes detected"
           fi
 
-          if echo "$DEPLOY_FILES_ALL" | grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/'; then
+          if grep -E -q '^infra/k8s/base/|^infra/deploy-control\.yaml|^infra/smart-deployment-config\.yaml|^infra/k8s/hetzner/.*/patches/|^\.github/workflows/deploy-k8s-resources\.yml|^\.github/actions/deploy-k8s-resources/|^\.github/actions/load-deploy-control/' <<<"$DEPLOY_FILES_ALL"; then
             deploy=true
             echo "✅ Deploy resource changes detected"
           fi
@@ -769,7 +772,7 @@ jobs:
             echo "✅ Deployment manifest services detected: $manifest_services"
           fi
 
-          if echo "$IMAGES_FILES" | grep -E -q '^apps/.*/Dockerfile|^apps/.*\.(cs|ts|tsx|py|js|jsx|css|scss)$|^apps/.*\.csproj$|^apps/.*/package\.json$|^apps/.*/pyproject\.toml$|^apps/.*/requirements\.txt$|^apps/api-gateway/Configuration/.*\.json$|^libs/|^tools/docker/|^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/|^pnpm-lock\.yaml$|^uv\.lock$|^pyproject\.toml$|^Directory\.Build\.(props|targets)$|^Directory\.Packages\.props$|^nuget\.config$|^global\.json$|^infra/k8s/base/deployments/|^infra/k8s/hetzner/.*/patches/deployments/'; then
+          if grep -E -q '^apps/.*/Dockerfile|^apps/.*\.(cs|ts|tsx|py|js|jsx|css|scss)$|^apps/.*\.csproj$|^apps/.*/package\.json$|^apps/.*/pyproject\.toml$|^apps/.*/requirements\.txt$|^apps/api-gateway/Configuration/.*\.json$|^libs/|^tools/docker/|^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/|^pnpm-lock\.yaml$|^uv\.lock$|^pyproject\.toml$|^Directory\.Build\.(props|targets)$|^Directory\.Packages\.props$|^nuget\.config$|^global\.json$|^infra/k8s/base/deployments/|^infra/k8s/hetzner/.*/patches/deployments/' <<<"$IMAGES_FILES"; then
             images=true
             echo "✅ Container image changes detected"
           fi
@@ -984,7 +987,7 @@ jobs:
           IGNORED_PATHS=$(yq -r '.ignored_paths.paths[]' "$CONFIG_FILE" | paste -sd '|' -)
 
           # Check for global triggers (files that affect all services)
-          if echo "$FILES" | grep -E -q "$GLOBAL_TRIGGERS"; then
+          if grep -E -q "$GLOBAL_TRIGGERS" <<<"$FILES"; then
             echo "deploy_strategy=all" >> $GITHUB_OUTPUT
             echo "services=all" >> $GITHUB_OUTPUT
             echo "environment=$ENV" >> $GITHUB_OUTPUT
@@ -993,7 +996,7 @@ jobs:
           fi
 
           # Check for ignored paths (documentation only)
-          if [ -n "$IGNORED_PATHS" ] && echo "$FILES" | grep -E -q "$IGNORED_PATHS"; then
+          if [ -n "$IGNORED_PATHS" ] && grep -E -q "$IGNORED_PATHS" <<<"$FILES"; then
             # Filter out ignored files
             FILES=$(echo "$FILES" | grep -v -E "$IGNORED_PATHS")
             if [ -z "$FILES" ]; then
@@ -1024,7 +1027,7 @@ jobs:
             
             # Check if any changed files match this service's resource paths
             # Use environment-aware matching (only match files for current env or base/)
-            if echo "$FILES" | grep -E -q "^($RESOURCE_PATHS)$"; then
+            if grep -E -q "^($RESOURCE_PATHS)$" <<<"$FILES"; then
               # Additional environment isolation check
               # If file is in a patch directory, verify it's for the correct environment
               ENV_FILES=$(echo "$FILES" | grep -E "^($RESOURCE_PATHS)$" | grep -E "infra/k8s/(hetzner|podman)/" || true)
@@ -1032,7 +1035,7 @@ jobs:
               
               # If we have env-specific files, check they match our target env
               if [ -n "$ENV_FILES" ]; then
-                if echo "$ENV_FILES" | grep -E -q "/$ENV/"; then
+                if grep -E -q "/$ENV/" <<<"$ENV_FILES"; then
                   echo "  ✅ Service affected (environment-specific change for $ENV)"
                   affected_services="$service,$affected_services"
                 else
