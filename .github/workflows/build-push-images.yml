@@ -180,7 +180,7 @@ jobs:
             echo "$FILES"
             
             # If workflow files changed, build all services
-            if echo "$FILES" | grep -E -q '^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/'; then
+            if grep -E -q '^\.github/workflows/build-push-images\.yml|^\.github/actions/build-push-image/' <<<"$FILES"; then
               echo "🚨 Build workflow files changed - building ALL services"
               echo "🔍 DEBUG: Running: pnpm exec nx show projects --withTarget=container-build"
               PROJECTS=$(pnpm exec nx show projects --withTarget=container-build)
