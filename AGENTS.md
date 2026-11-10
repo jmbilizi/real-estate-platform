@@ -1913,7 +1913,7 @@ sessions rely on the developer's own `gh auth login` session instead.
 - **Kustomize**: Kubernetes manifest templating (required for local testing and workflows)
 - **kubectl**: Kubernetes CLI (workflows use version from GitHub Actions runner)
 - **yq**: YAML processor for secret substitution and config parsing (installed in workflows)
-- **hetzner-k3s**: K3s cluster provisioning CLI (v2.4.1, installed by provision-hetzner-k8s-cluster
+- **hetzner-k3s**: K3s cluster provisioning CLI (v2.7.0, installed by provision-hetzner-k8s-cluster
   action)
 - **gh (GitHub CLI)**: Issues/Projects automation for the product backlog (see
   [Product Backlog](#product-backlog-github-issues--projects) below) and manual workflow dispatch
