@@ -94,6 +94,32 @@ runs:
         sed "s/HETZNER_TOKEN/${{ inputs.hetzner-token }}/g" > \
         cluster-config-processed.yaml
 
+    - name: Use the existing Hetzner SSH key
+      if: steps.check-enabled.outputs.enabled == 'true'
+      shell: bash
+      env:
+        HCLOUD_TOKEN: ${{ inputs.hetzner-token }}
+      run: |
+        # hetzner-k3s v2.4.6+ refuses autoscaled pools when the public key is in Hetzner
+        # under a name other than cluster_name. Set existing_ssh_key_name to the name the
+        # key has in this project. This also stops `hetzner-k3s delete` from deleting it.
+        FINGERPRINT=$(ssh-keygen -l -E md5 -f ~/.ssh/id_rsa.pub | awk '{print $2}' | sed 's/^MD5://')
+        RESPONSE=$(curl -fsS --retry 5 --retry-all-errors --retry-delay 3 \
+          -H "Authorization: Bearer $HCLOUD_TOKEN" \
+          "https://api.hetzner.cloud/v1/ssh_keys?fingerprint=$FINGERPRINT")
+        KEY_NAME=$(jq -r '.ssh_keys[0].name // empty' <<<"$RESPONSE")
+        if [ -z "$KEY_NAME" ]; then
+          echo "🔑 No Hetzner SSH key has fingerprint $FINGERPRINT. hetzner-k3s creates it."
+          exit 0
+        fi
+        echo "🔑 Hetzner SSH key '$KEY_NAME' has fingerprint $FINGERPRINT. Using it."
+        # A text insert under `networking.ssh:` keeps the rest of the file byte-for-byte.
+        awk -v name="$KEY_NAME" '{ print } /^  ssh:[[:space:]]*$/ && !done { printf "    existing_ssh_key_name: \"%s\"\n", name; done = 1 }' \
+          cluster-config-processed.yaml > cluster-config-ssh.yaml
+        mv cluster-config-ssh.yaml cluster-config-processed.yaml
+        grep -qF "    existing_ssh_key_name: \"$KEY_NAME\"" cluster-config-processed.yaml \
+          || { echo "❌ No 'networking.ssh:' block to receive existing_ssh_key_name"; exit 1; }
+
     - name: Validate YAML syntax
       if: steps.check-enabled.outputs.enabled == 'true'
       shell: bash
