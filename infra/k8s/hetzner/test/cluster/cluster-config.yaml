@@ -132,7 +132,7 @@ additional_post_k3s_commands:
     spec:
       acme:
         server: https://acme-v02.api.letsencrypt.org/directory
-        email: admin@cribstop.com
+        email: contact@cribstop.com
         privateKeySecretRef:
           name: letsencrypt-prod-account-key
         solvers:
