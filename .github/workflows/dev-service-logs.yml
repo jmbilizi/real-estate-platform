@@ -59,6 +59,7 @@ jobs:
           s/([Pp]ass(word|wd)?|[Ss]ecret|[Tt]oken|[Aa]pi[_-]?[Kk]ey)(["']?[[:space:]]*[:=][[:space:]]*["']?)[^"',;[:space:]]+/\1\3[REDACTED]/g
           s/(postgres(ql)?|redis|amqp):\/\/[^[:space:]"']+/\1:\/\/[REDACTED]/g
           s/([0-9]{1,3}\.){3}[0-9]{1,3}/[IP]/g
+          s/^(\[IP\]|[0-9a-fA-F:]+) - [^ ]+ \[/\1 - [USER] [/
           SED_EOF
 
       - name: Pods, restarts and last termination
@@ -66,11 +67,27 @@ jobs:
           {
             echo "## Dev service logs (last ${SINCE})"
             echo ""
+            # #1030: a pod that cannot reach Postgres is often on one bad node. Show the nodes and
+            # the node of each pod, so a fault that follows one node is visible.
+            echo "### Nodes"
+            echo '```'
+            kubectl get nodes -o custom-columns='NODE:.metadata.name,READY:.status.conditions[?(@.type=="Ready")].status,CREATED:.metadata.creationTimestamp,K3S:.status.nodeInfo.kubeletVersion,TAINTS:.spec.taints[*].key' 2>&1
+            echo ""
+            kubectl get nodes --show-labels --no-headers 2>&1 | awk '{print $1, $NF}'
+            echo '```'
+            echo ""
             echo "### Pods"
             echo '```'
-            for app in $APPS; do
-              kubectl get pods -n default -l "app=$app" -o custom-columns='POD:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,LAST_EXIT:.status.containerStatuses[0].lastState.terminated.reason,LAST_EXIT_AT:.status.containerStatuses[0].lastState.terminated.finishedAt,STARTED:.status.startTime' --no-headers 2>&1
+            COLUMNS='POD:.metadata.name,NODE:.spec.nodeName,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,LAST_EXIT:.status.containerStatuses[0].lastState.terminated.reason,LAST_EXIT_AT:.status.containerStatuses[0].lastState.terminated.finishedAt,STARTED:.status.startTime'
+            for app in $APPS postgres redis; do
+              kubectl get pods -n default -l "app=$app" -o custom-columns="$COLUMNS" --no-headers 2>&1
             done
+            kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller -o custom-columns="$COLUMNS" --no-headers 2>&1
+            echo '```'
+            echo ""
+            echo "### kube-system pods (network, DNS, autoscaler)"
+            echo '```'
+            kubectl get pods -n kube-system -o custom-columns="$COLUMNS" --no-headers 2>&1
             echo '```'
             echo ""
             echo "### Warning events"
@@ -100,16 +117,16 @@ jobs:
             done
           done
 
-      - name: Ingress 429 and 5xx
+      - name: Ingress 401, 429 and 5xx
         run: |
           {
             echo ""
-            echo "### ingress-nginx: 429 and 5xx access lines"
+            echo "### ingress-nginx: 401, 429 and 5xx access lines"
             echo '```'
             for pod in $(kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller -o name); do
               out=$(kubectl logs "$pod" -n ingress-nginx --since="$SINCE" 2>/dev/null || true)
-              echo "$out" | grep -E '" (429|5[0-9][0-9]) ' | tail -n "$MAX_LINES"
-              echo "(${pod#pod/}: $(echo "$out" | grep -Ec '" 429 ') x 429, $(echo "$out" | grep -Ec '" 5[0-9][0-9] ') x 5xx)"
+              echo "$out" | grep -E '" (401|429|5[0-9][0-9]) ' | tail -n "$MAX_LINES"
+              echo "(${pod#pod/}: $(echo "$out" | grep -Ec '" 401 ') x 401, $(echo "$out" | grep -Ec '" 429 ') x 429, $(echo "$out" | grep -Ec '" 5[0-9][0-9] ') x 5xx)"
             done
             echo '```'
           } | sed -E -f /tmp/redact.sed | tee -a "$GITHUB_STEP_SUMMARY"
