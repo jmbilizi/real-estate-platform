@@ -199,14 +199,11 @@ runs:
           echo "✅ cert-manager v1.13.3 installed successfully"
         fi
 
-        # Ensure ClusterIssuer exists
+        # Apply on every run, not only when missing, so a changed ACME email reaches a live
+        # cluster. cluster-config.yaml creates the issuer only when the first master boots.
         echo ""
-        echo "🏢 Checking ClusterIssuer..."
-        if kubectl get clusterissuer letsencrypt-prod >/dev/null 2>&1; then
-          echo "✅ ClusterIssuer 'letsencrypt-prod' already exists"
-        else
-          echo "📝 Creating ClusterIssuer 'letsencrypt-prod'..."
-          cat <<EOF | kubectl apply -f -
+        echo "🏢 Applying ClusterIssuer 'letsencrypt-prod'..."
+        cat <<EOF | kubectl apply -f -
         apiVersion: cert-manager.io/v1
         kind: ClusterIssuer
         metadata:
@@ -214,7 +211,7 @@ runs:
         spec:
           acme:
             server: https://acme-v02.api.letsencrypt.org/directory
-            email: admin@cribstop.com
+            email: contact@cribstop.com
             privateKeySecretRef:
               name: letsencrypt-prod-account-key
             solvers:
@@ -222,8 +219,7 @@ runs:
                   ingress:
                     class: nginx
         EOF
-          echo "✅ ClusterIssuer created"
-        fi
+        echo "✅ ClusterIssuer applied"
 
     - name: Verify cluster prerequisites
       if: steps.check-enabled.outputs.enabled == 'true' && steps.cluster-create.outputs.cluster_updated == 'true'
