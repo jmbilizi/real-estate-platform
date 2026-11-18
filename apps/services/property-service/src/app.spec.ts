@@ -10,6 +10,8 @@ import {
 } from '@cribstop/property-contracts';
 import { createApp } from './app';
 import type { IntrospectionOutcome } from './inquiries/account-introspection';
+import { LISTING_VISIBILITY_SQL } from './listings/columns';
+import { COUNT_SOURCE_SQL } from './listings/count-source';
 import type { ReadPool } from './listings/repository';
 import { cardDbRowFixture } from './listings/test-fixtures';
 
@@ -116,7 +118,7 @@ describe('GET /health/ready (#388)', () => {
 });
 
 describe('read-model invariants, asserted against the SQL actually issued', () => {
-  it('reads every endpoint through listing_search_v', async () => {
+  it('reads every endpoint through listing_search_v or its visibility rule (#1050)', async () => {
     const pool = createSearchPool();
     const app = createApp({ pool });
 
@@ -127,7 +129,10 @@ describe('read-model invariants, asserted against the SQL actually issued', () =
     const reads = pool.statements.filter((sql) => sql.includes('SELECT'));
     expect(reads.length).toBeGreaterThan(0);
     for (const sql of reads) {
-      expect(sql).toContain('listing_search_v');
+      // The exact count and the meta read `listings` with the view's row rule, not the view.
+      expect(sql.includes('listing_search_v') || sql.includes(LISTING_VISIBILITY_SQL.trim())).toBe(
+        true,
+      );
     }
   });
 
@@ -174,7 +179,9 @@ describe('GET /listings', () => {
       .get('/listings?city=Alexandria&state=VA&bounds=-77.07,38.79,-77.03,38.83')
       .expect(200);
 
-    const searches = pool.statements.filter((sql) => sql.includes('FROM listing_search_v'));
+    const searches = pool.statements.filter(
+      (sql) => sql.includes('FROM listing_search_v') || sql.includes(COUNT_SOURCE_SQL),
+    );
     expect(searches.length).toBeGreaterThanOrEqual(2);
     for (const sql of searches) {
       expect(sql).toContain('lower(v.city) = lower(');
@@ -608,14 +615,14 @@ describe('GET /listings/meta', () => {
     });
   });
 
-  it('derives freshness from the view, so a suppressed listing cannot advance it', async () => {
+  it('derives freshness from the view row rule, so a suppressed listing cannot advance it', async () => {
     const pool = createSearchPool([], 1);
 
     await request(createApp({ pool })).get('/listings/meta');
 
     const aggregate = pool.statements.find((sql) => sql.includes('data_updated_at'));
-    expect(aggregate).toContain('listing_search_v');
-    expect(aggregate).toContain('max(v.last_updated)');
+    expect(aggregate).toContain(LISTING_VISIBILITY_SQL.trim());
+    expect(aggregate).toContain('max(l.last_updated)');
     // `updated_at` moves on any local write; `last_updated` is MLS feed freshness. Surfacing the
     // wrong one would make the footer claim a refresh that never happened.
     expect(aggregate).not.toContain('updated_at)');

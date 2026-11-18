@@ -30,6 +30,7 @@ import {
   LISTINGS_SUBJECT,
   mergedRecordsLateral,
 } from './collapse';
+import { countSource } from './count-source';
 import { resolvedSearchRequest } from './on-demand';
 import { priceChangeLateral } from './price-change';
 import {
@@ -181,7 +182,7 @@ export async function searchListings(
     let total = 0;
     if (exactTotal) {
       const countResult = await client.query<{ total: number }>(
-        `SELECT count(*)::int AS total FROM listing_search_v v WHERE ${where}`,
+        `SELECT count(*)::int AS total FROM ${countSource(request)} WHERE ${where}`,
         params,
       );
       total = countResult.rows[0]?.total ?? 0;
@@ -343,7 +344,11 @@ export async function findListingCardById(
  * Dataset freshness, derived from the SAME view as search so a suppressed or non-consumer-status
  * listing cannot advance the timestamp the footer shows.
  *
- * #755. This is a full scan of the view, not a cheap aggregate. The web proxy stores the answer for
+ * #1050. It reads `listings` with `LISTING_VISIBILITY_SQL`, the view's row rule, because the view's
+ * joins ran past the statement timeout on a large dataset. `source` and `last_updated` pass through the
+ * view unchanged.
+ *
+ * #755. This is a full scan of the visible listings, not a cheap aggregate. The web proxy stores the answer for
  * the shared-cache lifetime (`META_CACHE_CONTROL`), and `createSingleFlight` merges concurrent calls.
  *
  * `MAX(last_updated)` is MLS FEED freshness — never `updated_at`, which a local write moves, and never
@@ -354,26 +359,27 @@ export async function findListingCardById(
 export async function getListingsMeta(pool: ReadPool): Promise<ListingsMeta> {
   const result = await readWithoutJit(pool, (client) =>
     client.query<ListingsMetaDbRow>(
-      `SELECT max(v.last_updated)                        AS data_updated_at,
-            array_agg(DISTINCT v.source ORDER BY v.source) AS sources,
+      `SELECT max(l.last_updated)                        AS data_updated_at,
+            array_agg(DISTINCT l.source ORDER BY l.source) AS sources,
             count(*)::int                              AS listing_count,
             (
               -- #438. The sync worker's own record of the last run it completed, not a listing
               -- field: a listing's own \`last_updated\` can be older than the run that fetched it,
-              -- so "Updated X ago" must read this, never \`max(v.last_updated)\`.
+              -- so "Updated X ago" must read this, never \`max(l.last_updated)\`.
               SELECT r.finished_at
               FROM bright_sync_runs r
               WHERE r.status = 'succeeded'
               ORDER BY r.finished_at DESC NULLS LAST
               LIMIT 1
             )                                          AS last_synced_at
-     FROM listing_search_v v`,
+     FROM listings l
+     WHERE ${LISTING_VISIBILITY_SQL}`,
     ),
   );
   // An aggregate-only SELECT always returns exactly one row, even over zero input rows.
   const row = result.rows[0];
   if (!row) {
-    throw new Error('Aggregate query over listing_search_v returned no row.');
+    throw new Error('Aggregate query over listings returned no row.');
   }
   return toListingsMeta(row);
 }

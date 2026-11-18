@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { COUNT_COLUMNS } from './count-source';
 
 /**
  * Structural guards on `listing_search_v` itself, asserted against the SQL the NEWEST view migration
@@ -404,5 +405,35 @@ describe("the neighborhoods aggregate's visibility predicate matches the view's"
     expect(whereClause).toMatch(
       /l\.consumer_status\s*<>\s*'Sold'\s+OR\s+l\.close_date\s+IS\s+NOT\s+NULL/i,
     );
+  });
+});
+
+/**
+ * #1050. `count-source.ts` rebuilds some view columns over `listings` so the exact total skips the
+ * view's joins. Each rebuilt column must stay the view's own expression, or the count and the cards
+ * describe two result sets.
+ */
+describe("the count source's columns match the view's (#1050)", () => {
+  const normalize = (sql: string): string => sql.replace(/\s+/g, ' ').trim();
+  const viewExpressionOf = (name: string): string | undefined => {
+    const projection = projections.find((item) => item.outputName === name);
+    if (!projection) return undefined;
+    // `l.zip5 AS zip` -> `l.zip5`. A bare `l.id` has no alias to strip.
+    return normalize(projection.expression.replace(/\s+AS\s+[a-z_][a-z0-9_]*\s*$/i, ''));
+  };
+
+  it.each(COUNT_COLUMNS.map((column) => [column.name, column] as const))(
+    'writes %s as the view does',
+    (name, column) => {
+      const viewSide = viewExpressionOf(name);
+      expect(viewSide).toBeDefined();
+      expect(viewSide).toBe(normalize(column.viewExpression ?? column.expression));
+    },
+  );
+
+  it('keeps the view rows: an inner join to properties, so no listing drops out here', () => {
+    const view = newestCreateViewSql().replace(/--[^\n]*/g, '');
+    expect(view).toMatch(/\bJOIN\s+properties\s+p\s+ON\s+p\.id\s*=\s*l\.property_id/i);
+    expect(view).not.toMatch(/LEFT\s+JOIN\s+properties/i);
   });
 });
