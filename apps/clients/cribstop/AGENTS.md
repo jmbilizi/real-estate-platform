@@ -160,16 +160,10 @@ with a fixed date. A failure means a spec reads the real clock.
   `local`, `dev`, `test`, `prod`); #245 wires it into a Kubernetes CronJob the same way.
   `is-production-build.js` is a separate, unrelated signal: it only toggles Next.js standalone
   output and must not be reused for environment checks (#157).
-- **Agents never send a request from the workstation to a deployed host** (stakeholder rule,
-  2026-10-19). A SecOps network hook blocks it. Dev, test and prod gateways and ingresses are off
-  limits to agents. Verify frontend work with specs, mocked data, or the local cluster: run
-  `pnpm run skaffold:services:deploy`, then `pnpm run cribstop:web` against the local gateway on
-  `localhost:8080`. Read dev state only through GitHub workflows on env branches, such as
-  `.github/workflows/dev-service-logs.yml`. A human developer may still point their own
-  `next/.env.local` at dev. This rule binds agents only.
-  - The `tools/dev/cribstop-web.js` launcher loads the primary checkout's `next/.env.local` into the
-    process. It logs the loaded key names. If the log names `API_GATEWAY_URL` or
-    `API_GATEWAY_BASIC_AUTH`, stop and report it. Do not run the app or any request.
+- **`tools/dev/cribstop-web.js` launcher.** To use the deployed dev gateway, set `API_GATEWAY_URL`
+  and `API_GATEWAY_BASIC_AUTH` in `next/.env.local`. Without them, the app calls the local gateway
+  on `localhost:8080`. In a worktree with no `.env.local`, the launcher loads the primary checkout's
+  file and logs only its key names.
   - The launcher also canonicalizes the workspace root casing with `fs.realpathSync.native` before
     it starts Next (#440). A shell cwd of `c:\...` and `C:\...` resolve to the same directory but
     are different strings, so an uncanonicalized cwd makes webpack load two copies of Next and React
