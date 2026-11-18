@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { BRAND } from '@/lib/brand';
 import { readdirSync } from 'fs';
 import { join } from 'path';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -100,7 +101,7 @@ describe('NavBar before hydration', () => {
   });
 
   /**
-   * PRD §6.1: the brokerage name is the most prominent brand on the site, and must read from
+   * PRD §6.1: the brokerage name is legible on every page (#1048), and must read from
    * server-rendered HTML, not only after the bundle hydrates. Both the brokerage name and the
    * CRIB/STOP wordmark are compile-time constants, so there is no hydration uncertainty to
    * placeholder over — unlike the tab labels below, which stay skeletoned because they wait on
@@ -110,8 +111,8 @@ describe('NavBar before hydration', () => {
     const html = serverHtml();
 
     expect(html).toContain('Real Broker, LLC');
-    expect(html).toContain('CRIB');
-    expect(html).toContain('STOP');
+    expect(html).toContain(BRAND.siteWordmark[0]);
+    expect(html).toContain(BRAND.siteWordmark[1]);
   });
 
   it('still placeholders the tab labels, which are not known until hydration resolves', () => {

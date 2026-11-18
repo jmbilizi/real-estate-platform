@@ -290,7 +290,7 @@ export default function ListingDetailContent({
           </PropertyGallery>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           {/* Main column */}
           <div className="space-y-4">
             {/*

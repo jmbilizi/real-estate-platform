@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { aListingCardRow } from '@/test/fixtures';
 import ListingCard from './ListingCard';
-import { ListingCardSkeleton } from './listing/ListingStates';
 
 jest.mock('@/lib/context', () => ({
   useApp: () => ({ toggleSave: jest.fn(), isSaved: () => false }),
@@ -19,21 +18,21 @@ describe('price change on the card (#717)', () => {
 
   afterEach(() => jest.useRealTimers());
 
-  const line = () => document.querySelector('.listing-card-change-line');
-  const inline = () => document.querySelector('.listing-card-change-inline');
+  const change = () => document.querySelector('.listing-card-change');
 
-  it('shows the arrow and the amount, with the day inside 14 days', () => {
+  it('shows the cut as the photo badge, with the amount and no day (#1048)', () => {
     renderAt({ ...CUT, priceChangedAt: '2026-10-02T00:00:00.000Z' });
 
-    expect(line()?.textContent).toContain('↓ $100K · Oct 2');
-    expect(inline()?.textContent).toContain('(↓ $100K · Oct 2)');
+    expect(change()?.querySelector('[aria-hidden="true"]')?.textContent).toBe('Price cut $100K');
+    expect(change()?.textContent).not.toContain('Oct 2');
+    expect(change()?.closest('.listing-card-media')).not.toBeNull();
   });
 
   it('gives a screen reader the full amount', () => {
     renderAt({ ...CUT, priceChangedAt: '2026-09-01T00:00:00.000Z' });
 
-    expect(line()?.querySelector('.sr-only')?.textContent).toBe('Price reduced by $100,000');
-    expect(line()?.querySelector('[aria-hidden="true"]')?.textContent).toBe('↓ $100K');
+    expect(change()?.querySelector('.sr-only')?.textContent).toBe('Price reduced by $100,000');
+    expect(change()?.querySelector('[aria-hidden="true"]')?.textContent).toBe('Price cut $100K');
   });
 
   it('shows an increase with the same markup and no alarm color', () => {
@@ -43,28 +42,21 @@ describe('price change on the card (#717)', () => {
       priceChangedAt: '2026-09-01T00:00:00.000Z',
     });
 
-    expect(line()?.textContent).toContain('↑ $100K');
-    expect(line()?.className).toContain('text-ink-body');
-    expect(line()?.className).not.toMatch(/red|rose|amber|green|emerald/);
-  });
-
-  it('names no day for a change older than 14 days', () => {
-    renderAt({ ...CUT, priceChangedAt: '2026-09-01T00:00:00.000Z' });
-
-    expect(line()?.textContent).not.toContain('·');
+    expect(change()?.textContent).toContain('Price up $100K');
+    expect(change()?.className).toContain('text-ink');
+    expect(change()?.className).not.toMatch(/red|rose|amber|green|emerald/);
   });
 
   it('shows nothing for a change older than 90 days', () => {
     renderAt({ ...CUT, priceChangedAt: '2026-07-01T00:00:00.000Z' });
 
-    expect(line()).toBeNull();
-    expect(inline()).toBeNull();
+    expect(change()).toBeNull();
   });
 
   it('shows nothing with no earlier price', () => {
     renderAt({ price: 500_000 });
 
-    expect(line()).toBeNull();
+    expect(change()).toBeNull();
   });
 
   it('shows nothing when an older service sends neither field', () => {
@@ -74,11 +66,18 @@ describe('price change on the card (#717)', () => {
 
     render(<ListingCard listing={row as unknown as ReturnType<typeof aListingCardRow>} />);
 
-    expect(line()).toBeNull();
+    expect(change()).toBeNull();
   });
 
-  it('keeps the Price reduced pill on a cut', () => {
+  it('drops the Price reduced pill when the amount shows, so the fact shows once (#1048)', () => {
     renderAt({ ...CUT, priceReduced: true, priceChangedAt: '2026-10-02T00:00:00.000Z' });
+
+    expect(screen.queryByText('Price reduced')).not.toBeInTheDocument();
+    expect(change()?.textContent).toContain('Price cut $100K');
+  });
+
+  it('keeps the Price reduced pill when the card has no amount to show', () => {
+    renderAt({ price: 500_000, priceReduced: true });
 
     expect(screen.getByText('Price reduced')).toBeInTheDocument();
   });
@@ -94,10 +93,13 @@ describe('price change on the card (#717)', () => {
     expect(screen.queryByText('Price reduced')).not.toBeInTheDocument();
   });
 
-  it('leaves the loading card without the second line, so its height does not jump on load', () => {
-    render(<ListingCardSkeleton />);
+  it('adds no line to the info block, so card heights match (#1048)', () => {
+    renderAt({ ...CUT, priceChangedAt: '2026-10-02T00:00:00.000Z' });
+    const withChange = document.querySelectorAll('.listing-card-root .pt-1\\.5 > *').length;
+    document.body.innerHTML = '';
+    renderAt({ price: 500_000 });
+    const without = document.querySelectorAll('.listing-card-root .pt-1\\.5 > *').length;
 
-    expect(document.querySelector('.listing-card-change-line')).toBeNull();
-    expect(document.querySelector('.listing-card-change-inline')).not.toBeNull();
+    expect(withChange).toBe(without);
   });
 });

@@ -55,12 +55,15 @@ export default function Footer() {
 
   return (
     <footer className="border-t border-surface-border bg-surface-alt">
-      <div className="px-6 py-10 sm:px-10 lg:px-20">
-        {/* Links grid */}
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+      <div className="mx-auto max-w-[1760px] px-6 py-8 sm:px-10 lg:px-20">
+        {/*
+         * Links grid (#1048). Only real destinations: an entry with no page or URL looked like a
+         * link and went nowhere. "About" shows once.
+         */}
+        <nav aria-label="Footer" className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3">
           <div>
-            <h4 className="mb-3 text-sm font-semibold text-ink">Explore</h4>
-            <ul className="space-y-2 text-sm text-ink-muted">
+            <h4 className="mb-2 text-sm font-semibold text-ink">Explore</h4>
+            <ul className="space-y-1.5 text-sm text-ink-muted">
               <li>
                 <a href="/homes-for-sale" className="hover:text-ink">
                   Homes for Sale
@@ -76,16 +79,11 @@ export default function Footer() {
                   Search All
                 </a>
               </li>
-              <li>
-                <a href="/about" className="hover:text-ink">
-                  About
-                </a>
-              </li>
             </ul>
           </div>
           <div>
-            <h4 className="mb-3 text-sm font-semibold text-ink">Company</h4>
-            <ul className="space-y-2 text-sm text-ink-muted">
+            <h4 className="mb-2 text-sm font-semibold text-ink">Company</h4>
+            <ul className="space-y-1.5 text-sm text-ink-muted">
               <li>{BRAND.brokerageShort}</li>
               <li>
                 <a href="/about" className="hover:text-ink">
@@ -93,16 +91,15 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <span>Careers</span>
-              </li>
-              <li>
-                <span>Contact</span>
+                <a href={`mailto:${BRAND.contactEmail}`} className="hover:text-ink">
+                  Contact
+                </a>
               </li>
             </ul>
           </div>
           <div>
-            <h4 className="mb-3 text-sm font-semibold text-ink">Legal</h4>
-            <ul className="space-y-2 text-sm text-ink-muted">
+            <h4 className="mb-2 text-sm font-semibold text-ink">Legal</h4>
+            <ul className="space-y-1.5 text-sm text-ink-muted">
               <li>
                 <Link href="/terms" className="hover:text-ink">
                   Terms of Service
@@ -125,24 +122,7 @@ export default function Footer() {
               </li>
             </ul>
           </div>
-          <div>
-            <h4 className="mb-3 text-sm font-semibold text-ink">Connect</h4>
-            <ul className="space-y-2 text-sm text-ink-muted">
-              <li>
-                <span>Facebook</span>
-              </li>
-              <li>
-                <span>Instagram</span>
-              </li>
-              <li>
-                <span>LinkedIn</span>
-              </li>
-              <li>
-                <span>YouTube</span>
-              </li>
-            </ul>
-          </div>
-        </div>
+        </nav>
 
         {/*
          * One card, but its paragraphs are not one claim — they answer to three different
@@ -168,7 +148,7 @@ export default function Footer() {
          *
          * Because 2 and 3 always render, the card always has a body and needs no outer guard.
          */}
-        <div className="mt-10 rounded-md border border-surface-border bg-white p-6">
+        <div className="mt-8 rounded-md border border-surface-border bg-white p-5">
           <h5 className="mb-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">
             {showBrightDisclosure ? 'MLS Disclosure' : 'Data Disclosure'}
           </h5>
@@ -211,26 +191,26 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-8 text-ink-muted">
-          <PersonaliseSwitch />
-        </div>
-
-        {/* Bottom bar */}
-        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-surface-border pt-6 text-xs text-ink-muted sm:flex-row">
+        {/*
+         * Bottom bar (#1048): copyright on the left; the personalise controls and the Equal Housing
+         * link on the right, on one row from `md` up. The controls used to take their own block.
+         */}
+        <div className="mt-6 flex flex-col gap-2 border-t border-surface-border pt-4 text-xs text-ink-muted md:flex-row md:items-center md:justify-between">
           <p>
             &copy; {new Date().getFullYear()} {BRAND.brokerageShort}. All rights reserved. |{' '}
             {BRAND.siteDomain}
           </p>
-          <p>
+          <div className="flex flex-wrap items-center gap-x-4">
+            <PersonaliseSwitch inline />
             <a
               href="https://www.hud.gov/program_offices/fair_housing_equal_opp"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-ink"
+              className="inline-flex min-h-[44px] items-center underline hover:text-ink"
             >
               {BRAND.equalHousingOpportunity}
             </a>
-          </p>
+          </div>
         </div>
       </div>
     </footer>

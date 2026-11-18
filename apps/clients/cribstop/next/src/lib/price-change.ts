@@ -25,13 +25,11 @@ export interface PriceChange {
   /** `4.4%`. From the two stored prices only. */
   percentText: string;
   previousPriceText: string;
-  /** `Oct 2`. Always set. The card shows it only inside `CARD_DATE_DAYS`. */
+  /** `Oct 2`. Always set. The detail page shows it. The card does not (#1048). */
   dateText: string;
   ageDays: number;
 }
 
-/** The card names the day of a change this recent. */
-export const CARD_DATE_DAYS = 14;
 /** No indicator shows for an older change. The price history table keeps it. */
 export const MAX_INDICATOR_DAYS = 90;
 
@@ -99,27 +97,21 @@ export function describePriceChange(
   };
 }
 
-/** `↓ $100K` or `↑ $100K`, with the day inside `CARD_DATE_DAYS`. The arrow carries the direction. */
-export function formatCardPriceChange(change: PriceChange): string {
-  return `${formatCardPriceChangeAmount(change)}${formatCardPriceChangeDate(change)}`;
-}
-
 /** `↓ $100K`. The arrow carries the direction. */
 export function formatCardPriceChangeAmount(change: PriceChange): string {
   const arrow = change.direction === 'down' ? '↓' : '↑';
   return `${arrow} ${change.amountText}`;
 }
 
-/** ` · Oct 2` inside `CARD_DATE_DAYS`, else an empty string. */
-export function formatCardPriceChangeDate(change: PriceChange): string {
-  return change.ageDays <= CARD_DATE_DAYS ? ` · ${change.dateText}` : '';
+/** The card photo badge (#1048): "Price cut $100K" or "Price up $100K". */
+export function formatCardPriceChangeBadge(change: PriceChange): string {
+  return `${change.direction === 'down' ? 'Price cut' : 'Price up'} ${change.amountText}`;
 }
 
 /** The screen-reader text of the card indicator, with the full amount: "Price reduced by $100,000". */
 export function describeCardPriceChange(change: PriceChange): string {
   const verb = change.direction === 'down' ? 'reduced' : 'increased';
-  const date = change.ageDays <= CARD_DATE_DAYS ? `, ${change.dateText}` : '';
-  return `Price ${verb} by ${change.fullAmountText}${date}`;
+  return `Price ${verb} by ${change.fullAmountText}`;
 }
 
 /** The detail line: "Reduced $100,000 (4.4%) from $2,297,500 on Oct 2". */
