@@ -117,6 +117,11 @@ spec:
                 secretKeyRef:
                   name: account-service-secret
                   key: ACCOUNT_SERVICE_POSTMARK_WEBHOOK_USER
+            - name: ACCOUNT_SERVICE_GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_GOOGLE_CLIENT_ID
           # #954: keeps the pod serving while the Service endpoints drop it (see api-gateway).
           lifecycle:
             preStop:

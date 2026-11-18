@@ -96,6 +96,10 @@ internal sealed class AccountRecoveryThrottleFilter(
                 allowed = this.TrySignUpSend(deviceResend.Email, clientAddress, out retryAfter, AccountRecoveryRateLimiter.DeviceCodeScope);
                 break;
 
+            case GoogleSignInRequest:
+                allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.GoogleScope);
+                break;
+
             case SecureAccountRequest:
                 allowed = rateLimiter.TrySignUpVerify(clientAddress, out retryAfter, AccountRecoveryRateLimiter.SecureAccountScope);
                 break;
@@ -179,6 +183,7 @@ internal sealed class AccountRecoveryThrottleFilter(
                 or SecureAccountRequest
                 or DeviceSignInRequest
                 or DeviceSignInResendRequest
+                or GoogleSignInRequest
                 or LoginRequest)
             {
                 return context.Arguments[i];

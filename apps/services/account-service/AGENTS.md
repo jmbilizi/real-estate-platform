@@ -22,12 +22,25 @@ pnpm exec nx build account-service     # Also: lint, type-check, format
   JWT**), and SHA-256-hashed API keys.
 - Six-tier staff RBAC is hierarchical; **domain roles are additive facets** — never model them as
   exclusive personas (PRD §11.2).
-- **Only a verified code creates an account.** `POST /account/signup/complete` is the only endpoint
-  that creates an `ApplicationUser`, and it creates it confirmed. Identity's `/register`,
-  `/confirmEmail`, `/resendConfirmationEmail`, `/forgotPassword` and `/resetPassword` do not exist
-  (`404`, absent from OpenAPI). Do not add a route that creates a user.
-  `Tests/Integration/AccountCreationSurfaceTests.cs` lists every endpoint, fails on an unlisted one,
-  probes each with a registration body, and checks that those five paths answer `404`.
+- **Only a verified address creates an account.** Two endpoints create an `ApplicationUser`, and
+  both create it confirmed. `POST /account/signup/complete` needs a verified email code.
+  `POST /account/login/google` needs a Google ID token with `email_verified == true` (#1049). That
+  is the one exception to the code rule: Google verified the address, and no code is sent. The
+  account has no password. Identity's `/register`, `/confirmEmail`, `/resendConfirmationEmail`,
+  `/forgotPassword` and `/resetPassword` do not exist (`404`, absent from OpenAPI). Do not add
+  another route that creates a user. `Tests/Integration/AccountCreationSurfaceTests.cs` lists every
+  endpoint, fails on an unlisted one, probes each other endpoint with a registration body, and
+  checks that those five paths answer `404`.
+- **Continue with Google (#1049).** `Helpers/GoogleSignInService.cs` takes the ID token and
+  `IGoogleIdTokenValidator` (`Google.Apis.Auth`) checks signature, issuer, audience (the client ID)
+  and expiry. The service then needs `email_verified`. It matches the Google `sub` first, then the
+  verified address. An address match links the login (`AddLoginAsync`, provider `Google`). A new
+  address makes a confirmed account with the `User` role. The session is the one `/account/login`
+  issues: cookie with `useCookies`, bearer otherwise. A soft-deleted or locked account answers
+  `401 sign_in_failed` before any link or session. This path skips the new-device code, because
+  Google holds the sign-in factor. `ACCOUNT_SERVICE_GOOGLE_CLIENT_ID` sets the audience. Unset, or
+  the committed placeholder, makes the endpoint answer `503 google_unavailable`, and nothing fails
+  at startup. Tests: `Tests/Integration/GoogleSignInEndpointTests.cs`.
 - **Identity keeps `login`, `refresh` and `manage/*`.** They stay `MapIdentityApi`'s own handlers.
   `Routes/IdentityEndpoints.cs` maps Identity into a detached route builder and hides the five
   retired routes before the app sees them. Hand-mapping the kept endpoints would copy Identity's
