@@ -115,6 +115,38 @@ export async function loginAccount(payload: LoginRequest): Promise<LoginResponse
   return body as LoginResponse;
 }
 
+/** The Google OAuth client ID, or `null` when sign-in with Google is off (#1049). Never throws. */
+export async function getGoogleClientId(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/google-config');
+    if (!res.ok) return null;
+    const body = await res.json();
+    return typeof body?.clientId === 'string' && body.clientId ? body.clientId : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Signs in, or signs up, with a Google ID token (#1049). A `401` means the token or the account
+ * was refused and throws SignInFailedError. A `503` means Google sign-in is off.
+ */
+export async function loginWithGoogle(
+  credential: string,
+  remember = false,
+): Promise<LoginResponse> {
+  const res = await fetch('/api/account/login/google', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential, remember }),
+  });
+  if (res.status === 401) throw new SignInFailedError();
+  if (res.status === 429) throw new RateLimitError(retryAfterSeconds(res));
+  if (res.status === 503) throw new CodesUnavailableError();
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return (await res.json()) as LoginResponse;
+}
+
 export async function logoutAccount(): Promise<void> {
   await post('/api/account/logout', {});
 }

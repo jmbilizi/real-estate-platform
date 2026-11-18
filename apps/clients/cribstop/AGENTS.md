@@ -156,6 +156,13 @@ with a fixed date. A failure means a spec reads the real clock.
   service with no SLA. The exit path is a self-hosted PMTiles build. Never call
   `tile.openstreetmap.org`: its policy forbids this use. The CSP sets only `frame-src`, so tile and
   font hosts need no CSP entry.
+- "Continue with Google" uses Google Identity Services (#1049). `/api/google-config` returns the
+  public client ID from the runtime `GOOGLE_CLIENT_ID` variable. The button stays hidden while it is
+  `null` (unset, empty or the committed placeholder). `GoogleSignInButton.tsx` loads the GIS script
+  and Google draws the button. The ID token goes to `/api/account/login/google`, which sets the same
+  cookies as `/api/account/login`. Local run: set `GOOGLE_CLIENT_ID` in the Next environment
+  (`next/.env.local`) and add `http://localhost:3000` as an authorized JavaScript origin. The CSP
+  `frame-src` lists `https://accounts.google.com` for the button frame.
 - `next/scripts/check-legal-content.js` blocks the **prod** deploy while `src/content/legal/*.json`
   carries `isDraft: true` (#219). It runs only from the prod job in
   `.github/workflows/deploy-k8s-resources.yml`, keyed on `DEPLOYMENT_ENV=prod`. `DEPLOYMENT_ENV` is
