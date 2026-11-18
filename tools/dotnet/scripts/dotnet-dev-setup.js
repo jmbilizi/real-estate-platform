@@ -651,6 +651,18 @@ async function setupDotNetEnvironment() {
   console.log('  pnpm run nx:reset     # Triggers auto-tagging');
   console.log('  pnpm run nx:tag-projects  # Manual tagging if needed');
 
+  // A running Nx daemon keeps the PATH it started with, so it cannot see the new SDK and keeps the
+  // graph without .NET projects (tools/nx/optional-dotnet-plugin.js). The next nx call restarts it.
+  const daemonStop = spawnSync('pnpm', ['exec', 'nx', 'daemon', '--stop'], {
+    stdio: 'pipe',
+    shell: true,
+  });
+  if (daemonStop.status !== 0) {
+    console.warn(
+      '\nCould not stop the Nx daemon. Run pnpm run nx:reset to load the .NET projects.',
+    );
+  }
+
   // Reload the current shell so dotnet is available immediately without
   // closing the terminal. `exec zsh` replaces the current shell process
   // with a fresh one that sources ~/.zshrc — making dotnet available right away.

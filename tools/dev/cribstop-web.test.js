@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  buildDevSpawnArgs,
   canonicalizePath,
   resolvePrimaryCheckoutFromCommonDir,
   resolvePrimaryCheckoutFromWorktreeList,
@@ -215,4 +216,15 @@ test('process.loadEnvFile lets a variable already set in the shell win', () => {
     delete process.env[name];
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// --- buildDevSpawnArgs (no Nx, so no .NET SDK needed) ---------------------------------------
+
+test('buildDevSpawnArgs runs the app dev script in the app directory, not nx', () => {
+  const root = path.join(path.sep, 'repo');
+  const { command, args, cwd } = buildDevSpawnArgs(root);
+  assert.equal(command, 'pnpm');
+  assert.deepEqual(args, ['run', 'dev']);
+  assert.equal(cwd, path.join(root, 'apps', 'clients', 'cribstop', 'next'));
+  assert.ok(!args.includes('nx'));
 });

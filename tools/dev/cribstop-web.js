@@ -34,7 +34,8 @@ const path = require('path');
 const { parsePorcelain } = require('./worktree-reclaim');
 
 const workspaceRoot = path.resolve(__dirname, '../..');
-const APP_ENV_LOCAL_RELATIVE = path.join('apps', 'clients', 'cribstop', 'next', '.env.local');
+const APP_DIR_RELATIVE = path.join('apps', 'clients', 'cribstop', 'next');
+const APP_ENV_LOCAL_RELATIVE = path.join(APP_DIR_RELATIVE, '.env.local');
 
 /**
  * Resolves a path to its OS-canonical casing, so a worktree opened from a `c:` shell and one
@@ -140,6 +141,18 @@ function loadPrimaryEnvLocal(cwd) {
   }
 }
 
+/**
+ * The app's own `dev` script, run in the app directory. It skips Nx, because Nx builds the whole
+ * project graph first and that graph needs the .NET SDK. A frontend developer may not have it.
+ */
+function buildDevSpawnArgs(canonicalWorkspaceRoot) {
+  return {
+    command: 'pnpm',
+    args: ['run', 'dev'],
+    cwd: path.join(canonicalWorkspaceRoot, APP_DIR_RELATIVE),
+  };
+}
+
 function main() {
   const canonicalWorkspaceRoot = canonicalizePath(workspaceRoot);
   if (canonicalWorkspaceRoot !== workspaceRoot) {
@@ -151,8 +164,9 @@ function main() {
 
   loadPrimaryEnvLocal(canonicalWorkspaceRoot);
 
-  const result = spawnSync('pnpm', ['exec', 'nx', 'serve', 'cribstop-web'], {
-    cwd: canonicalWorkspaceRoot,
+  const { command, args, cwd } = buildDevSpawnArgs(canonicalWorkspaceRoot);
+  const result = spawnSync(command, args, {
+    cwd,
     stdio: 'inherit',
     shell: true,
     env: { ...process.env, NX_WORKSPACE_ROOT_PATH: canonicalWorkspaceRoot },
@@ -166,6 +180,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildDevSpawnArgs,
   canonicalizePath,
   resolvePrimaryCheckoutFromCommonDir,
   resolvePrimaryCheckoutFromWorktreeList,

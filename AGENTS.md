@@ -246,6 +246,13 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   `/code-review` stalls, review `git diff` by hand. `dev:review-range` also exits 1 when
   `NX_WORKSPACE_ROOT_PATH` names a tree other than the current worktree.
 - `tag:runtime:*` commands miss new projects until `pnpm run nx:reset`.
+- **Nx runs without the .NET SDK.** `nx.json` loads `@nx/dotnet` through
+  `tools/nx/optional-dotnet-plugin.js`. Each graph build checks for `dotnet`. If it exists, the real
+  plugin runs. If not, the graph has no inferred .NET targets or dependencies. A `dotnet` that
+  exists but fails still runs the real plugin, so its error shows. The explicit `project.json`
+  targets of .NET projects call `dotnet` directly either way. A running Nx daemon keeps the PATH it
+  started with, so it cannot see a new SDK. `pnpm run dotnet:env` stops the daemon when it finishes.
+  After an install by any other method, run `pnpm run nx:reset`.
 - Accounts are multi-role platform-wide (owner+renter+buyer+agent+provider simultaneously); never
   introduce a single-value `user_type` (PRD §11.2).
 - **Deployment is gated in two registries, and omission is silent**: `skaffold.yaml` (local) and

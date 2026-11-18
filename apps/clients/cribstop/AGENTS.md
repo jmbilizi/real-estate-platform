@@ -12,6 +12,9 @@ pnpm exec nx lint cribstop-web        # Also: test, type-check
 pnpm run test:clock-guard              # Specs with the system clock one year ahead
 ```
 
+`cribstop:web` runs the app's `dev` script directly, not through Nx. It needs only Node and pnpm,
+not the .NET SDK.
+
 A spec that renders a relative or clock-dependent value pins the clock with `pinClock()` from
 `src/test/fixed-clock.ts`. It asserts the exact text. Run `test:clock-guard` before you add a spec
 with a fixed date. A failure means a spec reads the real clock.
@@ -160,10 +163,10 @@ with a fixed date. A failure means a spec reads the real clock.
   `local`, `dev`, `test`, `prod`); #245 wires it into a Kubernetes CronJob the same way.
   `is-production-build.js` is a separate, unrelated signal: it only toggles Next.js standalone
   output and must not be reused for environment checks (#157).
-- **`tools/dev/cribstop-web.js` launcher.** To use the deployed dev gateway, set `API_GATEWAY_URL`
-  and `API_GATEWAY_BASIC_AUTH` in `next/.env.local`. Without them, the app calls the local gateway
-  on `localhost:8080`. In a worktree with no `.env.local`, the launcher loads the primary checkout's
-  file and logs only its key names.
+- **`tools/dev/cribstop-web.js` launcher.** It runs the app's `dev` script. To use the deployed dev
+  gateway, set `API_GATEWAY_URL` and `API_GATEWAY_BASIC_AUTH` in `next/.env.local`. Without them,
+  the app calls the local gateway on `localhost:8080`. In a worktree with no `.env.local`, the
+  launcher loads the primary checkout's file and logs only its key names.
   - The launcher also canonicalizes the workspace root casing with `fs.realpathSync.native` before
     it starts Next (#440). A shell cwd of `c:\...` and `C:\...` resolve to the same directory but
     are different strings, so an uncanonicalized cwd makes webpack load two copies of Next and React

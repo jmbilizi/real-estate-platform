@@ -45,7 +45,7 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "next dev -p 3000",
+        "command": "pnpm run dev",
         "cwd": "apps/clients/cribstop/next"
       }
     },
