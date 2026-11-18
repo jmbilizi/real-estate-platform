@@ -106,33 +106,32 @@ if (isDotNetAvailable) {
   console.log('✅ .NET SDK detected - @nx/dotnet plugin enabled');
 } else {
   console.log(
-    '⚠️ .NET SDK not found - @nx/dotnet plugin disabled (run pnpm run dotnet:env to enable)',
+    '⚠️ .NET SDK not found - Nx leaves .NET projects out of the graph (run pnpm run dotnet:env to include them)',
   );
-  // Remove @nx/dotnet from plugins if present to prevent project graph failures
-  const before = nxJson.plugins.length;
-  nxJson.plugins = nxJson.plugins.filter((p) => {
-    const name = typeof p === 'string' ? p : p.plugin;
-    return name !== '@nx/dotnet';
-  });
-  if (nxJson.plugins.length !== before) nxJsonDirty = true;
 }
+
+// The wrapper loads @nx/dotnet only when the SDK exists, so nx.json never changes per machine.
+// Replace a bare @nx/dotnet entry with the wrapper, keeping its options.
+const DOTNET_PLUGIN = './tools/nx/optional-dotnet-plugin.js';
+nxJson.plugins = nxJson.plugins.map((p) => {
+  const name = typeof p === 'string' ? p : p.plugin;
+  if (name !== '@nx/dotnet') return p;
+  nxJsonDirty = true;
+  return typeof p === 'string' ? DOTNET_PLUGIN : { ...p, plugin: DOTNET_PLUGIN };
+});
 
 // Make sure we have all the plugins listed properly
 const requiredPlugins = [
-  ...(isDotNetAvailable
-    ? [
-        {
-          plugin: '@nx/dotnet',
-          options: {
-            lintTargetName: 'lint',
-            formatTargetName: 'format',
-            testTargetName: 'test',
-            buildTargetName: 'build',
-            serveTargetName: 'serve',
-          },
-        },
-      ]
-    : []),
+  {
+    plugin: DOTNET_PLUGIN,
+    options: {
+      lintTargetName: 'lint',
+      formatTargetName: 'format',
+      testTargetName: 'test',
+      buildTargetName: 'build',
+      serveTargetName: 'serve',
+    },
+  },
   {
     plugin: '@nx/js/typescript',
     options: {
