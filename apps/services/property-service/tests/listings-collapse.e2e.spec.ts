@@ -344,6 +344,16 @@ describe('one card per home (#716)', () => {
     }
   });
 
+  it('counts the same total on the light count path and on the view path (#1050)', async () => {
+    const expected = HOMES.reduce((sum, home) => sum + home.expected, 0);
+    // A free-text `query` makes the count read `listing_search_v`. No query uses the light source.
+    const light = await fetchPage({ pageSize: 100 });
+    const view = await fetchPage({ pageSize: 100, query: COLLAPSE_CITY });
+    expect(light.total).toBe(expected);
+    expect(view.total).toBe(light.total);
+    expect(light.total).toBe(light.results.length);
+  });
+
   it('counts homes in the map pins and the map total', async () => {
     const expected = HOMES.reduce((sum, home) => sum + home.expected, 0);
     const response = await axios.get('/listings/map', {
