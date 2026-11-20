@@ -13,6 +13,7 @@ import {
   getProfile,
   getSession,
   loginAccount,
+  loginWithGoogle,
   logoutAccount,
   verifyDeviceSignIn,
 } from '@/lib/api/account';
@@ -83,6 +84,8 @@ interface AppContextValue {
   savedHomes: SavedEntry[];
   savedPropertyIds: Set<string>;
   login: (email: string, password: string, remember?: boolean) => Promise<void>;
+  /** Signs in, or signs up, with a Google ID token (#1049). */
+  loginWithGoogle: (credential: string, remember?: boolean) => Promise<void>;
   completeSignup: (
     email: string,
     signupProof: string,
@@ -361,6 +364,14 @@ export function useApp(): AppContextValue {
     [startSession],
   );
 
+  const loginWithGoogleUser = useCallback(
+    async (credential: string, remember?: boolean) => {
+      const res = await loginWithGoogle(credential, remember);
+      await startSession(res.email, res);
+    },
+    [startSession],
+  );
+
   const completeDeviceLoginUser = useCallback(
     async (email: string, password: string, code: string, remember?: boolean) => {
       const outcome = await verifyDeviceSignIn({ email, password, code, remember });
@@ -524,6 +535,7 @@ export function useApp(): AppContextValue {
     savedHomes,
     savedPropertyIds,
     login: loginUser,
+    loginWithGoogle: loginWithGoogleUser,
     completeSignup: completeSignupUser,
     completeDeviceLogin: completeDeviceLoginUser,
     logout: logoutUser,

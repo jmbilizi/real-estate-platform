@@ -74,6 +74,9 @@
     <!-- DNS (MX lookup for the sign-up address check) -->
     <PackageVersion Include="DnsClient" Version="1.8.0" />
 
+    <!-- Google ID token validation (Continue with Google, #1049) -->
+    <PackageVersion Include="Google.Apis.Auth" Version="1.68.0" />
+
     <!-- Configuration packages -->
     <PackageVersion Include="DotNetEnv" Version="3.1.1" />
 

@@ -68,6 +68,9 @@ internal sealed class AccountRecoveryRateLimiter(
     /// <summary>The counter scope of the new-device sign-in code (#818).</summary>
     internal const string DeviceCodeScope = "devicecode";
 
+    /// <summary>The counter scope of the Google sign-in (#1049).</summary>
+    internal const string GoogleScope = "google";
+
     /// <summary>The share of the counter cache dropped when it is full.</summary>
     private const double CompactionShare = 0.1;
 

@@ -19,8 +19,14 @@ const nextConfig = {
   },
   // frame-src is the only directive set. It limits iframes to the tour hosts the gallery embeds (#573, #590).
   // frame-src also checks every redirect target, so list the host a tour URL redirects to.
+  // accounts.google.com is the "Continue with Google" button frame (#1049). Google Identity
+  // Services draws it. No script-src or connect-src is set, so the GIS script needs no entry.
   async headers() {
-    const frameSrc = ["'self'", ...frameHosts.map((h) => `https://${h}`)].join(' ');
+    const frameSrc = [
+      "'self'",
+      ...frameHosts.map((h) => `https://${h}`),
+      'https://accounts.google.com',
+    ].join(' ');
     return [
       // The token in the URL must not leave in a Referer header (#662).
       {

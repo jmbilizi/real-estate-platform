@@ -6,6 +6,7 @@ import {
   CodesUnavailableError,
   completePasswordReset,
   DeviceCodeRequiredError,
+  getGoogleClientId,
   identifyEmail,
   RateLimitError,
   resendDeviceCode,
@@ -18,10 +19,11 @@ import {
 } from '@/lib/api/account';
 
 const login = jest.fn();
+const loginWithGoogle = jest.fn();
 const completeSignup = jest.fn();
 const completeDeviceLogin = jest.fn();
 jest.mock('@/lib/context', () => ({
-  useApp: () => ({ login, completeSignup, completeDeviceLogin }),
+  useApp: () => ({ login, loginWithGoogle, completeSignup, completeDeviceLogin }),
 }));
 const toast = jest.fn();
 jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast }) }));
@@ -30,6 +32,7 @@ jest.mock('@/lib/useToast', () => ({ useToast: () => ({ toast }) }));
 jest.mock('@/lib/api/account', () => ({
   ...jest.requireActual('@/lib/api/account'),
   identifyEmail: jest.fn(),
+  getGoogleClientId: jest.fn().mockResolvedValue(null),
   verifySignupCode: jest.fn(),
   resendSignupCode: jest.fn(),
   changeSignupEmail: jest.fn(),
@@ -53,6 +56,8 @@ const mockVerifyReset = verifyResetCode as jest.MockedFunction<typeof verifyRese
 const mockCompleteReset = completePasswordReset as jest.MockedFunction<
   typeof completePasswordReset
 >;
+
+const mockGoogleClientId = getGoogleClientId as jest.MockedFunction<typeof getGoogleClientId>;
 
 const EMAIL = 'user@example.com';
 const GOOD_PASSWORD = 'a long passphrase here';
@@ -80,10 +85,64 @@ async function reachSetPassword() {
 describe('AuthForm', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockGoogleClientId.mockResolvedValue(null);
     (jest.requireMock('@/lib/api/account').getPasswordPolicy as jest.Mock).mockResolvedValue({
       minLength: 8,
       passphraseLength: 15,
       requiredClasses: ['upper', 'lower', 'digit', 'symbol'],
+    });
+  });
+
+  describe('Continue with Google', () => {
+    let gis: { initialize: jest.Mock; renderButton: jest.Mock };
+
+    beforeEach(() => {
+      gis = { initialize: jest.fn(), renderButton: jest.fn() };
+      (window as unknown as { google: unknown }).google = { accounts: { id: gis } };
+    });
+    afterEach(() => {
+      delete (window as unknown as { google?: unknown }).google;
+    });
+
+    it('shows the Google button and initializes Google with the client ID', async () => {
+      mockGoogleClientId.mockResolvedValue('client-1.apps.googleusercontent.com');
+      render(<AuthForm />);
+
+      expect(await screen.findByTestId('google-signin')).toBeInTheDocument();
+      await waitFor(() => expect(gis.renderButton).toHaveBeenCalled());
+      expect(gis.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({ client_id: 'client-1.apps.googleusercontent.com' }),
+      );
+    });
+
+    it('signs in through the route when Google returns a credential', async () => {
+      mockGoogleClientId.mockResolvedValue('client-1.apps.googleusercontent.com');
+      loginWithGoogle.mockResolvedValue(undefined);
+      const onSuccess = jest.fn();
+      render(<AuthForm onSuccess={onSuccess} />);
+      await waitFor(() => expect(gis.initialize).toHaveBeenCalled());
+
+      await act(async () => {
+        gis.initialize.mock.calls[0][0].callback({ credential: 'id-token' });
+      });
+
+      expect(loginWithGoogle).toHaveBeenCalledWith('id-token', false);
+      await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    });
+
+    it('shows an error and stays on the form when the server refuses the token', async () => {
+      mockGoogleClientId.mockResolvedValue('client-1.apps.googleusercontent.com');
+      loginWithGoogle.mockRejectedValue(new SignInFailedError());
+      const onSuccess = jest.fn();
+      render(<AuthForm onSuccess={onSuccess} />);
+      await waitFor(() => expect(gis.initialize).toHaveBeenCalled());
+
+      await act(async () => {
+        gis.initialize.mock.calls[0][0].callback({ credential: 'id-token' });
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Google/);
+      expect(onSuccess).not.toHaveBeenCalled();
     });
   });
 
@@ -98,26 +157,20 @@ describe('AuthForm', () => {
       expect(screen.queryByPlaceholderText('••••••••')).not.toBeInTheDocument();
     });
 
-    it('puts the email field first, then "or", then Google and Apple on one row', () => {
+    it('puts the email field first, then "or", then Apple, with no Google button without a client ID', () => {
       render(<AuthForm />);
 
       const email = screen.getByPlaceholderText('you@example.com');
       const or = screen.getByText('or');
-      const google = screen.getByRole('button', { name: 'Continue with Google' });
       const apple = screen.getByRole('button', { name: 'Continue with Apple' });
       const follows = (x: Node, y: Node) =>
         Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
       expect(follows(email, or)).toBe(true);
-      expect(follows(or, google)).toBe(true);
-      expect(google.parentElement).toBe(apple.parentElement);
-      expect(google.parentElement).toHaveClass('grid-cols-2', 'gap-1.5');
-      // One pill split in two: full outer corners, small inner corners.
-      expect(google).toHaveClass('rounded-l-full', 'rounded-r-[6px]');
-      expect(apple).toHaveClass('rounded-l-[6px]', 'rounded-r-full');
-      expect(google.className).toContain('min-h-11');
+      expect(follows(or, apple)).toBe(true);
+      expect(apple).toHaveClass('rounded-full');
       expect(apple.className).toContain('min-h-11');
-      expect(google).toHaveAttribute('title', 'Continue with Google');
       expect(apple).toHaveAttribute('title', 'Continue with Apple');
+      expect(screen.queryByTestId('google-signin')).not.toBeInTheDocument();
       expect(screen.queryByText('Welcome back')).not.toBeInTheDocument();
     });
 

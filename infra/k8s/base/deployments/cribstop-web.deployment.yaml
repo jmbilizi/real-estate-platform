@@ -67,6 +67,15 @@ spec:
               value: "false"
             - name: HOME_FEED_ROLLOUT_PCT
               value: "0"
+            # Google OAuth client ID for the sign-in button (#1049). Public, so the page may show it.
+            # optional: the Secret belongs to the account-service lane and may not exist when this pod
+            # first starts. A missing key leaves the button hidden.
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: account-service-secret
+                  key: ACCOUNT_SERVICE_GOOGLE_CLIENT_ID
+                  optional: true
             # Kubernetes metadata (Downward API)
             - name: K8S_POD_NAME
               valueFrom:

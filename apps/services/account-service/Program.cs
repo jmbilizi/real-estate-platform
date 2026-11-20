@@ -113,6 +113,19 @@ internal static class Program
             .Validate(options => options.Validate() is null, "EmailCodes configuration is invalid. See EmailCodeOptions.Validate.")
             .ValidateOnStart();
         builder.Services
+            .AddOptions<GoogleSignInOptions>()
+            .PostConfigure(options =>
+            {
+                // The client ID is public but arrives as a flat env var. Unset keeps Google sign-in off (#1049).
+                var clientId = builder.Configuration[GoogleSignInOptions.ClientIdVariable];
+                if (!string.IsNullOrWhiteSpace(clientId))
+                {
+                    options.ClientId = clientId.Trim();
+                }
+            });
+        builder.Services.AddSingleton<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
+        builder.Services.AddScoped<GoogleSignInService>();
+        builder.Services
             .AddOptions<UnsubscribeOptions>()
             .PostConfigure(options =>
             {
@@ -364,6 +377,9 @@ internal static class Program
 
         // Email-first routing: POST /account/identify. See Routes/Identify.cs.
         app.MapIdentifyRoutes();
+
+        // Continue with Google: POST /account/login/google. See Routes/GoogleSignIn.cs.
+        app.MapGoogleSignInRoutes();
 
         // Profile: GET/PUT/DELETE /account/profile, GET /account/{userId}/history
         app.MapProfileRoutes();

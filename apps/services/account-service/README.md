@@ -137,17 +137,20 @@ without an extra DB call.
 ## Sign-in, Sign-up and Account Recovery by Code
 
 Every flow that proves control of a mailbox runs on a 6-digit email code. Only a verified code
-creates an account. `POST /account/signup/complete` is the only endpoint that creates an
-`ApplicationUser`, and it creates it confirmed. No setting turns confirmation on or off. Identity's
-`/register`, `/confirmEmail`, `/resendConfirmationEmail`, `/forgotPassword` and `/resetPassword` do
-not exist: they answer `404` and are absent from OpenAPI. `AccountCreationSurfaceTests` lists every
-endpoint, fails on an unlisted one, and probes each with a registration body.
+creates an account, with one exception. `POST /account/signup/complete` and
+`POST /account/login/google` are the only endpoints that create an `ApplicationUser`, and both
+create it confirmed. The Google path needs an ID token with `email_verified == true` and sends no
+code (#1049). No setting turns confirmation on or off. Identity's `/register`, `/confirmEmail`,
+`/resendConfirmationEmail`, `/forgotPassword` and `/resetPassword` do not exist: they answer `404`
+and are absent from OpenAPI. `AccountCreationSurfaceTests` lists every endpoint, fails on an
+unlisted one, and probes each with a registration body.
 
 | Flow         | Endpoints                                                 | Auth         |
 | ------------ | --------------------------------------------------------- | ------------ |
 | Sign-in step | `POST /account/identify`                                  | Anonymous    |
 | Sign-up      | `POST /account/signup/{start,verify,resend,change-email}` | Anonymous    |
 | Sign-up      | `POST /account/signup/complete`                           | Signup proof |
+| Google       | `POST /account/login/google`                              | Anonymous    |
 | Reset        | `POST /account/password/reset/{start,verify,complete}`    | Anonymous    |
 | Email change | `POST /account/email/change/{start,verify}`               | Session      |
 | Secure       | `POST /account/secure`                                    | Notice token |

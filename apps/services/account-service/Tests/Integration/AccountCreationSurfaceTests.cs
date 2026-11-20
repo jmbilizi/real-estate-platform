@@ -18,7 +18,9 @@ namespace AccountService.Tests.Integration
 {
     /// <summary>
     /// The hard goal of #657: no code path creates an <c>ApplicationUser</c> without a verified
-    /// code. <c>POST /account/signup/complete</c> is the only endpoint that may.
+    /// address. <c>POST /account/signup/complete</c> (a verified code) and
+    /// <c>POST /account/login/google</c> (a Google <c>email_verified</c> address, #1049) are the
+    /// only endpoints that may.
     /// </summary>
     /// <remarks>
     /// The test fails when a new endpoint appears that is not in <see cref="Surface"/>, so the author
@@ -28,6 +30,7 @@ namespace AccountService.Tests.Integration
     public class AccountCreationSurfaceTests
     {
         private const string SignUpComplete = "POST /account/signup/complete";
+        private const string GoogleSignIn = "POST /account/login/google";
 
         private static readonly string[] AnyMethod = new[] { "*" };
 
@@ -65,6 +68,7 @@ namespace AccountService.Tests.Integration
             ["DELETE /account/waitlist/{interest}"] = false,
             ["POST /account/email/change/start"] = false,
             ["POST /account/email/change/verify"] = false,
+            ["POST /account/login/google"] = true,
             ["POST /account/login/device"] = false,
             ["POST /account/login/device/resend"] = false,
             ["GET /account/security/new-device"] = false,
@@ -84,7 +88,7 @@ namespace AccountService.Tests.Integration
         };
 
         [Fact]
-        public void EveryEndpoint_IsClassified_AndOnlySignUpCompleteCreatesAnAccount()
+        public void EveryEndpoint_IsClassified_AndOnlyTheTwoVerifiedPathsCreateAnAccount()
         {
             using var factory = new AccountServiceFactory();
 
@@ -94,7 +98,7 @@ namespace AccountService.Tests.Integration
             unclassified.Should().BeEmpty("a new endpoint must be added to Surface, stating whether it creates an account");
 
             Surface.Where(entry => entry.Value).Select(entry => entry.Key)
-                .Should().BeEquivalentTo([SignUpComplete]);
+                .Should().BeEquivalentTo([SignUpComplete, GoogleSignIn]);
             Surface.Keys.Except(mapped).Should().BeEmpty("a listed endpoint is not mapped");
         }
 
@@ -131,7 +135,7 @@ namespace AccountService.Tests.Integration
             using var client = factory.CreateClient();
             var before = await CountUsersAsync(factory);
 
-            foreach (var key in MappedEndpoints(factory).Where(key => key != SignUpComplete))
+            foreach (var key in MappedEndpoints(factory).Where(key => key is not (SignUpComplete or GoogleSignIn)))
             {
                 var parts = key.Split(' ', 2);
                 var path = Regex.Replace(parts[1], @"\{[^}]+\}", "probe");
