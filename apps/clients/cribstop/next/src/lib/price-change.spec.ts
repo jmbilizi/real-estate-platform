@@ -1,8 +1,8 @@
 import {
-  CARD_DATE_DAYS,
   describeCardPriceChange,
   describePriceChange,
-  formatCardPriceChange,
+  formatCardPriceChangeAmount,
+  formatCardPriceChangeBadge,
   formatDetailPriceChange,
   formatPriceChangeAmount,
   MAX_INDICATOR_DAYS,
@@ -91,21 +91,21 @@ describe('card text (#717)', () => {
       NOW,
     ) as NonNullable<ReturnType<typeof describePriceChange>>;
 
-  it(`names the day only inside ${CARD_DATE_DAYS} days`, () => {
-    expect(formatCardPriceChange(at(6))).toBe('↓ $100K · Oct 2');
-    expect(formatCardPriceChange(at(CARD_DATE_DAYS))).toContain('·');
-    expect(formatCardPriceChange(at(CARD_DATE_DAYS + 1))).toBe('↓ $100K');
+  it('never names the day on the card (#1048)', () => {
+    expect(formatCardPriceChangeAmount(at(6))).toBe('↓ $100K');
+    expect(formatCardPriceChangeBadge(at(6))).toBe('Price cut $100K');
+    expect(formatCardPriceChangeBadge(at(6, 2_397_500))).toBe('Price up $100K');
   });
 
   it('gives a cut and an increase the same text shape, with an arrow and an amount', () => {
-    expect(formatCardPriceChange(at(30, 2_397_500))).toBe('↑ $100K');
-    expect(formatCardPriceChange(at(30))).toBe('↓ $100K');
+    expect(formatCardPriceChangeAmount(at(30, 2_397_500))).toBe('↑ $100K');
+    expect(formatCardPriceChangeAmount(at(30))).toBe('↓ $100K');
   });
 
   it('gives the full amount to a screen reader', () => {
     expect(describeCardPriceChange(at(30))).toBe('Price reduced by $100,000');
     expect(describeCardPriceChange(at(30, 2_397_500))).toBe('Price increased by $100,000');
-    expect(describeCardPriceChange(at(6))).toBe('Price reduced by $100,000, Oct 2');
+    expect(describeCardPriceChange(at(6))).toBe('Price reduced by $100,000');
   });
 
   it('writes the detail line from the two stored prices', () => {

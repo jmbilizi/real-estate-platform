@@ -30,9 +30,11 @@ origin, or disability. Known red-flag phrases (non-exhaustive — judge intent, 
 Objective property facts are fine ("3 beds", "0.2 mi to Metro", "built 2015"). Describe the
 property, never the people who should live there.
 
-## 2. Brand prominence (Bright MLS rule)
+## 2. Brokerage identification (PRD §6.1)
 
-- **Real Broker, LLC** must be the most prominent brand; **Cribstop** secondary.
+- **Real Broker, LLC** is clearly identified and legible on every page (ink, semibold, at least
+  12px). The header reads "CRIBSTOP at Real Broker, LLC", with "at" as the only joiner and no image
+  or symbol between the names. Cribstop may lead (stakeholder ruling 2026-11-18).
 - Licensure claims must match MD / DC / VA only.
 - Web client: brand strings come from `apps/clients/cribstop/next/src/lib/brand.ts` — flag any
   hardcoded brand text elsewhere.

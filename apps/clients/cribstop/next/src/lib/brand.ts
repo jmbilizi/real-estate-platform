@@ -1,9 +1,9 @@
 /**
  * Centralized brand configuration.
  *
- * Bright MLS requires the licensed brokerage ("Real Broker, LLC") to be the
- * primary, most-prominent brand on the site.  "Cribstop" may still appear but
- * must always be smaller and less prominent than the brokerage name.
+ * The licensed brokerage ("Real Broker, LLC") must be clearly identified, legible and
+ * conspicuous on every page, joined to "Cribstop" by "at" (PRD §6.1). Cribstop leads the
+ * header (stakeholder ruling 2026-11-18, #1048). No rule sets a size ratio.
  *
  * Update values here and they propagate everywhere — navbar, footer, metadata,
  * page copy, etc.
@@ -27,14 +27,17 @@ function joinWithAnd(items: readonly string[]): string {
 }
 
 export const BRAND = {
-  /** Licensed brokerage — must be the most prominent brand on the site. */
+  /** Licensed brokerage name. Shown legibly on every page (PRD §6.1). */
   brokerage: 'Real Broker, LLC',
 
   /** Short brokerage reference (without ", LLC") for running text. */
   brokerageShort: 'Real Broker LLC',
 
-  /** Site / product name — always displayed smaller than the brokerage. */
+  /** Site / product name. It leads the header lockup (#1048). */
   siteName: 'Cribstop',
+
+  /** The wordmark: `siteName` in two parts. The second part is drawn in the brand color. */
+  siteWordmark: ['Crib', 'stop'] as const,
 
   /** Pillar names. Page copy reads these; never hardcode a pillar name (#89). */
   pillars: {

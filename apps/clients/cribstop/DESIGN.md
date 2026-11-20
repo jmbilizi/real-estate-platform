@@ -12,8 +12,8 @@ description:
   buy/sell/rent marketplace, a professional services directory, and a community layer. Pill-shaped
   search bars (`{rounded.full}`), softly rounded listing cards (`{rounded.md}` ~14px), and 32px
   button radii read as friendly and human — there is no hard corner anywhere except the body grid.
-  Brokerage attribution (Real Broker, LLC) is always the most prominent brand element per MLS rules;
-  "Cribstop" is the secondary product/marketplace name.
+  The header reads "CRIBSTOP at Real Broker, LLC" (`BrandLockup`): Cribstop leads, and the
+  brokerage name stays legible, ink and semibold (PRD §6.1).
 
 colors:
   primary: '#ff385c'
@@ -230,7 +230,7 @@ components:
     backgroundColor: transparent
     textColor: '{colors.ink}'
     typography: '{typography.caption-sm}'
-    note: 'Real Broker, LLC — most prominent brand per MLS rules'
+    note: 'Real Broker, LLC — legible on every page, joined by "at" (PRD §6.1)'
   product-tab-active:
     backgroundColor: transparent
     textColor: '{colors.ink}'

@@ -26,9 +26,9 @@ unified action plan. You never guess — you inspect the repo and the outputs be
    - Comply with the **Fair Housing Act** — no language referencing or implying preference based on
      race, color, religion, sex, familial status, national origin, disability. No steering (e.g.
      "safe neighborhood," "great for families," "exclusive community").
-   - Respect the **Bright MLS brand-prominence rule**: the licensed brokerage **Real Broker, LLC**
-     is always the most prominent brand; **Cribstop** is shown smaller/secondary. Note licensure in
-     **MD, DC, VA** where a jurisdiction claim is made. Never present internal/FSBO listings as
+   - Respect **PRD §6.1**: the licensed brokerage **Real Broker, LLC** is clearly identified and
+     legible on every page; the header reads "CRIBSTOP at Real Broker, LLC". Note licensure in **MD,
+     DC, VA** where a jurisdiction claim is made. Never present internal/FSBO listings as
      MLS-sourced.
    - Honor **lead-contact consent** rules (TCPA / Do-Not-Call / email + SMS opt-in) — no unsolicited
      calls/texts, clear opt-in and unsubscribe. For any affiliated-provider or referral flow, apply

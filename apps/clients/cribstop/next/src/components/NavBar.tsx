@@ -12,7 +12,7 @@ import MobileSearchPill from './MobileSearchPill';
 import AppsDropdown from './AppsDropdown';
 import SlidePanel from './SlidePanel';
 import DismissButton from './DismissButton';
-import { BRAND } from '@/lib/brand';
+import BrandLockup from './BrandLockup';
 import { openAuthModal } from '@/lib/auth-modal';
 import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 import { NAV_TABS } from './NavTabIcons';
@@ -156,26 +156,15 @@ export default function NavBar() {
          * depth. Desktop keeps the three column grid. Below `md` the right nav is `display: contents`,
          * so Apps and Account become items of this row, ordered by `max-md:order-*`.
          */}
-        <div className="relative flex h-16 items-center gap-2 px-3 md:grid md:grid-cols-[auto_1fr_auto] md:px-4 lg:px-6">
+        <div className="relative flex h-16 items-center gap-2 px-3 md:grid md:grid-cols-[auto_1fr_auto] md:px-10 lg:px-20">
           {/*
-           * Logo. Brand name and wordmark render unconditionally, never behind the `hydrated`
-           * gate. Both are compile-time constants (`BRAND.brokerage`, "CRIB"/"STOP"). There is no
-           * hydration uncertainty to placeholder over. PRD §6.1 requires Real Broker, LLC to read
-           * from the server-rendered HTML at its most prominent placement.
+           * Logo (#1048). `BrandLockup` renders unconditionally, never behind the `hydrated` gate:
+           * its text is compile-time constants, and PRD §6.1 needs the brokerage name in the
+           * server HTML.
            */}
-          <Link href="/" className="flex flex-shrink-0 items-center -ml-1 max-md:hidden">
-            <span className="flex items-center gap-0">
-              <span className="flex flex-col">
-                <span className="font-display text-xl font-bold leading-tight">
-                  {BRAND.brokerage}
-                </span>
-                <span className="flex gap-1 mt-1">
-                  <p className="font-display text-xs leading-tight">CRIB</p>
-                  <p className="font-display text-xs text-brand leading-tight">STOP</p>
-                </span>
-              </span>
-            </span>
-          </Link>
+          <div className="flex flex-shrink-0 items-center max-md:hidden">
+            <BrandLockup variant="nav" />
+          </div>
 
           {/* ── Center: tabs / compact pill ── */}
           <div className="absolute left-1/2 -translate-x-1/2 max-md:hidden w-[520px] max-w-[calc(100vw-160px)] h-16 flex items-center justify-center">
@@ -188,7 +177,7 @@ export default function NavBar() {
                   : undefined
               }
             >
-              <div className="relative flex items-center gap-8">
+              <div className="relative flex items-center gap-4 lg:gap-8">
                 {NAV_TABS.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = displayTab === tab.id;

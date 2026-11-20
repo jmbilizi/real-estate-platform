@@ -180,7 +180,9 @@ describe('HomePageContent', () => {
 
       for (const [query] of mockedSearchListings.mock.calls) {
         // Rows that dedupe against each other fetch 7 extra cards (#873).
-        const dedupes = ['near-you', 'just-listed', 'price-drops'].includes(rowKind(query));
+        const dedupes = ['near-you', 'just-listed', 'coming-soon', 'price-drops'].includes(
+          rowKind(query),
+        );
         expect(query).toMatchObject({ skipTotal: true, pageSize: dedupes ? 15 : 8 });
       }
     });
@@ -614,6 +616,7 @@ describe('HomePageContent', () => {
       nearYou: ReturnType<typeof cards>;
       justListed: ReturnType<typeof cards>;
       priceDrops?: ReturnType<typeof cards>;
+      comingSoon?: ReturnType<typeof cards>;
     }) =>
       mockedSearchListings.mockImplementation((q: Query) => {
         if (q.listingType !== 'sale') return Promise.resolve(envelope([aListingCardRow()]));
@@ -622,6 +625,8 @@ describe('HomePageContent', () => {
         if (kind === 'just-listed') return Promise.resolve(envelope(rows.justListed));
         if (kind === 'price-drops')
           return Promise.resolve(envelope(rows.priceDrops ?? cards(1, 15)));
+        if (kind === 'coming-soon' && rows.comingSoon)
+          return Promise.resolve(envelope(rows.comingSoon));
         return Promise.resolve(envelope([aListingCardRow()]));
       });
 
@@ -638,6 +643,20 @@ describe('HomePageContent', () => {
         expect(near.has(pid(n))).toBe(true);
         expect(newest.has(pid(n))).toBe(false);
       }
+    });
+
+    it('drops from the Coming Soon row every card an earlier row shows, even a short row (#1048)', async () => {
+      mockRegionFetch({ city: 'Baltimore', state: 'MD' });
+      mockSaleRows({ nearYou: cards(1, 15), justListed: cards(20, 34), comingSoon: cards(5, 9) });
+
+      renderWithClient(<HomePageContent />);
+
+      const title = 'Be first to see homes coming for sale';
+      await screen.findByText('Homes for sale near you');
+      await waitFor(() => expect(linksIn(title).has(pid(8))).toBe(true));
+      const soon = linksIn(title);
+      for (const n of [5, 6, 7]) expect(soon.has(pid(n))).toBe(false);
+      expect(soon.has(pid(9))).toBe(true);
     });
 
     it('keeps the original cards when the drop would leave fewer than 4', async () => {
@@ -1436,8 +1455,11 @@ describe('HomePageContent', () => {
       const title = await screen.findByText('Price drops on homes for sale');
       const hrefOf = () =>
         title.closest('section')?.querySelector('a[href*="priceReduced"]')?.getAttribute('href');
-      await waitFor(() => expect(hrefOf()).toContain('state=MD'));
-      expect(hrefOf()).not.toContain('city=');
+      // Wait for the widened link itself. The first link names the city, before the scope arrives.
+      await waitFor(() => {
+        expect(hrefOf()).toContain('state=MD');
+        expect(hrefOf()).not.toContain('city=');
+      });
     });
   });
 });

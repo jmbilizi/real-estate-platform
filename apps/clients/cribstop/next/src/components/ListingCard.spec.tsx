@@ -157,14 +157,13 @@ describe('ListingCard', () => {
     });
 
     /**
-     * jsdom computes no layout, so a wrap-then-clip bug (#121) does not fail under a plain
-     * presence assertion — both badges are in the DOM whether or not the row's CSS clips one of
-     * them. This pins the CSS itself: the row cannot wrap, so a second badge can never land on a
-     * row a fixed height then clips, and neither badge carries `truncate`, so neither label can be
-     * cut mid-word. `SampleBadge`/`SponsoredBadge` are sized to fit one row at the narrowest
-     * supported card (~155px) — measured in a real browser during #121's fix, see the PR.
+     * jsdom computes no layout, so a clip bug (#121) does not fail under a plain presence
+     * assertion. This pins the CSS itself. Since #1048 the labels sit on the photo with no fixed
+     * height: both edges are pinned and the row wraps upward, so on the narrowest card a second
+     * label goes above the first instead of past the photo edge, where the photo would clip it.
+     * Neither label carries `truncate`, and the row never sets a height or `overflow-hidden`.
      */
-    it('reserves one non-wrapping row for both labels, with neither truncated (#121)', () => {
+    it('keeps both labels inside the photo by wrapping, with neither truncated (#121, #1048)', () => {
       render(<ListingCard listing={aListingCardRow({ isSample: true, sponsored: true })} />);
 
       const sample = screen.getByText(/sample data/i);
@@ -172,9 +171,9 @@ describe('ListingCard', () => {
       const row = sample.parentElement;
 
       expect(row).toBe(sponsored.parentElement);
-      expect(row?.className).toContain('flex-nowrap');
-      expect(row?.className).not.toMatch(/flex-wrap\b/);
-      expect(row?.className).not.toContain('overflow-hidden');
+      expect(row?.className).toContain('inset-x-2');
+      expect(row?.className).toContain('flex-wrap-reverse');
+      expect(row?.className).not.toMatch(/\bh-\d|overflow-hidden/);
       expect(sample.className).not.toContain('truncate');
       expect(sponsored.className).not.toContain('truncate');
     });
@@ -521,7 +520,7 @@ describe('ListingCard', () => {
       const marketing = classes(withBoth.getByText('Price reduced'));
       const openHouseClasses = classes(withBoth.getByText('Open:').parentElement as HTMLElement);
 
-      for (const shared of ['max-w-[calc(100%-3.5rem)]', 'px-2', 'py-1', 'shadow-card', 'bg-white'])
+      for (const shared of ['max-w-full', 'px-2', 'py-1', 'shadow-card', 'bg-white'])
         expect([shared, marketing.has(shared), openHouseClasses.has(shared)]).toEqual([
           shared,
           true,
@@ -596,13 +595,13 @@ describe('ListingCard', () => {
       expect(attribution.textContent).toContain('Real Broker');
     });
 
-    it('keeps the label row first when a disclosure label applies, ahead of price', () => {
+    it('adds no info row for a disclosure label: it sits on the photo (#1048)', () => {
       const { container } = render(<ListingCard listing={aListingCardRow({ isSample: true })} />);
       const rows = infoRows(container);
 
-      expect(rows).toHaveLength(5);
-      expect(rows[0].textContent).toMatch(/sample data/i);
-      expect(rows[1].textContent).toContain('$');
+      expect(rows).toHaveLength(4);
+      expect(rows[0].textContent).toContain('$');
+      expect(container.querySelector('.listing-card-media')?.textContent).toMatch(/sample data/i);
     });
 
     it('puts save/share/more on the price line, not the attribution row', () => {
@@ -657,9 +656,7 @@ describe('ListingCard', () => {
      * because it is read as coverage.
      */
     const labelRow = (container: HTMLElement) =>
-      container
-        .querySelector('.listing-card-media')
-        ?.nextElementSibling?.querySelector(':scope > .h-5');
+      container.querySelector('.listing-card-media')?.querySelector(':scope > .bottom-2.inset-x-2');
 
     it('renders the disclosure-label row whenever a label applies', () => {
       for (const flags of [

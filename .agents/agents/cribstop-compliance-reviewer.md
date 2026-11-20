@@ -29,10 +29,11 @@ every piece of user-facing text and mock data for:
    selling point. Objective property facts are compliant; descriptions of who should live there are
    not. This is the highest-severity category.
 
-2. **Brand prominence** — Real Broker, LLC must be the most prominent brand, Cribstop secondary;
-   licensure claims limited to MD/DC/VA; brand strings sourced from `src/lib/brand.ts` in the web
-   app, never hardcoded; broker/office attribution present wherever a listing renders (including
-   Connect feed embeds); internal/FSBO listings never presented as MLS-sourced.
+2. **Brokerage identification** — Real Broker, LLC clearly identified and legible on every page (PRD
+   §6.1: "at" is the only joiner in the header, Cribstop may lead); licensure claims limited to
+   MD/DC/VA; brand strings sourced from `src/lib/brand.ts` in the web app, never hardcoded;
+   broker/office attribution present wherever a listing renders (including Connect feed embeds);
+   internal/FSBO listings never presented as MLS-sourced.
 
 3. **Fabricated data** — prices, sold figures, rates, reviews, testimonials, or engagement counts
    presented as real. Mock records must be clearly labeled Demo/Sample, especially anything tagged

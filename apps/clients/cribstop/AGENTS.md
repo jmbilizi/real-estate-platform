@@ -28,7 +28,7 @@ with a fixed date. A failure means a spec reads the real clock.
 
 - Route groups in `next/src/app`: `(pill-only)`, `(tabs-only)`, `(with-search)` control
   navbar/search variants; `@modal` is a parallel route for modals.
-- `next/src/lib/brand.ts` — centralized brand (Real Broker LLC prominence rule); propagate brand
+- `next/src/lib/brand.ts` — centralized brand (PRD §6.1 brokerage identification); propagate brand
   changes from here only, never hardcode.
 - `next/src/lib/types.ts` — **re-exports `@cribstop/property-contracts`; it does not declare listing
   shapes.** Add a field to the contract, never here. Search and detail are two different shapes:
@@ -117,9 +117,18 @@ with a fixed date. A failure means a spec reads the real clock.
     a `min-h-11`/`min-w-11` wrapper) so the control reads lighter without shrinking below 44px of
     actually-tappable space.
 - All listing/marketing microcopy must be Fair-Housing compliant and attribute Real Broker, LLC
-  (most prominent brand per Bright MLS rule).
+  legibly (PRD §6.1). The header is `BrandLockup`: "CRIBSTOP at Real Broker, LLC", Cribstop first
+  (stakeholder ruling 2026-11-18, #1048).
 - Follow existing component patterns and Tailwind config; no new dependencies unless clearly
   necessary.
+- **Listing cards are one height in any grid or carousel (#1048).** Never add a row to the info
+  block for one listing only. A price change is the photo badge ("Price cut $50K"), never a line
+  under the price and never a date. Sample and Sponsored labels sit on the photo, bottom left. The
+  "Price reduced" pill shows only when the card has no amount, so one fact shows once.
+- **A home row never repeats a card an earlier row shows (#873, #1048).** The Coming Soon rows drop
+  every repeat (`minCards: 0`) and hide when nothing is left.
+- **Header and content share one gutter:** `px-6 sm:px-10 lg:px-20` (`.section`). The header uses
+  `px-3` below `md` only, so the phone search pill keeps its width.
 - **Never collect a protected-class signal from the searcher.** The occupancy ("Who") picker was
   removed in #34 (age bands, plus a pets counter labelled "Bringing a service animal?" — age,
   familial status, family responsibilities and disability). Do not reintroduce any of it. The

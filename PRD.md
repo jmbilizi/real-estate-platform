@@ -4,9 +4,9 @@
 Messaging, Media, and Social Ecosystem**
 
 > Consumer brand: **Cribstop.com**. Brokered by **Real Broker, LLC** (licensed in **MD, DC, and
-> VA**). Listing data sourced from **Bright MLS** and internal/FSBO submissions. Per MLS rules, the
-> licensed brokerage is always the most prominent brand; "Cribstop" is the product/marketplace name
-> and is displayed as secondary.
+> VA**). Listing data sourced from **Bright MLS** and internal/FSBO submissions. The licensed
+> brokerage is clearly identified, legible and conspicuous on every page, and "Cribstop" leads the
+> header (Section 6.1).
 
 ---
 
@@ -632,11 +632,18 @@ Exact pricing and packaging per category to be specified.
 
 ## 6. Brand, Compliance & MLS Integration
 
-### 6.1 Brokerage & brand prominence (Bright MLS rule)
+### 6.1 Brokerage identification (state advertising rules, NAR 7.58)
 
-- The licensed brokerage **Real Broker, LLC** must always be the **most prominent** brand on the
-  site; the **Cribstop** product name is displayed smaller/secondary. Centralized in the web
-  client's `brand.ts` and propagated to navbar, footer, metadata, and page copy.
+- The licensed brokerage name **Real Broker, LLC** is clearly identified on every page, in a
+  legible, readily visible color and typeface (VA 18VAC135-20-190, NAR Policy 7.58, MD COMAR
+  09.11.02.01G). The header lockup reads "CRIBSTOP at Real Broker, LLC": "at" is the only word
+  between the names, with no image or symbol (MD G(5)), and the brokerage name is ink, semibold and
+  at least 12px. It is in the server HTML, in the first 25 percent of the page (MD G(4)).
+- **Cribstop** leads the header (stakeholder ruling 2026-11-18, #1048). No MD, DC or VA rule and no
+  NAR policy sets a size ratio between the two names. Research: #946. Broker review of the live site
+  stays open (#306).
+- Centralized in the web client's `brand.ts` and propagated to navbar, footer, metadata, and page
+  copy.
 - Licensure disclosed as **MD, DC, and VA**; jurisdiction claims must match actual licensure.
 
 ### 6.2 Bright MLS data integration
