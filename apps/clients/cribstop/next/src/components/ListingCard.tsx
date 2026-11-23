@@ -34,9 +34,7 @@ import { useToast } from '@/lib/useToast';
 import {
   describeCardPriceChange,
   describePriceChange,
-  formatCardPriceChange,
-  formatCardPriceChangeAmount,
-  formatCardPriceChangeDate,
+  formatCardPriceChangeBadge,
 } from '@/lib/price-change';
 import ListingImage from '@/components/listing/ListingImage';
 import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges';
@@ -179,14 +177,19 @@ export default function ListingCard({
   /**
    * The marketing pill shares the top-left stack with open house rather than contending for one
    * slot — it takes the top row when both are present. The required disclosure labels (sample,
-   * sponsored) are not in this rotation and never have been: they have their own guaranteed row
-   * below the image, because a marketing badge must never be able to displace a label that has to
-   * be shown.
+   * sponsored) are not in this rotation and never have been: they have their own slot on the
+   * photo, bottom left (#1048), because a marketing badge must never be able to displace a label
+   * that has to be shown.
    */
-  // #717. A visible increase and the "Price reduced" pill never show together.
+  /*
+   * #717, #1048. A known price change is the photo badge: "Price cut $50K" or "Price up $10K".
+   * It is not on the price line, where a narrow card truncated it, and it never adds a line. The
+   * "Price reduced" pill shows only when the card has no amount to show, so one fact shows once.
+   * The date is on the detail page.
+   */
   const priceChange = describePriceChange(listing, now);
   const marketingBadge =
-    listing.priceReduced && priceChange?.direction !== 'up'
+    listing.priceReduced && priceChange === null
       ? 'Price reduced'
       : listing.newConstruction
         ? 'New construction'
@@ -249,7 +252,7 @@ export default function ListingCard({
          * below the image, which was the only row those cards had and others did not, and it made
          * tiles in a grid different heights (#79a90aa).
          */}
-        {(isComingSoon || newListingBadge || marketingBadge || openHouse) && (
+        {(isComingSoon || newListingBadge || priceChange || marketingBadge || openHouse) && (
           <div
             /*
              * `inset-x-3`, not `left-3` alone: the children cap themselves with percentage widths,
@@ -308,13 +311,15 @@ export default function ListingCard({
               </span>
             )}
 
-            {marketingBadge && (
-              <span
-                // #433 moved the save control off the photo into the footer row below, but the
-                // cap stays: it is a general truncation margin now, kept at its old 3.5rem value
-                // rather than widened without a reason to.
-                className="max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card"
-              >
+            {priceChange && (
+              <span className="listing-card-change max-w-full truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card">
+                <span aria-hidden="true">{formatCardPriceChangeBadge(priceChange)}</span>
+                <span className="sr-only">{describeCardPriceChange(priceChange)}</span>
+              </span>
+            )}
+
+            {!priceChange && marketingBadge && (
+              <span className="max-w-full truncate rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-ink shadow-card">
                 {marketingBadge}
               </span>
             )}
@@ -349,7 +354,7 @@ export default function ListingCard({
                * distinction, and the brand fill pulled the eye off the photo. The bold `Open:`
                * label already separates them.
                */
-              <span className="max-w-[calc(100%-3.5rem)] truncate rounded-full bg-white px-2 py-1 text-[11px] font-medium text-ink shadow-card">
+              <span className="max-w-full truncate rounded-full bg-white px-2 py-1 text-[11px] font-medium text-ink shadow-card">
                 {/*
                  * Only the word is bold, so this reads as a label and its value rather than as one
                  * undifferentiated string — at 11px, a uniform weight makes "Open Sat 11am" scan as
@@ -368,6 +373,21 @@ export default function ListingCard({
             )}
           </div>
         )}
+
+        {/*
+         * #1048. Required labels (sample, sponsored) sit in their own slot on the photo, bottom
+         * left. No other badge uses this slot, so a marketing badge can never displace them. On
+         * the photo they cost no card height, so every card in a grid has the same height.
+         * Both edges are pinned and the row wraps upward (`flex-wrap-reverse`, no fixed height), so on
+         * the narrowest card (~141px) the second badge goes above the first instead of past the
+         * photo edge. Never `truncate` (#121): a clipped label is a dropped disclosure.
+         */}
+        {(listing.isSample || listing.sponsored) && (
+          <div className="absolute inset-x-2 bottom-2 flex flex-wrap-reverse items-center gap-1">
+            {listing.isSample && <SampleBadge />}
+            {listing.sponsored && <SponsoredBadge />}
+          </div>
+        )}
       </div>
 
       {/*
@@ -375,9 +395,8 @@ export default function ListingCard({
        * which optional rows a row happens to have. Each variable row keeps its box whether or not it
        * has content:
        *
-       * - the label row (sample / sponsored) — `h-5`, rendered only when a label applies. Always
-       *   reserving it left a blank 20px band under every Bright photo, which carries neither label.
-       *   A grid mixing labelled and unlabelled rows is therefore uneven by that one row.
+       * - the price line carries any price change inline (#1048), and the sample / sponsored labels
+       *   sit on the photo, so neither adds a row
        * - the stats line (absent for a parcel with unknown lot size, or an all-null dwelling) —
        *   `h-[18px]`, which is `caption-sm`'s line box; a slot sized for the old 12px text would
        *   clip the 13px it now holds
@@ -388,24 +407,6 @@ export default function ListingCard({
        * row that only some cards had.
        */}
       <div className="pt-1.5">
-        {/*
-         * Required labels get a guaranteed slot that is reserved even when empty. They are never
-         * what gets truncated or crowded out to make heights match — that is why they sit outside
-         * the image's single badge slot in the first place. If the row is visible, these are visible.
-         *
-         * `flex-nowrap`, not `flex-wrap`: on a narrow card, wrapping put the second badge on a row
-         * the fixed `h-5` then clipped out of existence (#121) — a required disclosure silently
-         * dropped. `SampleBadge`/`SponsoredBadge` are sized to fit one row at the narrowest
-         * supported card (~155px); this row must never gain `overflow-hidden` or `truncate`, or a
-         * disclosure can go invisible again the same way.
-         */}
-        {(listing.isSample || listing.sponsored) && (
-          <div className="mb-1 flex h-5 flex-nowrap items-center gap-1">
-            {listing.isSample && <SampleBadge />}
-            {listing.sponsored && <SponsoredBadge />}
-          </div>
-        )}
-
         {/*
          * #458. Price leads the body, with save/share/more beside it on the same line.
          * `title-md` (16px/600) on the figure, `body-md` (16/400) on the qualifiers. Was 14/600,
@@ -428,20 +429,6 @@ export default function ListingCard({
                 <span className={price.isWithheld ? 'text-ink-body' : 'font-semibold'}>
                   {price.text}
                 </span>
-                {/* #717. Wide cards: the change follows the price. Narrow cards: see the line below. */}
-                {priceChange && (
-                  <span className="listing-card-change-inline text-ink-body">
-                    {' '}
-                    <span aria-hidden="true">
-                      ({formatCardPriceChangeAmount(priceChange)}
-                      <span className="listing-card-change-date">
-                        {formatCardPriceChangeDate(priceChange)}
-                      </span>
-                      )
-                    </span>
-                    <span className="sr-only">{describeCardPriceChange(priceChange)}</span>
-                  </span>
-                )}
               </>
             )}
           </p>
@@ -489,19 +476,6 @@ export default function ListingCard({
             />
           </div>
         </div>
-
-        {/*
-         * #717. Narrow cards (every card below 640px, and any card under 260px) show the change on
-         * a line of its own. The arrow and the amount carry the meaning. The color is the neutral
-         * body color for a cut and an increase alike. The two change classes in globals.css show
-         * one of the two renders.
-         */}
-        {priceChange && (
-          <p className="listing-card-change-line mt-0.5 truncate text-[13px] leading-[18px] text-ink-body">
-            <span aria-hidden="true">{formatCardPriceChange(priceChange)}</span>
-            <span className="sr-only">{describeCardPriceChange(priceChange)}</span>
-          </p>
-        )}
 
         {/* Reserved whether or not there are stats to show, so the address never shifts up a row. */}
         <p className="mt-0.5 h-[18px] truncate text-[13px] leading-[18px] text-ink-muted">

@@ -1,4 +1,8 @@
-/** #946. The phone brand line reads "CRIBSTOP at Real Broker, LLC" (MD COMAR 09.11.02.01G). */
+/**
+ * #946, #1048. The phone brand line is the shared `BrandLockup`: "CRIBSTOP at Real Broker, LLC"
+ * (MD COMAR 09.11.02.01G). Cribstop leads (stakeholder ruling 2026-11-18). The brokerage stays
+ * legible: ink, semibold, at least 12px.
+ */
 jest.mock('./NavBar', () => ({ __esModule: true, default: () => <nav data-testid="navbar" /> }));
 
 import { renderToString } from 'react-dom/server';
@@ -7,33 +11,29 @@ import SiteHeader from './SiteHeader';
 import { BRAND } from '@/lib/brand';
 
 const line = () => screen.getByTestId('mobile-brand-line');
-const part = (text: string) => screen.getByText(text);
-const px = (el: HTMLElement) =>
-  el.className.includes('text-sm') ? 14 : el.className.includes('text-xs') ? 12 : NaN;
 
 describe('SiteHeader phone brand line', () => {
-  it('reads exactly "<siteName> at <brokerage>"', () => {
+  it('reads "<siteName> at <brokerage>" with real spaces', () => {
     render(<SiteHeader />);
-    const spans = Array.from(line().querySelectorAll('span')).map((s) => s.textContent);
-    expect(spans).toEqual([BRAND.siteName, 'at', 'Real Broker, LLC']);
+    const link = line().querySelector('a')!;
+    expect(link.textContent).toBe(`${BRAND.siteName} at ${BRAND.brokerage}`);
     expect(BRAND.brokerage).toBe('Real Broker, LLC');
-    expect(part(BRAND.siteName).className).toContain('uppercase');
+    expect(BRAND.siteWordmark.join('')).toBe(BRAND.siteName);
   });
 
-  it('joins the names with "at" and nothing else', () => {
+  it('joins the names with "at" and nothing else: no image or symbol', () => {
     render(<SiteHeader />);
     const link = line().querySelector('a')!;
     expect(link.querySelector('img, svg, picture')).toBeNull();
-    expect(Array.from(link.children).map((c) => c.tagName)).toEqual(['SPAN', 'SPAN', 'SPAN']);
+    expect(screen.getByText('at').tagName).toBe('SPAN');
   });
 
-  it('keeps the brokerage at 14px semibold ink, never smaller than the site name', () => {
+  it('keeps the brokerage legible: semibold ink, never below 12px', () => {
     render(<SiteHeader />);
-    expect(px(part(BRAND.brokerage))).toBe(14);
-    expect(px(part(BRAND.siteName))).toBe(12);
-    expect(px(part(BRAND.brokerage))).toBeGreaterThanOrEqual(px(part(BRAND.siteName)));
-    expect(part(BRAND.brokerage).className).toContain('font-semibold');
-    expect(part(BRAND.brokerage).className).toContain('text-ink');
+    const brokerage = screen.getByText(BRAND.brokerage);
+    expect(brokerage.className).toContain('font-semibold');
+    expect(brokerage.className).toContain('text-ink');
+    expect(brokerage.parentElement!.className).toMatch(/text-xs|text-\[13px\]|text-sm/);
   });
 
   it('is one link to / that keeps its visible name', () => {

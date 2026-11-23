@@ -84,8 +84,7 @@ export function ListingCardSkeleton() {
     // `listing-card-root` gives the action placeholders the same container width the card gap reads.
     <div aria-hidden="true" data-skeleton-card className="listing-card-root">
       <div className={`aspect-[4/3] overflow-hidden rounded-md ${FILL}`} />
-      {/* #458. Mirrors ListingCard: pt-1.5, no label row (it renders only when a label applies,
-          and a loading card has none). Order: price + three action dots, facts, address,
+      {/* #458. Mirrors ListingCard: pt-1.5. The disclosure labels sit on the photo (#1048). Order: price + three action dots, facts, address,
           attribution (avatar + name bar). */}
       <div className="pt-1.5">
         {/* Price line, with the save/share/more dots beside it — the loaded row never wraps to a
@@ -93,8 +92,6 @@ export function ListingCardSkeleton() {
         <div className="flex items-center gap-1">
           <p className="flex min-w-0 flex-1 items-center gap-2 text-base">
             <Bar className="w-2/5" />
-            {/* #717. A loaded wide card can carry a change after the price. */}
-            <Bar className="listing-card-change-inline w-1/5" />
           </p>
           <div className="listing-card-actions flex shrink-0 items-center">
             <span className={`h-4 w-4 rounded-full ${FILL}`} />
@@ -294,7 +291,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
           )}
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_380px] lg:items-start">
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
           <div className="space-y-4">
             {/*
              * Overview: badge row, price, address, then the stat tiles under a hairline. One panel,

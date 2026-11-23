@@ -10,7 +10,11 @@ import {
 } from '@/lib/feed-profile';
 
 /** Switch and clear button for the local feed profile (#833). Used in the footer and account page. */
-export default function PersonaliseSwitch() {
+/**
+ * `inline` (#1048) lays the switch and the clear button out on one row, for the footer bottom bar.
+ * Each control keeps a 44px hit area.
+ */
+export default function PersonaliseSwitch({ inline = false }: { inline?: boolean }) {
   // The server cannot read the opt-out, so the switch stays off and disabled until mounted.
   const [mounted, setMounted] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -30,12 +34,12 @@ export default function PersonaliseSwitch() {
   }, []);
 
   return (
-    <div className="space-y-2 text-sm">
-      <label className="flex min-h-[44px] items-center gap-3">
+    <div className={inline ? 'flex flex-wrap items-center gap-x-4 text-xs' : 'space-y-2 text-sm'}>
+      <label className={`flex min-h-[44px] items-center ${inline ? 'gap-2' : 'gap-3'}`}>
         <input
           type="checkbox"
           role="switch"
-          className="h-5 w-5 shrink-0"
+          className={inline ? 'h-4 w-4 shrink-0' : 'h-5 w-5 shrink-0'}
           checked={enabled}
           disabled={gpc || !mounted}
           aria-describedby={gpc ? 'personalise-gpc-note' : undefined}
@@ -64,7 +68,10 @@ export default function PersonaliseSwitch() {
       >
         Clear browsing history
       </button>
-      <p role="status" className="text-xs text-ink-muted">
+      <p
+        role="status"
+        className={inline ? 'empty:sr-only text-ink-muted' : 'text-xs text-ink-muted'}
+      >
         {cleared ? 'Browsing history cleared.' : ''}
       </p>
     </div>

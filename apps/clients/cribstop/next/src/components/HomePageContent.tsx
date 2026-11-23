@@ -85,12 +85,13 @@ function ShownProvider({ children }: { children: React.ReactNode }) {
 }
 
 /** Page order of the rows that dedupe. The earlier row keeps a card, the later row skips it. */
-const DEDUPE_ORDER = { nearYou: 0, justListed: 1, priceDrops: 2 } as const;
+const DEDUPE_ORDER = { nearYou: 0, justListed: 1, comingSoon: 1.5, priceDrops: 2 } as const;
 
 /**
  * Drops cards an earlier row on the page already shows. Until that row resolves nothing drops, so
  * a later row may show a repeat for a moment, then filters once. If the drop leaves fewer than
- * `MIN_DEDUPED_CARDS`, the row keeps its original cards.
+ * `minCards`, the row keeps its original cards. A row that passes `minCards: 0` never shows a
+ * repeat: it shows what is left, and an empty row hides (#1048).
  */
 function useDedupedListings(
   rowKey: string,
@@ -98,6 +99,7 @@ function useDedupedListings(
   order: number,
   listings: ListingCardRow[],
   loading: boolean,
+  minCards: number = MIN_DEDUPED_CARDS,
 ): ListingCardRow[] {
   const registry = useContext(ShownContext);
   const shown = registry?.shown;
@@ -113,8 +115,8 @@ function useDedupedListings(
     }
     if (earlier.size === 0) return listings;
     const kept = listings.filter((l) => !earlier.has(l.propertyId));
-    return kept.length >= MIN_DEDUPED_CARDS ? kept : listings;
-  }, [shown, rowKey, side, order, listings]);
+    return kept.length >= minCards ? kept : listings;
+  }, [shown, rowKey, side, order, listings, minCards]);
 
   const idsKey = deduped
     .slice(0, ROW_MAX)
@@ -750,14 +752,25 @@ function ComingSoonRow({
   useTargetDebug(`coming-soon-${side}`, place);
   // Scoped to the home target even with no subtitle to name it. While the target resolves, the
   // row waits. With no target at all, it shows the platform-wide row.
-  const { listings, total, loading, failed, refetch } = useCarouselListings(
+  const carousel = useCarouselListings(
     homeRowQuery.comingSoon(side, place),
     placeLoading,
     placeLoading,
     homeBatchId.comingSoon(side),
   );
+  const { loading, failed, refetch } = carousel;
+  // #1048. A Coming Soon home is also new and near the visitor, so the rows above can show it.
+  // This row drops those and never puts a repeat back.
+  const listings = useDedupedListings(
+    `coming-soon-${side}`,
+    side,
+    DEDUPE_ORDER.comingSoon,
+    carousel.listings,
+    loading,
+    0,
+  );
 
-  const show = loading || total > 0 || failed;
+  const show = loading || listings.length > 0 || failed;
   if (!show) return null;
 
   return (

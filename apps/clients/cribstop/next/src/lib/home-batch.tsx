@@ -60,7 +60,7 @@ export const homeRowQuery = {
     status: ['Coming Soon'],
     sort: 'newest',
     listingType: side,
-    pageSize: CAROUSEL_PAGE_SIZE,
+    pageSize: DEDUPE_PAGE_SIZE,
     city: place?.city,
     state: place?.state,
   }),
