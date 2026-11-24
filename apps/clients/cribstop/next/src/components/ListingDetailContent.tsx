@@ -49,6 +49,7 @@ import { useToast } from '@/lib/useToast';
 import { useRecordRecentlyViewed } from '@/lib/useRecordRecentlyViewed';
 import {
   DETAIL_ASIDE,
+  DETAIL_ASIDE_BLOCK,
   DETAIL_ASIDE_CARD,
   DETAIL_BODY,
   DETAIL_GALLERY,
@@ -540,7 +541,7 @@ export default function ListingDetailContent({
             {/* Open houses — the API sends only upcoming occurrences, so "upcoming" is never
                 re-derived here and an occurrence the API did not send is never displayed. */}
             {listing.openHouses.length > 0 && (
-              <div className={DETAIL_SECTION}>
+              <div className={DETAIL_ASIDE_BLOCK}>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">
                   {listing.openHouses.length > 1 ? 'Upcoming Open Houses' : 'Upcoming Open House'}
                 </p>

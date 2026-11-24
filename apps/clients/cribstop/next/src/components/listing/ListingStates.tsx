@@ -9,6 +9,7 @@
 
 import {
   DETAIL_ASIDE,
+  DETAIL_ASIDE_BLOCK,
   DETAIL_ASIDE_CARD,
   DETAIL_BODY,
   DETAIL_GALLERY,
@@ -460,7 +461,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
              * being wrong about it moves nothing.
              */}
             {(!layoutRow || (layoutRow.listingType === 'sale' && layoutRow.price !== null)) && (
-              <div className={DETAIL_SECTION} data-skeleton-section="mortgage">
+              <div className={DETAIL_ASIDE_BLOCK} data-skeleton-section="mortgage">
                 <p className="text-base font-semibold">
                   <Bar className="w-3/5" />
                 </p>

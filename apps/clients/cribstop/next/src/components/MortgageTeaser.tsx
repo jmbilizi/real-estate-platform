@@ -1,6 +1,6 @@
 'use client';
 
-import { DETAIL_SECTION } from '@/components/listing/detail-layout';
+import { DETAIL_ASIDE_BLOCK } from '@/components/listing/detail-layout';
 
 import { useId, useState } from 'react';
 import {
@@ -82,7 +82,7 @@ export default function MortgageTeaser({
     }`;
 
   return (
-    <div className={DETAIL_SECTION}>
+    <div className={DETAIL_ASIDE_BLOCK}>
       {/* `title-md` (16px/600) per DESIGN.md. */}
       <h3 className="text-base font-semibold text-ink">Estimated monthly payment</h3>
 
