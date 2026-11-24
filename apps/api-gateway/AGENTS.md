@@ -15,6 +15,10 @@ pnpm run nx:dotnet-build               # All .NET projects
 
 - Auth is **forwarded, not issued here**: cookie / opaque bearer / API key, validated by
   account-service (PRD §11.1). No JWT.
+- The Ingress basic auth reads `Authorization`. A caller outside the cluster sends the user's
+  credential in `X-User-Authorization`. `Middleware/UserAuthorizationHeaderMiddleware.cs` moves it
+  to `Authorization` before Ocelot. The local web app does this when `API_GATEWAY_BASIC_AUTH` is
+  set.
 - Swagger aggregation via MMLib.SwaggerForOcelot; routing config lives in `Configuration/`.
 - .NET conventions: Central Package Management (`Directory.Packages.props` at repo root) —
   versionless `<PackageReference>`; `.editorconfig` at root drives style; `pnpm run nx:reset` after

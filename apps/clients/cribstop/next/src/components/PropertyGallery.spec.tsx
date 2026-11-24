@@ -54,6 +54,36 @@ describe('PropertyGallery lightbox', () => {
   const openLightbox = () =>
     fireEvent.click(screen.getByRole('button', { name: 'View primary photo' }));
 
+  it('opens a slide from its filmstrip thumbnail and marks it current', () => {
+    render(<PropertyGallery media={photos} />);
+    openLightbox();
+    const dialog = screen.getByRole('dialog');
+    const thumbs = within(within(dialog).getByTestId('gallery-filmstrip')).getAllByRole('button');
+    expect(thumbs).toHaveLength(3);
+    expect(thumbs[0]).toHaveAttribute('aria-current', 'true');
+
+    fireEvent.click(thumbs[2]);
+
+    expect(within(dialog).getByText('3 / 3')).toBeInTheDocument();
+    expect(thumbs[2]).toHaveAttribute('aria-current', 'true');
+    expect(thumbs[0]).not.toHaveAttribute('aria-current');
+  });
+
+  it('changes the slide on a sideways swipe of the photo', () => {
+    render(<PropertyGallery media={photos} />);
+    openLightbox();
+    const dialog = screen.getByRole('dialog');
+    const stage = within(dialog).getByTestId('gallery-stage');
+
+    fireEvent.touchStart(stage, { touches: [{ clientX: 300 }] });
+    fireEvent.touchEnd(stage, { changedTouches: [{ clientX: 100 }] });
+    expect(within(dialog).getByText('2 / 3')).toBeInTheDocument();
+
+    fireEvent.touchStart(stage, { touches: [{ clientX: 100 }] });
+    fireEvent.touchEnd(stage, { changedTouches: [{ clientX: 300 }] });
+    expect(within(dialog).getByText('1 / 3')).toBeInTheDocument();
+  });
+
   it('shows the counter once and moves with the arrow keys', () => {
     render(<PropertyGallery media={photos} />);
     openLightbox();
@@ -81,7 +111,7 @@ describe('PropertyGallery lightbox', () => {
       /focus-visible:ring-brand/,
     );
     expect(within(dialog).getByRole('button', { name: 'Next' }).className).toMatch(
-      /rounded-full.*border-gray-300/,
+      /rounded-full.*bg-white/,
     );
     expect(within(dialog).getByTestId('gallery-caption').className).toMatch(/text-ink-muted/);
   });

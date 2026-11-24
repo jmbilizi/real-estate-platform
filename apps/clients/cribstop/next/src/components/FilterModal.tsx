@@ -6,6 +6,7 @@ import FilterModalContent from '@/components/FilterModalContent';
 import { deferUnlockScroll, lockScroll } from '@/lib/rootScrollLock';
 import { useOverlayOpen } from '@/lib/overlay';
 import { applyLandInterlock, filtersToSearchParams } from '@/lib/listing-filters';
+import DismissButton from '@/components/DismissButton';
 
 interface Props {
   onClose: () => void;
@@ -193,34 +194,23 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
       aria-label="Filters"
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div
+        className="absolute inset-0 animate-fade-in bg-black/40 motion-reduce:animate-none"
+        onClick={onClose}
+      />
 
       {/* Modal card */}
-      <div className="relative z-10 flex flex-col w-full sm:w-[95vw] sm:max-w-2xl max-h-[92dvh] rounded-t-3xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="relative z-10 flex max-h-[92dvh] w-full animate-fade-up flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl motion-reduce:animate-none sm:w-[95vw] sm:max-w-2xl sm:rounded-3xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border shrink-0">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-surface-border px-4 sm:px-6">
           {/* Spacer to keep title centered */}
-          <div className="h-11 w-11" />
-          <h2 className="font-semibold text-[15px] text-ink">Filters</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close filters"
-            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-alt transition shrink-0"
-          >
-            <svg
-              className="h-4 w-4 text-ink"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="h-8 w-8" />
+          <h2 className="text-lg font-semibold text-ink">Filters</h2>
+          <DismissButton onClick={onClose} label="Close filters" />
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
           <FilterModalContent
             value={draft}
             // The Lot/Land interlock is applied on every draft edit rather than in an effect, so it
@@ -231,19 +221,21 @@ export default function FilterModal({ onClose, filters, onChange, resultCount }:
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-border shrink-0 bg-white">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-surface-border bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
           <button
             onClick={() => setDraft(clearedDraft())}
             disabled={!hasFilters}
-            className={`text-sm font-semibold underline-offset-2 transition ${
-              hasFilters ? 'text-ink underline hover:text-ink/60' : 'text-ink-muted cursor-default'
+            className={`-ml-2 inline-flex min-h-11 items-center rounded-full px-2 text-[15px] font-semibold underline-offset-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+              hasFilters
+                ? 'text-ink underline hover:text-brand-700'
+                : 'cursor-default text-ink-subtle'
             }`}
           >
             Clear all
           </button>
           <button
             onClick={() => apply(draft)}
-            className="rounded-xl bg-ink px-6 py-3 text-sm font-bold text-white hover:bg-ink/85 active:scale-[0.98] transition"
+            className="btn-primary btn-press min-h-12 px-6 text-[15px] font-semibold"
           >
             {countIsCurrent
               ? `Show ${resultCount.toLocaleString()} home${resultCount !== 1 ? 's' : ''}`

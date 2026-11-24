@@ -34,12 +34,12 @@ export default function PersonaliseSwitch({ inline = false }: { inline?: boolean
   }, []);
 
   return (
-    <div className={inline ? 'flex flex-wrap items-center gap-x-4 text-xs' : 'space-y-2 text-sm'}>
+    <div className={inline ? 'flex flex-wrap items-center gap-x-4 text-xs' : 'text-[15px]'}>
       <label className={`flex min-h-[44px] items-center ${inline ? 'gap-2' : 'gap-3'}`}>
         <input
           type="checkbox"
           role="switch"
-          className={inline ? 'h-4 w-4 shrink-0' : 'h-5 w-5 shrink-0'}
+          className={`shrink-0 accent-brand ${inline ? 'h-4 w-4' : 'h-5 w-5'}`}
           checked={enabled}
           disabled={gpc || !mounted}
           aria-describedby={gpc ? 'personalise-gpc-note' : undefined}
@@ -55,7 +55,7 @@ export default function PersonaliseSwitch({ inline = false }: { inline?: boolean
       )}
       <button
         type="button"
-        className="min-h-[44px] text-left underline hover:text-ink"
+        className="min-h-[44px] text-left text-ink-muted underline underline-offset-2 hover:text-ink"
         onClick={() => {
           clearFeedProfile();
           try {

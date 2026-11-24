@@ -13,6 +13,8 @@ type Props = Pick<
   Partial<Pick<ListingDetailView, 'state' | 'timeZone'>> & {
     /** The property page's market status. 'Under Contract' has no consumer status (#349). */
     statusLabel?: string;
+    /** #716. The MLS market time ("On market 12 days"). It shows when the badge has no new age. */
+    marketTime?: string | null;
   };
 
 /** The status words on the photo. `Active` reads as the offer: for sale or for rent. */
@@ -26,7 +28,8 @@ function statusText(status: string, listingType: Props['listingType']): string {
  * #565. The listing status, top left of the photo gallery.
  *
  * The age shows only under 7 days (`formatNewListingAge`), and never for Coming Soon or Sold,
- * the same rules as the listing card.
+ * the same rules as the listing card. An older listing shows its MLS market time here instead.
+ * This badge is the one place the page states it.
  */
 export default function GalleryStatusBadge({
   status,
@@ -37,6 +40,7 @@ export default function GalleryStatusBadge({
   state,
   timeZone,
   statusLabel,
+  marketTime,
 }: Props) {
   const label = statusLabel ?? status;
   const isComingSoon = label === 'Coming Soon';
@@ -68,6 +72,12 @@ export default function GalleryStatusBadge({
         className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
       />
       {age ? `${text} · ${age}` : text}
+      {!age && showAge && marketTime && (
+        <>
+          {' · '}
+          <span data-testid="market-time">{marketTime}</span>
+        </>
+      )}
     </span>
   );
 }

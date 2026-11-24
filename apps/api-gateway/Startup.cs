@@ -188,6 +188,9 @@ namespace ApiGateway
             // Trust X-Forwarded-For only from TRUSTED_PROXY_NETWORKS. X-Real-IP is always derived (#143).
             app.UseTrustedClientIp(Configuration);
 
+            // A caller behind the Ingress basic auth sends the user's token in X-User-Authorization.
+            app.UseMiddleware<UserAuthorizationHeaderMiddleware>();
+
             app.UseCors("CORSPolicy");
 
             app.UseHttpsRedirection();

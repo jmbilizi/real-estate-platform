@@ -90,7 +90,25 @@ describe('fetchGateway basic auth header', () => {
     expect(headers.has('Authorization')).toBe(true);
   });
 
-  it('never overwrites a caller-supplied Authorization header (e.g. a user Bearer token)', async () => {
+  it('keeps a user Bearer token in Authorization when no basic auth is set', async () => {
+    setEnv({
+      API_GATEWAY_URL: 'http://localhost:8080',
+      API_GATEWAY_BASIC_AUTH: undefined,
+      NODE_ENV: 'test',
+    });
+
+    await fetchGateway('/account/profile', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer user-token' },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const headers = init.headers as Headers;
+    expect(headers.get('Authorization')).toBe('Bearer user-token');
+    expect(headers.has('X-User-Authorization')).toBe(false);
+  });
+
+  it('moves a user Bearer token to X-User-Authorization behind the ingress basic auth', async () => {
     setEnv({
       API_GATEWAY_URL: 'https://dev.cribstop.example.com',
       API_GATEWAY_BASIC_AUTH: 'devuser:sup3r-secret',
@@ -103,7 +121,10 @@ describe('fetchGateway basic auth header', () => {
     });
 
     const [, init] = fetchMock.mock.calls[0];
-    expect((init.headers as Headers).get('Authorization')).toBe('Bearer user-token');
+    const headers = init.headers as Headers;
+    const basic = `Basic ${Buffer.from('devuser:sup3r-secret').toString('base64')}`;
+    expect(headers.get('Authorization')).toBe(basic);
+    expect(headers.get('X-User-Authorization')).toBe('Bearer user-token');
   });
 
   it('refuses to send the header in production against a cluster-internal gateway URL', async () => {

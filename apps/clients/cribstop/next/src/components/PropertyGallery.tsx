@@ -17,7 +17,11 @@ import { useOverlayOpen } from '@/lib/overlay';
  */
 export type GalleryPhoto = Media & { caption?: string | null };
 
-const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+/** The shortest sideways drag that counts as a swipe in the full-screen viewer. */
+const SWIPE_MIN_PX = 48;
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 /**
  * What a full-screen viewer needs from the page. Focus moves to `initialRef` on open and returns
@@ -115,11 +119,11 @@ type GalleryTour = { src: string; href: string };
  */
 function TourFrame({ tour }: { tour: GalleryTour }) {
   return (
-    <div className="flex h-full w-full flex-col gap-2" data-testid="gallery-tour-slide">
+    <div className="flex h-full w-full flex-col gap-1 bg-white" data-testid="gallery-tour-slide">
       <iframe
         {...TOUR_FRAME_PROPS}
         src={tour.src}
-        className="min-h-0 w-full flex-1 rounded-xl border border-surface-border bg-white"
+        className="min-h-0 w-full flex-1 border-0 bg-white"
       />
       <a
         href={tour.href}
@@ -181,10 +185,37 @@ function PhotoViewer({
     },
   });
 
-  // A white ground like the rest of the site. Photos keep their own tones, and `object-contain`
-  // never crops the Bright MLS watermark. Nothing overlays the photo.
+  // The filmstrip keeps the current slide in view.
+  const stripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const current = stripRef.current?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (current && typeof current.scrollIntoView === 'function') {
+      current.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }
+  }, [index]);
+
+  // A sideways swipe on the photo changes the slide. The tour frame takes its own touches.
+  const touchStartX = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const from = touchStartX.current;
+    touchStartX.current = null;
+    const to = e.changedTouches[0]?.clientX;
+    if (from === null || to === undefined || count <= 1) return;
+    if (to - from > SWIPE_MIN_PX) prev();
+    else if (from - to > SWIPE_MIN_PX) next();
+  };
+
+  // A white ground like the rest of the site. The photo fills a frame: `object-contain` never
+  // crops the Bright MLS watermark, and the same photo, blurred, fills the space around it. The
+  // arrows sit at mid height, so they never cover the watermark at the bottom left.
   const ring =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2';
+  // White with a shadow, so the arrows show on any photo.
+  const arrow =
+    'absolute top-1/2 z-10 -translate-y-1/2 shadow-[0_2px_12px_rgba(0,0,0,0.3)] !text-ink hover:!text-brand-700 disabled:hidden';
 
   return (
     <div
@@ -194,12 +225,12 @@ function PhotoViewer({
       aria-label="Photo viewer"
       className="fixed inset-0 z-[100] flex flex-col bg-white text-ink"
     >
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))]">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pb-2 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-4">
         <button
           ref={closeRef}
           type="button"
           onClick={onClose}
-          className={`inline-flex min-h-11 items-center gap-1.5 justify-self-start rounded-full border border-surface-border bg-white px-4 text-sm font-medium text-ink shadow-card transition-colors hover:bg-surface-soft ${ring}`}
+          className={`inline-flex min-h-11 items-center gap-1.5 justify-self-start rounded-full border border-surface-border bg-white px-4 text-sm font-medium text-ink transition-colors hover:bg-surface-soft ${ring}`}
         >
           <svg
             className="h-4 w-4"
@@ -213,45 +244,94 @@ function PhotoViewer({
           </svg>
           Close
         </button>
-        <p className="text-sm font-medium tabular-nums">
+        <p className="text-[15px] font-semibold tabular-nums">
           {index + 1} / {count}
         </p>
         <div className="flex items-center justify-self-end gap-1.5">{actions}</div>
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 py-2">
-        {onTour ? (
-          <TourFrame tour={tour} />
-        ) : (
-          <ListingImage
-            media={photo}
-            fallbackAlt={altFallback}
-            className="max-h-full max-w-full rounded-xl object-contain"
-            backdrop={false}
-          />
-        )}
-      </div>
-      {/* Bottom bar: prev/next and the photo caption, when the photo has one. */}
-      <div className="flex items-center justify-between gap-3 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-        <ToolbarIconButton
-          label="Previous"
-          icon={BACK_ICON}
-          onClick={prev}
-          disabled={count <= 1}
-          className="disabled:opacity-30"
-        />
-        <p
-          className="min-w-0 flex-1 px-3 text-center text-sm text-ink-muted"
-          data-testid="gallery-caption"
+      <div className="relative min-h-0 flex-1 px-2 sm:px-4">
+        <div
+          className="relative h-full w-full overflow-hidden rounded-2xl bg-surface-soft"
+          data-testid="gallery-stage"
+          onTouchStart={onTour ? undefined : onTouchStart}
+          onTouchEnd={onTour ? undefined : onTouchEnd}
         >
-          {photo?.caption ?? ''}
-        </p>
-        <ToolbarIconButton
-          label="Next"
-          icon={FORWARD_ICON}
-          onClick={next}
-          disabled={count <= 1}
-          className="disabled:opacity-30"
-        />
+          {onTour ? (
+            <TourFrame tour={tour} />
+          ) : (
+            <ListingImage
+              media={photo}
+              fallbackAlt={altFallback}
+              className="h-full w-full object-contain"
+            />
+          )}
+          {/* After the slide in the DOM, so Tab leaves a tour frame for Previous. */}
+          <ToolbarIconButton
+            label="Previous"
+            icon={BACK_ICON}
+            surface="map"
+            onClick={prev}
+            disabled={count <= 1}
+            className={`${arrow} left-2 sm:left-4`}
+          />
+          <ToolbarIconButton
+            label="Next"
+            icon={FORWARD_ICON}
+            surface="map"
+            onClick={next}
+            disabled={count <= 1}
+            className={`${arrow} right-2 sm:right-4`}
+          />
+        </div>
+      </div>
+      {/* The photo caption, when the photo has one. The line keeps its height with none. */}
+      <p
+        className="min-h-9 px-4 pt-2 text-center text-sm text-ink-muted"
+        data-testid="gallery-caption"
+      >
+        {photo?.caption ?? ''}
+      </p>
+      {/* Filmstrip: one thumbnail for each slide. A tap opens that slide. */}
+      <div
+        ref={stripRef}
+        data-testid="gallery-filmstrip"
+        className="scrollbar-none flex shrink-0 gap-2 overflow-x-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 sm:px-4"
+      >
+        {Array.from({ length: count }, (_, slide) => {
+          const isTour = tour !== null && slide === tourSlide;
+          const thumb = isTour ? null : media[tour && slide > tourSlide ? slide - 1 : slide];
+          const current = slide === index;
+          return (
+            <button
+              type="button"
+              key={slide}
+              // Out of the Tab order: the arrow keys and the two arrows change the slide.
+              tabIndex={-1}
+              onClick={() => onIndex(() => slide)}
+              aria-label={isTour ? 'Go to the 3D tour' : `Go to slide ${slide + 1}`}
+              aria-current={current ? 'true' : undefined}
+              className={`relative h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-sm bg-surface-soft transition ${ring} ${
+                current
+                  ? 'ring-2 ring-brand ring-offset-2'
+                  : 'opacity-60 hover:opacity-100 focus-visible:opacity-100'
+              }`}
+            >
+              {thumb ? (
+                <img
+                  src={thumb.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-ink-muted">
+                  <TourIcon className="h-5 w-5" />
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -637,7 +717,7 @@ export default function PropertyGallery({
               setActiveIdx(0);
               setOpen(true);
             }}
-            className="absolute bottom-4 right-4 hidden items-center gap-1.5 rounded-lg border border-ink/15 bg-white px-4 py-2 text-sm font-medium text-ink shadow-card transition hover:shadow-card md:inline-flex"
+            className="absolute bottom-4 right-4 hidden items-center gap-1.5 min-h-11 rounded-full border border-surface-border bg-white px-4 text-sm font-medium text-ink shadow-card transition-colors hover:border-ink md:inline-flex"
           >
             <svg
               className="h-4 w-4"

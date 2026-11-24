@@ -13,6 +13,11 @@ import {
 } from '@/lib/api/looking-for';
 import { type DateRange, DateRangePanel } from '@/components/DateRangePanel';
 import { formatPrice } from '@/lib/format';
+import {
+  ACCOUNT_CARD_CLASSES,
+  ACCOUNT_CARD_HEADER_CLASSES,
+  ACCOUNT_CARD_TITLE_CLASSES,
+} from '@/components/account-card';
 
 const MAX_PLACES = 5;
 const ROOM_CHOICES = ['1', '2', '3', '4', '5'];
@@ -228,22 +233,16 @@ export default function LookingForSection() {
   };
 
   return (
-    <section
-      aria-labelledby="looking-for-heading"
-      className="mt-10 rounded-2xl border border-surface-border bg-white shadow-card"
-    >
-      <div className="flex items-center justify-between gap-3 border-b border-surface-border px-5 py-4">
-        <h2
-          id="looking-for-heading"
-          className="text-sm font-semibold uppercase tracking-wide text-ink-muted"
-        >
+    <section aria-labelledby="looking-for-heading" className={ACCOUNT_CARD_CLASSES}>
+      <div className={ACCOUNT_CARD_HEADER_CLASSES}>
+        <h2 id="looking-for-heading" className={ACCOUNT_CARD_TITLE_CLASSES}>
           What I&apos;m looking for
         </h2>
         {!draft && items && items.length < max && (
           <button
             type="button"
             onClick={() => setDraft(newDraft())}
-            className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-brand hover:bg-brand/10"
+            className="-mr-3 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-brand hover:bg-brand/10"
           >
             Add
           </button>
@@ -255,14 +254,14 @@ export default function LookingForSection() {
       </p>
 
       {error && (
-        <p role="alert" className="px-5 pt-3 text-sm text-red-600">
+        <p role="alert" className="px-5 pt-3 text-sm text-brand-700">
           {error}
         </p>
       )}
 
       {loadFailed && (
         <div className="px-5 py-4 text-sm">
-          <p role="alert" className="text-red-600">
+          <p role="alert" className="text-brand-700">
             Could not load your preferences.
           </p>
           <button type="button" onClick={load} className="mt-2 font-medium text-brand">
@@ -380,7 +379,7 @@ function LookingForForm({
     has(key) ? { 'aria-invalid': true, 'aria-describedby': `lf-err-${key}` } : {};
   const msg = (key: string) =>
     has(key) ? (
-      <p id={`lf-err-${key}`} className="mt-1 text-xs text-red-600">
+      <p id={`lf-err-${key}`} className="mt-1 text-xs text-brand-700">
         {messageFor(key)}
       </p>
     ) : null;
@@ -567,7 +566,7 @@ function LookingForForm({
               <label
                 key={type}
                 className={`inline-flex min-h-11 cursor-pointer items-center rounded-full border px-3.5 text-sm ${
-                  on ? 'border-ink bg-ink text-white' : 'border-surface-border text-ink'
+                  on ? 'border-brand bg-brand-50 text-brand-700' : 'border-surface-border text-ink'
                 }`}
               >
                 <input
@@ -614,12 +613,12 @@ function LookingForForm({
           )}
         </div>
         {expired && (
-          <p role="alert" className="text-xs text-red-600">
+          <p role="alert" className="text-xs text-brand-700">
             This date has passed. Choose a new date or clear it before you save.
           </p>
         )}
         {!expired && has(whenKey) && (
-          <p id={`lf-err-${whenKey}`} className="text-xs text-red-600">
+          <p id={`lf-err-${whenKey}`} className="text-xs text-brand-700">
             {messageFor(whenKey)}
           </p>
         )}
