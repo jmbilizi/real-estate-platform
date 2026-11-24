@@ -1,5 +1,8 @@
 const GATEWAY_TIMEOUT_MS = 30_000;
 
+/** Carries the user's credential past the ingress basic auth. The gateway owns the name. */
+const USER_AUTHORIZATION_HEADER = 'X-User-Authorization';
+
 /**
  * Returns the base URL of the API gateway.
  *
@@ -82,12 +85,13 @@ export async function fetchGateway(
   const url = `${baseUrl}${path}`;
   const headers = new Headers(init.headers);
 
-  // The ingress basic auth and the backend's own Bearer auth share the one Authorization header,
-  // so a caller that already sets it (account routes forwarding a user's token) wins. Those calls
-  // are out of scope for the dev-gateway override; only unauthenticated loaders use it today.
-  if (!headers.has('Authorization')) {
-    const authHeader = resolveBasicAuthHeader(baseUrl);
-    if (authHeader) headers.set('Authorization', authHeader);
+  // The ingress basic auth reads Authorization, so a user's Bearer token cannot share it. The token
+  // moves to X-User-Authorization and the gateway restores it (UserAuthorizationHeaderMiddleware).
+  const basicAuth = resolveBasicAuthHeader(baseUrl);
+  if (basicAuth) {
+    const userAuth = headers.get('Authorization');
+    if (userAuth) headers.set(USER_AUTHORIZATION_HEADER, userAuth);
+    headers.set('Authorization', basicAuth);
   }
 
   const controller = new AbortController();
