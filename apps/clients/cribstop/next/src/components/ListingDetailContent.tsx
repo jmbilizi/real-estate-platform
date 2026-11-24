@@ -258,7 +258,7 @@ export default function ListingDetailContent({
        */}
       <div
         ref={headerRef}
-        className="listing-header flex-shrink-0 flex items-center gap-3 border-b border-surface-border px-6 sm:px-8 pt-4 pb-3 bg-white"
+        className="listing-header flex-shrink-0 flex items-center gap-3 border-b border-surface-border page-gutter pt-4 pb-3 bg-white"
       >
         {onClose && <ToolbarIconButton label="Go back" icon={BACK_ICON} onClick={onClose} />}
         {/* The price and address repeat the overview. The stakeholder accepts this one exception. */}
@@ -276,7 +276,7 @@ export default function ListingDetailContent({
       {/* Scrollable body — `surface-alt` is the canvas that makes a white panel read as a panel. */}
       <div
         data-scroll-body
-        className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt px-6 sm:px-8 py-4 pb-8"
+        className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt page-gutter py-4 pb-8"
       >
         {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
         <div className={`overflow-hidden ${PANEL}`}>

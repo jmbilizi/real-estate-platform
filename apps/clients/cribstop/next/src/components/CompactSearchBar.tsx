@@ -3,6 +3,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react';
 import DismissButton from '@/components/DismissButton';
 import { usePathname, useRouter } from 'next/navigation';
+import { parseSearchPath } from '@cribstop/property-contracts';
 import { motion } from 'motion/react';
 import { useApp } from '@/lib/context';
 import { enrichNearbyLocal } from '@/lib/nearby-enrich';
@@ -278,22 +279,19 @@ const DOCK_LARGE_STYLE: React.CSSProperties = {
 const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
   pill: {
     position: 'fixed',
-    top: 7,
-    left: 0,
-    right: 0,
-    marginLeft: 'auto',
-    marginRight: 'auto',
-    width: 'min(480px, calc(100vw - 160px))',
+    // Over `NavBar`'s `.header-pill-slot`: the two read the same variables (globals.css).
+    top: 10,
+    left: 'var(--header-pill-left)',
+    width: 'var(--header-pill-w)',
     zIndex: Z_LAYERS.searchBar,
   },
+  // The same top and left as the pill: only the width changes, so the bar grows to the right
+  // in its place. `.header-search-dock` (globals.css) eases that width.
   expanded: {
     position: 'fixed',
-    top: 'var(--navbar-h)',
-    left: 0,
-    right: 0,
-    marginLeft: 'auto',
-    marginRight: 'auto',
-    width: 'min(768px, calc(100vw - 48px))',
+    top: 10,
+    left: 'var(--header-pill-left)',
+    width: 'min(640px, calc(100vw - var(--header-pill-left) - 16px))',
     zIndex: Z_LAYERS.searchBar,
   },
 };
@@ -321,7 +319,10 @@ const DOCK_STYLE: Record<'pill' | 'expanded', React.CSSProperties> = {
 // no padding/border of its own, so it would COLLAPSE out through the wrapper —
 // pushing the whole search row down 16px in 'large' while the docked states
 // (out of flow, wrapper clipped) stayed put: a 16px jump on every swap.
-const DOCK_LARGE_CLASS = 'mx-auto w-[calc(100%_-_2rem)] max-w-3xl lg:max-w-4xl xl:max-w-5xl';
+/** The "Where" label, shown as the placeholder of the one-line header search field. */
+const WHERE_PLACEHOLDER = 'Where?';
+
+const DOCK_LARGE_CLASS = 'mx-auto w-[calc(100%_-_3rem)] max-w-5xl lg:w-[calc(100%_-_4rem)]';
 
 export default function CompactSearchBar({
   mobileSheetMode = false,
@@ -361,7 +362,10 @@ export default function CompactSearchBar({
   // read as garbled/flickering. Reading scroll state directly and picking ONE
   // of three layouts to render removes the duplication at the root instead of
   // re-synchronizing it.
-  const rawMode: DockMode = !showHeaderPill ? 'large' : headerExpanded ? 'expanded' : 'pill';
+  // `alwaysPill` decides alone: the store's `showHeaderPill` is false until `ScrollSentinel`'s
+  // effect runs, and reading it here painted one frame of the in-page bar before the pill.
+  const docked = alwaysPill || showHeaderPill;
+  const rawMode: DockMode = !docked ? 'large' : headerExpanded ? 'expanded' : 'pill';
   // Every swap renders immediately. The grow used to be held back a full
   // DOCK_TRANSITION so the in-page row could finish reopening first and the bar
   // would have a settled box to grow into — a requirement of measuring geometry,
@@ -418,7 +422,10 @@ export default function CompactSearchBar({
   // projected even once the prop goes false, so its scale ends up multiplying with
   // the crossfade's: measured as the growing bar dipping to 356px, narrower than
   // the 480px pill it was supposed to be growing out of.
-  const framerLayout = !morphing && !isMorphTransition && !isMorphPair(mode, rawMode);
+  // On `alwaysPill` pages a CSS width transition does pill <-> expanded (`.header-search-dock`).
+  // Framer's `layout` scales the box, which squeezes the text while it moves.
+  const framerLayout =
+    !alwaysPill && !morphing && !isMorphTransition && !isMorphPair(mode, rawMode);
 
   useLayoutEffect(() => {
     const prev = prevModeRef.current;
@@ -505,6 +512,9 @@ export default function CompactSearchBar({
     setActivePanel(panel);
     if (alwaysPill) {
       setHeaderExpanded(true);
+      if (panel === 'where') {
+        setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
+      }
     } else {
       // Instant, not smooth — matches the rest of this component's "hard cut
       // at the threshold, eased shape tween provides the motion" philosophy
@@ -857,7 +867,8 @@ export default function CompactSearchBar({
         !dropdownRef.current.contains(e.target as Node)
       ) {
         setIsDropdownOpen(false);
-        swallowNextClickRef.current = true;
+        // A click on another field of the bar is not an outside click: it must reach that field.
+        if (!panelRef.current?.contains(e.target as Node)) swallowNextClickRef.current = true;
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -877,6 +888,12 @@ export default function CompactSearchBar({
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [activePanel]);
+
+  // The header search stays open only while one of its panels is open. An outside click, Escape
+  // or a completed search closes the panel, and the bar then shrinks back to the pill.
+  useEffect(() => {
+    if (alwaysPill && headerExpanded && !activePanel) setHeaderExpanded(false);
+  }, [alwaysPill, headerExpanded, activePanel, setHeaderExpanded]);
 
   // Consumes the click that follows an outside-mousedown close, above. A capture-phase listener
   // on `document` runs before the click ever reaches its target, so stopping it here means the
@@ -1077,72 +1094,101 @@ export default function CompactSearchBar({
     );
   }
 
-  function renderWherePanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
+  /**
+   * The location input. The in-page bar and the phone sheet show it in the "Where" panel. The
+   * header search shows it in the bar itself (`inBar`), where its placeholder is the field label.
+   */
+  function renderWhereInput(className: string, inBar = false) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={location}
+        autoComplete="off"
+        placeholder={inBar ? WHERE_PLACEHOLDER : 'Search city, zip, neighborhood, or address'}
+        aria-label="Where"
+        className={className}
+        onChange={(e) => {
+          const val = e.target.value;
+          isCommittedSelectionRef.current = false;
+          setIsCommittedSelection(false);
+          setLocationNotFound(false);
+          if (typeof setLocation === 'function') setLocation(val);
+          setSelectedSuggestion(null);
+          suggestionDebouncer.cancel();
+          setSuggestionsUnavailable(false);
+          if (!val.trim() || val.trim().length < 2) {
+            setSuggestions([]);
+            setIsDropdownOpen(true);
+            return;
+          }
+          setLoadingSuggestions(true);
+          suggestionDebouncer.maybeExecute(val);
+        }}
+        onKeyDown={
+          inBar
+            ? (e) => {
+                if (e.key !== 'Enter') return;
+                // Suggestions still loading: search when they arrive, not on a second Enter.
+                if (loadingSuggestions) pendingEnterRef.current = true;
+                else handleSearch({ preventDefault: () => {} } as any);
+              }
+            : undefined
+        }
+        onFocus={async () => {
+          if (inBar) setActivePanel('where');
+          setIsDropdownOpen(true);
+          if (!location.trim()) await handleFetchNearbyLocations();
+        }}
+      />
+    );
+  }
+
+  function renderWherePanel(
+    highlightRef: React.RefObject<HTMLDivElement | null>,
+    inputInBar = false,
+  ) {
     return (
       <div
         className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border overflow-hidden"
         style={{ top: 'calc(100% + 6px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="p-4">
-          <div className="relative">
-            <input
-              ref={inputRef}
-              type="text"
-              value={location}
-              autoComplete="off"
-              placeholder="Search city, zip, neighborhood, or address"
-              className="w-full rounded-full border border-surface-border bg-white px-5 py-3 text-[15px] focus:outline-none focus:border-surface-border-strong focus:ring-1 focus:ring-surface-border-strong pr-10"
-              onChange={(e) => {
-                const val = e.target.value;
-                isCommittedSelectionRef.current = false;
-                setIsCommittedSelection(false);
-                setLocationNotFound(false);
-                if (typeof setLocation === 'function') setLocation(val);
-                setSelectedSuggestion(null);
-                suggestionDebouncer.cancel();
-                setSuggestionsUnavailable(false);
-                if (!val.trim() || val.trim().length < 2) {
-                  setSuggestions([]);
-                  setIsDropdownOpen(true);
-                  return;
-                }
-                setLoadingSuggestions(true);
-                suggestionDebouncer.maybeExecute(val);
-              }}
-              onFocus={async () => {
-                setIsDropdownOpen(true);
-                if (!location.trim()) await handleFetchNearbyLocations();
-              }}
-            />
-            {location && (
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  if (typeof setLocation === 'function') setLocation('');
-                  setSelectedSuggestion(null);
-                  isCommittedSelectionRef.current = false;
-                  setIsCommittedSelection(false);
-                  setLocationNotFound(false);
-                  setSuggestions([]);
-                  inputRef.current?.focus({ preventScroll: true });
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
-                aria-label="Clear location"
-              >
-                <svg
-                  className="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
+        <div className={inputInBar ? (locationNotFound ? 'px-4 pt-3' : 'hidden') : 'p-4'}>
+          {!inputInBar && (
+            <div className="relative">
+              {renderWhereInput(
+                'w-full rounded-full border border-surface-border bg-white px-5 py-3 text-[15px] focus:outline-none focus:border-surface-border-strong focus:ring-1 focus:ring-surface-border-strong pr-10',
+              )}
+              {location && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    if (typeof setLocation === 'function') setLocation('');
+                    setSelectedSuggestion(null);
+                    isCommittedSelectionRef.current = false;
+                    setIsCommittedSelection(false);
+                    setLocationNotFound(false);
+                    setSuggestions([]);
+                    inputRef.current?.focus({ preventScroll: true });
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
+                  aria-label="Clear location"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
+                  <svg
+                    className="h-3 w-3"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
           {locationNotFound && (
             <p className="mt-2 px-1 text-[13px] text-red-600" role="alert">
               We could not find that location. Try a different search.
@@ -1159,7 +1205,7 @@ export default function CompactSearchBar({
             className="absolute inset-x-0 bg-surface-soft pointer-events-none"
             style={{ top: 0, height: 0, opacity: 0 }}
           />
-          <hr className="border-t border-surface-border mb-1" />
+          {!inputInBar && <hr className="border-t border-surface-border mb-1" />}
           {(location.trim().length < 2 || suggestions.length === 0) && (
             <button
               type="button"
@@ -1483,6 +1529,14 @@ export default function CompactSearchBar({
     if (mode === 'expanded') setHeaderExpanded(false);
   };
 
+  // Enter in the header search field while suggestions load: run the search when they arrive.
+  const pendingEnterRef = useRef(false);
+  useEffect(() => {
+    if (loadingSuggestions || !pendingEnterRef.current) return;
+    pendingEnterRef.current = false;
+    handleSearch({ preventDefault: () => {} } as any);
+  }, [loadingSuggestions]);
+
   // Always trigger geolocation and update location input
   const handleGeolocate = (): Promise<void> => {
     // Cancel any previous in-flight geolocate fetch
@@ -1717,7 +1771,7 @@ export default function CompactSearchBar({
                   )}
                 </div>
               ) : (
-                <p className="text-[14px] text-ink-muted mt-1 pb-2">{location || 'Anywhere'}</p>
+                <p className="text-sm text-ink-muted mt-1 pb-2">{location || 'Anywhere'}</p>
               )}
             </div>
 
@@ -1976,7 +2030,7 @@ export default function CompactSearchBar({
               {activePanel === 'what' ? (
                 <div className="mt-3">{renderWhatPanelContent(whatHighlightRef)}</div>
               ) : (
-                <p className="text-[14px] text-ink-muted mt-1">
+                <p className="text-sm text-ink-muted mt-1">
                   {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
                 </p>
               )}
@@ -1988,13 +2042,13 @@ export default function CompactSearchBar({
         <div className="flex-shrink-0 flex items-center justify-between px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white border-t border-surface-border shadow-card">
           <button
             onClick={handleClearAll}
-            className="text-[14px] font-semibold text-ink underline underline-offset-2"
+            className="text-sm font-semibold text-ink underline underline-offset-2"
           >
             Clear all
           </button>
           <button
             onClick={handleSheetSearch}
-            className="flex items-center gap-2 h-12 px-7 rounded-full bg-brand text-white font-semibold text-[14px] hover:bg-brand/90 active:scale-95 transition-transform shadow-md"
+            className="flex items-center gap-2 h-12 px-7 rounded-full bg-brand text-white font-semibold text-sm hover:bg-brand/90 active:scale-95 transition-transform shadow-md"
           >
             <svg
               className="h-4 w-4"
@@ -2020,11 +2074,18 @@ export default function CompactSearchBar({
 
   let content: React.ReactNode;
 
+  // The header field before hydration. Only a search path seeds the location after mount
+  // (`SearchExperience` reads it from the URL), so only there is "Where" unknown and drawn as a
+  // bar. On every other route the server value is the settled one, and so is the listing type.
+  // The same rule as `MobileSearchPill`.
+  const wherePending = !hydrated && parseSearchPath(pathname.split('/')) !== null;
+
   if (mode === 'pill') {
+    // One line, as a search field: the "Where" label is the placeholder, not a second line.
     content = (
       <div
         {...{ [SHELL_ATTR]: '' }}
-        className={`flex w-full items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden ${
+        className={`flex h-11 w-full items-center overflow-hidden rounded-full border border-surface-border bg-surface-alt transition-colors hover:bg-white ${
           morphing ? fieldsInClass : ''
         }`}
       >
@@ -2033,18 +2094,51 @@ export default function CompactSearchBar({
           type="button"
           onClick={() => openFromPill('where')}
           aria-label="Where — edit search"
-          className="flex-1 flex flex-col justify-center px-4 py-2 text-left min-w-0 hover:bg-surface-alt/60 transition-colors"
+          className="flex h-full min-w-0 flex-1 items-center gap-2.5 pl-4 pr-3 text-left"
         >
-          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            <SkeletonText loading={!hydrated} width="w-10">
-              Where
-            </SkeletonText>
-          </span>
+          {busy ? (
+            <svg
+              role="status"
+              aria-label="Searching"
+              className="h-5 w-5 flex-shrink-0 animate-spin text-brand"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              />
+            </svg>
+          ) : (
+            <svg
+              aria-hidden="true"
+              className="h-5 w-5 flex-shrink-0 text-ink-muted"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          )}
           <span
-            className={`text-[13px] leading-snug truncate ${location ? 'text-ink font-bold' : 'text-ink-muted'}`}
+            className={`min-w-0 flex-1 truncate text-[15px] leading-none ${location ? 'font-semibold text-ink' : 'text-ink-muted'}`}
           >
-            <SkeletonText loading={!hydrated} width="w-20">
-              {location || 'Anywhere'}
+            <SkeletonText loading={wherePending} width="w-20">
+              {location || WHERE_PLACEHOLDER}
             </SkeletonText>
           </span>
         </button>
@@ -2054,40 +2148,28 @@ export default function CompactSearchBar({
           type="button"
           onClick={() => openFromPill('what')}
           aria-label="What — edit search"
-          className="flex flex-col justify-center px-4 py-2 text-left whitespace-nowrap flex-shrink-0 hover:bg-surface-alt/60 transition-colors"
+          className="flex h-full flex-shrink-0 items-center whitespace-nowrap pl-3 pr-4 text-[15px] font-semibold leading-none text-ink"
         >
-          <span className="text-[10px] font-medium text-ink-muted leading-none mb-1 select-none">
-            <SkeletonText loading={!hydrated} width="w-9">
-              What
-            </SkeletonText>
-          </span>
-          <span className="text-[13px] text-ink font-bold leading-snug flex items-center">
-            <SkeletonText loading={!hydrated} width="w-14">
-              {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
-            </SkeletonText>
-          </span>
+          {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
         </button>
-        {/* Search icon button — grows back (or expands) the same as a field
-            click, then either submits directly (valid location) or lands on
-            the 'where' panel already open (handleSearch's existing fallback). */}
-        <div className="flex items-center pr-1.5 pl-1">
-          {!hydrated && <SkeletonBlock className="h-9 w-9 rounded-full" />}
-          <button
-            type="button"
-            aria-label="Search"
-            onClick={() => {
-              openFromPill('where');
-              handleSearch({ preventDefault: () => {} } as any);
-            }}
-            className={`h-9 w-9 items-center justify-center rounded-full bg-brand text-white ${
-              hydrated ? 'flex content-resolved' : 'hidden'
-            }`}
+      </div>
+    );
+  } else if (mode === 'expanded') {
+    // --- expanded: the pill, grown to the right in the header; the panels open below it ---
+    content = (
+      <div className="relative w-full" ref={panelRef}>
+        {/* 4-slot pill */}
+        <div className="relative flex h-11 items-center rounded-full bg-white shadow-card ring-1 ring-surface-border-strong">
+          {/* WHERE: the input itself. Its placeholder is the label. */}
+          <div
+            className={`relative flex h-full min-w-0 flex-1 items-center gap-2.5 pl-4 pr-2 ${whereShake ? 'where-shake' : ''}`}
           >
             <svg
-              className="h-[15px] w-[15px]"
+              aria-hidden="true"
+              className="h-5 w-5 flex-shrink-0 text-ink-muted"
               fill="none"
               stroke="currentColor"
-              strokeWidth={2.5}
+              strokeWidth={2}
               viewBox="0 0 24 24"
             >
               <path
@@ -2096,95 +2178,24 @@ export default function CompactSearchBar({
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
-          </button>
-        </div>
-      </div>
-    );
-  } else if (mode === 'expanded') {
-    // --- expanded: full 4-slot bar shown as a dropdown below the header -----
-    content = (
-      <div className="relative w-full" ref={panelRef}>
-        {/* 4-slot pill */}
-        <div className="relative flex items-center rounded-full bg-white shadow-card ring-1 ring-surface-border">
-          {activePanel && (
-            <div
-              className={`absolute rounded-full bg-surface-soft pointer-events-none ${SLOT_IN_CLASS}`}
-              style={{
-                ...(() => {
-                  const s = getIndicatorStyle();
-                  const left = typeof s.left === 'number' ? s.left + 1 : s.left;
-                  const width = typeof s.width === 'number' ? s.width - 2 : s.width;
-                  return { ...s, left, width };
-                })(),
-                top: '1px',
-                bottom: '1px',
-                transition:
-                  'left 0.22s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1)',
-              }}
-            />
-          )}
-          {/* WHERE */}
-          <div
-            className={`relative w-3/5 sm:w-2/3 shrink-0 min-w-0 ${whereShake ? 'where-shake' : ''}`}
-          >
-            <button
-              ref={whereRef}
-              type="button"
-              onClick={() => {
-                setActivePanel('where');
-                setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
-              }}
-              className={`relative z-[1] w-full flex flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 min-w-0 focus:outline-none ${
-                activePanel !== 'where' ? 'hover:bg-surface-alt/60' : ''
-              }`}
-            >
-              <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-                Where
-              </span>
-              <span
-                className={`text-[11px] sm:text-[13px] leading-snug truncate pr-5 ${location ? 'text-ink font-bold' : 'text-ink-subtle'}`}
-              >
-                {isGeolocating ? (
-                  <span className="flex items-center gap-1.5 text-ink-muted">
-                    <svg
-                      className="h-3.5 w-3.5 animate-spin flex-shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                      />
-                    </svg>
-                    Detecting location…
-                  </span>
-                ) : (
-                  location || 'Anywhere'
-                )}
-              </span>
-            </button>
-            {location && activePanel === 'where' && (
+            {renderWhereInput(
+              'h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-0',
+              true,
+            )}
+            {location && (
               <button
                 type="button"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
                   if (typeof setLocation === 'function') setLocation('');
                   setSelectedSuggestion(null);
                   isCommittedSelectionRef.current = false;
                   setIsCommittedSelection(false);
+                  setLocationNotFound(false);
                   setSuggestions([]);
+                  inputRef.current?.focus({ preventScroll: true });
                 }}
-                className="absolute right-2 top-1/2 z-[2] -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full hover:bg-black/[0.08] text-ink/50 hover:text-ink transition-colors"
+                className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-ink/50 transition-colors hover:bg-black/[0.08] hover:text-ink"
                 aria-label="Clear location"
               >
                 <svg
@@ -2199,27 +2210,21 @@ export default function CompactSearchBar({
               </button>
             )}
           </div>
-          <div
-            className={`h-6 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] transition-opacity ${activePanel === 'where' || activePanel === 'what' ? 'opacity-0' : ''}`}
-          />
+          <div className="h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)]" />
           {/* WHAT */}
           <button
             ref={whatRef}
             type="button"
             onClick={() => setActivePanel('what')}
-            className={`flex relative z-[1] flex-1 min-w-0 flex-col justify-center text-left px-3 sm:px-4 py-2.5 sm:py-3.5 rounded-full transition-colors duration-150 focus:outline-none ${
-              activePanel !== 'what' ? 'hover:bg-surface-alt/60' : ''
+            aria-label="What"
+            className={`relative z-[1] flex h-full flex-shrink-0 items-center whitespace-nowrap rounded-full pl-3 pr-4 text-left text-[15px] font-semibold leading-none text-ink transition-colors duration-150 focus:outline-none ${
+              activePanel === 'what' ? 'bg-surface-soft' : 'hover:bg-surface-alt/60'
             }`}
           >
-            <span className="text-[11px] sm:text-[12px] font-medium text-ink-muted leading-none mb-1">
-              What
-            </span>
-            <span className="text-[11px] sm:text-[13px] text-ink font-bold leading-snug truncate">
-              {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
-            </span>
+            {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
           </button>
           {/* Search */}
-          <div ref={searchBtnRef} className="flex items-center pr-1.5 pl-1 flex-shrink-0">
+          <div ref={searchBtnRef} className="flex flex-shrink-0 items-center pl-1 pr-1">
             <button
               type="button"
               disabled={busy}
@@ -2227,7 +2232,7 @@ export default function CompactSearchBar({
                 setActivePanel(null);
                 handleSearch({ preventDefault: () => {} } as any);
               }}
-              className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-12 w-12 flex-shrink-0"
+              className="flex items-center justify-center rounded-full bg-brand text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-80 h-9 w-9 flex-shrink-0"
               aria-label="Search"
             >
               {busy ? (
@@ -2266,7 +2271,7 @@ export default function CompactSearchBar({
         </div>
 
         {/* WHERE panel */}
-        {activePanel === 'where' && renderWherePanel(whereHighlightRef)}
+        {activePanel === 'where' && renderWherePanel(whereHighlightRef, true)}
 
         {/* WHAT panel */}
         {activePanel === 'what' && renderWhatPanel(whatHighlightRef)}
@@ -2525,7 +2530,7 @@ export default function CompactSearchBar({
       layout={framerLayout}
       transition={DOCK_TRANSITION}
       style={mode === 'large' ? DOCK_LARGE_STYLE : DOCK_STYLE[mode]}
-      className={`hidden md:block ${mode === 'large' ? DOCK_LARGE_CLASS : ''}`}
+      className={`hidden md:block ${mode === 'large' ? DOCK_LARGE_CLASS : 'header-search-dock'}`}
       data-search-bar-dock={mode}
     >
       {content}

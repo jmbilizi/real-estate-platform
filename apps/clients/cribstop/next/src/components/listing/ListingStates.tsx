@@ -223,7 +223,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
   return (
     <div className="flex h-full min-h-0 flex-col" role="status" aria-label="Loading listing">
       {/* Header bar: back and actions on a phone. From md up, a price and address placeholder follows the back button. */}
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white page-gutter pb-3 pt-4">
         <div className={`h-11 w-11 flex-shrink-0 rounded-full ${FILL}`} />
         <div className="hidden min-w-0 flex-1 md:block">
           <div className={`h-5 w-28 rounded ${FILL}`} />
@@ -240,7 +240,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
           measured 999px inside a 750px panel and was simply clipped. */}
       {/* Same scroll classes as the loaded body. With `overflow-hidden` the skeleton had no
           scrollbar while the loaded page did, so the content column was 10px wider during load. */}
-      <div className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt px-6 py-4 pb-8 sm:px-8">
+      <div className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt page-gutter py-4 pb-8">
         {/*
          * The gallery, in the same bordered panel the loaded page wraps `PropertyGallery` in, so
          * the block measures 482px at `md` and up in both states. Getting this shape wrong is the
@@ -582,12 +582,12 @@ export function ListingErrorPanel({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white px-6 pb-3 pt-4 sm:px-8">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white page-gutter pb-3 pt-4">
         {onClose && <ToolbarIconButton label="Go back" icon={BACK_ICON} onClick={onClose} />}
       </div>
       <div
         data-error-body
-        className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt px-6 py-4 pb-8 sm:px-8"
+        className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt page-gutter py-4 pb-8"
       >
         <div className="mx-auto max-w-lg rounded-2xl border border-surface-border bg-white p-4">
           <ListingErrorState message={message} onRetry={onRetry} />

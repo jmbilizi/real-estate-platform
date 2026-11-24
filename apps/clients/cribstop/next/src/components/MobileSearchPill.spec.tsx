@@ -28,15 +28,14 @@ describe('MobileSearchPill before hydration', () => {
   /*
    * Regression: `searchLocation` only seeds asynchronously on a search path (via `SearchExperience`).
    * Everywhere else the store's default ('') is already the settled answer server-side, so
-   * placeholdering it there swaps a one-line button for a two-line skeleton on hydration — a
-   * height change this ticket was written to eliminate, not introduce.
+   * placeholdering it there would show a skeleton for a value the server already knows.
    */
   it('skips the placeholder off a search path, where there is nothing async to wait on', () => {
     mockPathname.mockReturnValue('/');
     const html = renderToStaticMarkup(<MobileSearchPill />);
 
     expect(html).not.toContain('skeleton-fill');
-    expect(html).toContain('Start your search');
+    expect(html).toContain('Where?');
   });
 
   it('placeholders on a search path, where searchLocation is seeded from the URL after mount', () => {
@@ -44,7 +43,7 @@ describe('MobileSearchPill before hydration', () => {
     const html = renderToStaticMarkup(<MobileSearchPill />);
 
     expect(html).toContain('skeleton-fill');
-    expect(html).not.toContain('Start your search');
+    expect(html).not.toContain('Where?');
   });
 });
 
@@ -53,7 +52,7 @@ describe('MobileSearchPill after hydration', () => {
     mockUseApp.mockReturnValue(appValue(''));
     const { getByText } = render(<MobileSearchPill />);
 
-    expect(getByText('Start your search')).toBeInTheDocument();
+    expect(getByText('Where?')).toBeInTheDocument();
   });
 
   // #519: the pill names the listing type the results apply, including the `type=all` override.

@@ -110,9 +110,9 @@ export default function EmptyState({
       </div>
 
       {/* Content */}
-      <h3 className="text-lg font-semibold text-ink sm:text-xl">{title || config.defaultTitle}</h3>
+      <h3 className="text-lg font-semibold text-ink">{title || config.defaultTitle}</h3>
       {description !== false && (
-        <p className="mt-2 max-w-[320px] text-sm leading-relaxed text-ink-muted sm:text-base">
+        <p className="mt-2 max-w-[320px] text-sm leading-relaxed text-ink-muted">
           {description || config.defaultDescription}
         </p>
       )}

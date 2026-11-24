@@ -92,7 +92,8 @@ export default function Toast() {
     <div
       aria-label="Notifications"
       className="pointer-events-none fixed inset-x-0 z-toast flex flex-col items-center gap-2.5 px-4"
-      style={{ top: 'max(1.25rem, calc(env(safe-area-inset-top) + 0.5rem))' }}
+      // Under the sticky header, so a toast never covers the search pill or the tabs.
+      style={{ top: 'calc(var(--navbar-h) + max(0.75rem, env(safe-area-inset-top)))' }}
     >
       {toasts.map((t) => (
         <ToastCard key={t.id} toast={t} />

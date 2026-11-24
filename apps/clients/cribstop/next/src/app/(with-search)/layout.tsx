@@ -1,7 +1,6 @@
 /**
  * Shared layout for the (with-search) route group.
- * Each sub-route manages its own ScrollSentinel so they can choose
- * scroll-based vs alwaysPill behaviour independently.
+ * Each sub-route mounts its own `ScrollSentinel`, which mounts the header search pill.
  */
 export default function WithSearchLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;

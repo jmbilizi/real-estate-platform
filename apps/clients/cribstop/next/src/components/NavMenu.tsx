@@ -15,6 +15,8 @@ export type NavMenuItem =
  * purpose: the app has no language support and no settings page (#767).
  */
 export const SECONDARY_ITEMS: NavMenuItem[] = [
+  { kind: 'link', label: 'List a property', href: '/list' },
+  { kind: 'link', label: 'Business directory', href: '/business' },
   { kind: 'link', label: 'Help', href: `mailto:${BRAND.contactEmail}` },
   { kind: 'link', label: 'About', href: '/about' },
   { kind: 'link', label: 'Fair Housing', href: '/fair-housing' },
@@ -155,7 +157,7 @@ export default function NavMenu({ signedIn, onAuth }: { signedIn: boolean; onAut
           if (Date.now() - closedAt.current < 300) return;
           setOpen((v) => !v);
         }}
-        className="relative -mr-1 inline-flex max-md:hidden h-6 w-1 shrink-0 cursor-pointer items-center justify-end rounded text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-2 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
+        className="relative inline-flex h-6 w-6 shrink-0 max-md:before:-inset-x-2.5 md:-mr-1 md:w-1 cursor-pointer items-center justify-center rounded md:justify-end text-ink before:absolute before:-inset-y-2.5 before:-left-1.5 before:-right-2 before:content-[''] md:before:-left-2 hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1"
       >
         {MORE_ICON}
       </button>

@@ -4,36 +4,27 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { useRouter } from 'nextjs-toploader/app';
 import { motion } from 'motion/react';
-import { Heart, LogOut, UserPlus } from 'lucide-react';
+import { Heart, LogOut, User as UserIcon, UserPlus } from 'lucide-react';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
-import AppsDropdown from './AppsDropdown';
 import SlidePanel from './SlidePanel';
 import DismissButton from './DismissButton';
-import BrandLockup from './BrandLockup';
+import BrandMark from './BrandMark';
 import { openAuthModal } from '@/lib/auth-modal';
-import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
-import { NAV_TABS } from './NavTabIcons';
-import { SkeletonBar, SkeletonBlock } from './Skeleton';
+import { getUserDisplayName, getUserInitials, type User } from '@/lib/store/types';
+import { PRIMARY_TABS } from './MobileTabBar';
+import { SkeletonBlock } from './Skeleton';
 import NavMenu from './NavMenu';
-import ToolbarIconButton, {
-  ACCOUNT_ICON,
-  HEART_ICON,
-  NAV_BUTTON_CLASSES,
-} from './ToolbarIconButton';
+import { MORE_ICON } from './ToolbarIconButton';
 
 /**
- * Placeholder widths for each tab label, so a skeletoned tab row is the same width as the loaded
- * one and the tabs do not shuffle sideways when the labels arrive. Keyed by tab id rather than
- * measured, because the labels are fixed copy.
+ * The account control. It has the shape of a primary tab: a line icon, then a label from `lg`.
+ * 44px tall and at least 44px wide, so it is a full tap target when the label is hidden.
  */
-const TAB_LABEL_WIDTH: Record<string, string> = {
-  homes: 'w-14',
-  services: 'w-16',
-  connect: 'w-16',
-};
+const ACCOUNT_CLASSES =
+  'flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-3 text-[15px] font-semibold text-ink-muted transition-colors duration-150 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand';
+const ACCOUNT_ICON_CLASSES = 'h-6 w-6 shrink-0 lg:h-5 lg:w-5';
 
 export default function NavBar() {
   const {
@@ -48,7 +39,6 @@ export default function NavBar() {
     setMobileSearchOpen,
   } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
-  const router = useRouter();
   const pathname = usePathname();
 
   // SSR guard — fires synchronously before paint on the client
@@ -101,16 +91,11 @@ export default function NavBar() {
   useEffect(() => {
     if (headerExpanded) {
       document.documentElement.setAttribute('data-header-expanded', '');
-      requestAnimationFrame(() => {
-        const el = document.querySelector('[data-search-bar-dock="expanded"]');
-        const h = el ? el.getBoundingClientRect().height : 0;
-        document.documentElement.style.setProperty('--expanded-bar-h', `${h}px`);
-      });
     } else {
       document.documentElement.removeAttribute('data-header-expanded');
-      document.documentElement.style.setProperty('--expanded-bar-h', '0px');
+      // Only on close: the search opens with the panel of the field the user clicked.
+      window.dispatchEvent(new Event('searchbar:close'));
     }
-    window.dispatchEvent(new Event('searchbar:close'));
   }, [headerExpanded]);
 
   // Collapse expanded search when user scrolls down while it's open
@@ -143,135 +128,96 @@ export default function NavBar() {
       {/* Mobile full-screen search sheet */}
       {mobileSearchOpen && <MobileSearchSheet onClose={() => setMobileSearchOpen(false)} />}
 
-      {/* Click-catcher backdrop */}
+      {/*
+       * The scrim behind the open search bar: it dims the page, and a click on it closes the bar.
+       * The header sits above it (`z-chrome` inside the sticky wrapper), so the header stays
+       * bright and usable. The open bar is on the `searchBar` layer, above both.
+       */}
       {headerExpanded && showHeaderPill && (
-        <div className="fixed inset-0 z-nav-backdrop" onClick={() => setHeaderExpanded(false)} />
+        <div
+          data-testid="search-scrim"
+          className="fixed inset-0 z-nav-backdrop animate-fade-in bg-black/25"
+          onClick={() => setHeaderExpanded(false)}
+        />
       )}
 
-      <header className="relative bg-white overflow-visible">
-        {/* ── Logo | Tabs/Pill | Nav ── */}
+      <header className="relative z-chrome overflow-visible bg-white">
         {/*
-         * Phones (#943): one row, Apps | search pill | Account, and nothing in it moves on scroll.
-         * The pill is the real MobileSearchPill and sits in the same DOM position at every scroll
-         * depth. Desktop keeps the three column grid. Below `md` the right nav is `display: contents`,
-         * so Apps and Account become items of this row, ordered by `max-md:order-*`.
+         * One row at every width. Phones (#943): brand mark | search pill | Account, with the tabs
+         * in the bottom bar. From `md`: brand mark | search pill | tabs | Account, More.
+         * Nothing in the row moves on scroll.
          */}
-        <div className="relative flex h-16 items-center gap-2 px-3 md:grid md:grid-cols-[auto_1fr_auto] md:px-10 lg:px-20">
+        <div className="page-gutter relative flex h-16 items-center gap-2 md:gap-4 lg:gap-6">
           {/*
-           * Logo (#1048). `BrandLockup` renders unconditionally, never behind the `hydrated` gate:
-           * its text is compile-time constants, and PRD §6.1 needs the brokerage name in the
-           * server HTML.
+           * Logo: the "cs" mark, the same at every width. It renders unconditionally, never behind
+           * the `hydrated` gate. The mark is 36px wide, so the search pill's left edge is a known
+           * value (`--header-pill-left` in globals.css).
            */}
-          <div className="flex flex-shrink-0 items-center max-md:hidden">
-            <BrandLockup variant="nav" />
-          </div>
+          <BrandMark />
 
-          {/* ── Center: tabs / compact pill ── */}
-          <div className="absolute left-1/2 -translate-x-1/2 max-md:hidden w-[520px] max-w-[calc(100vw-160px)] h-16 flex items-center justify-center">
-            {/* TABS — visible when NOT scrolled, or when expanded */}
-            <div
-              className="header-tabs absolute inset-0 hidden md:flex items-stretch justify-center"
-              style={
-                headerExpanded
-                  ? { opacity: 1, pointerEvents: 'auto', transform: 'translateY(0) scale(1)' }
-                  : undefined
-              }
-            >
-              <div className="relative flex items-center gap-4 lg:gap-8">
-                {NAV_TABS.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = displayTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        setActiveTab(tab.id);
-                        if (tab.id === 'services') router.push('/services');
-                        else if (tab.id === 'connect') router.push('/connect');
-                        else if (tab.id === 'homes') router.push('/');
-                      }}
-                      className="group/tab relative flex items-center justify-center h-full focus:outline-none"
-                    >
-                      <span
-                        className={`flex items-center gap-1 transition-colors duration-150 ${
-                          isActive ? 'text-ink' : 'text-ink-muted group-hover/tab:text-ink'
-                        }`}
-                      >
-                        {hydrated ? (
-                          <span className="content-resolved flex items-center gap-1">
-                            <Icon className={`${tab.iconClass} block flex-shrink-0`} />
-                            <span className="text-[15px] font-semibold">{tab.label}</span>
-                          </span>
-                        ) : (
-                          <>
-                            {/* The icon's own box, so the tab keeps its width and the row does
-                                not reflow when the labels arrive. */}
-                            <SkeletonBlock className={`${tab.iconClass} rounded-xs`} />
-                            <span className="text-[15px] font-semibold">
-                              <SkeletonBar className={TAB_LABEL_WIDTH[tab.id] ?? 'w-16'} />
-                            </span>
-                          </>
-                        )}
-                      </span>
-                      {/*
-                       * Animated underline, pinned to the bottom of the header.
-                       *
-                       * Not gated on `hydrated`. `isActive` already resolves from the route
-                       * before hydration (`displayTab`), so the server ships the underline under
-                       * the correct tab from first paint, not only after the bundle runs.
-                       */}
-                      {isActive && (
-                        <motion.span
-                          layoutId="nav-tab-underline"
-                          className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand"
-                          transition={{ type: 'spring', stiffness: 500, damping: 35 }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {/*
+           * The search pill's slot. The pill is `CompactSearchBar`, rendered from `ScrollSentinel`
+           * and fixed over this box: both read `--header-pill-left` and `--header-pill-w`. The
+           * slot only reserves the width, so the tabs start after the pill.
+           */}
+          <div aria-hidden="true" className="header-pill-slot h-11 flex-shrink-0 max-md:hidden" />
 
-            {/* The compact pill itself is CompactSearchBar rendered from
-                ScrollSentinel — it docks here via position:fixed (see its own
-                DOCK_STYLE) rather than being a child of this tree, since it
-                needs to be able to also render in normal page flow further
-                down the page. This slot just hosts the tabs above. */}
-          </div>
-          {/* Empty grid cell placeholder for col 2 */}
-          <div className="max-md:hidden" />
+          {/*
+           * Primary tabs: the same three destinations and line icons as the phone tab bar
+           * (`PRIMARY_TABS`), so the two bars read as one navigation. Icons only from `md`, icon
+           * and label from `lg`. They are real links in the server HTML and they show on every
+           * page. `ml-auto` puts them on the right, beside the account control.
+           */}
+          <nav aria-label="Primary" className="ml-auto hidden h-16 items-stretch gap-1 md:flex">
+            {PRIMARY_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = displayTab === tab.id;
+              return (
+                <Link
+                  key={tab.id}
+                  href={tab.href}
+                  aria-label={tab.label}
+                  aria-current={isActive ? 'page' : undefined}
+                  title={tab.label}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex min-w-12 items-center justify-center gap-1.5 px-3 text-[15px] font-semibold transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
+                    isActive ? 'text-ink' : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  <Icon
+                    className="h-6 w-6 shrink-0 lg:h-5 lg:w-5"
+                    strokeWidth={isActive ? 2.25 : 1.75}
+                    aria-hidden="true"
+                  />
+                  <span className="hidden lg:inline">{tab.label}</span>
+                  {/* The underline slides between tabs. `isActive` resolves from the route before
+                      hydration (`displayTab`), so the server ships it under the correct tab. */}
+                  {isActive && (
+                    <motion.span
+                      layoutId="nav-tab-underline"
+                      className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-brand"
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
 
-          <div className="order-2 flex min-w-0 flex-1 md:hidden">
+          <div className="flex min-w-0 flex-1 md:hidden">
             <MobileSearchPill />
           </div>
 
           {/* Right nav */}
-          <div className="relative z-20 items-center gap-1.5 max-md:contents md:flex md:gap-2">
+          {/* From `md` the negative margin cancels the row gap down to 4px, the gap between two
+              tabs. Account has the padding of a tab, so Connect to Account reads as one more step
+              of the same rhythm. */}
+          <div className="relative z-20 flex flex-shrink-0 items-center gap-1.5 md:-ml-3 md:gap-2 lg:-ml-5">
             {/*
-             * Saved and Apps are identical whether or not anyone is signed in, so they render
-             * straight away. They used to sit behind the `hydrated` gate below, which hid three
-             * controls because one of them was uncertain — and left the whole right-hand nav blank
-             * from first paint until the bundle finished hydrating.
+             * There is no Saved button in the row. A signed-in user gets "Saved homes" in the
+             * account panel, and phones have Saved in the bottom tab bar (#923). There is no Apps
+             * grid: one destination shows once.
              */}
-            {/* Phones get Saved in the bottom tab bar (#923), so the top bar drops it below md. */}
-            <Link
-              href="/favorites"
-              className={`${NAV_BUTTON_CLASSES} max-md:hidden`}
-              aria-label="Saved"
-              title="Saved"
-            >
-              {HEART_ICON}
-            </Link>
-
-            {hydrated ? (
-              <span className="content-resolved flex items-center max-md:order-1">
-                <AppsDropdown />
-              </span>
-            ) : (
-              <NavButtonSkeleton className="max-md:order-1" />
-            )}
-
             {/*
              * The one genuinely unknown slot, and the reason for the gate.
              *
@@ -285,38 +231,42 @@ export default function NavBar() {
              * server HTML paints, then the bundle has to arrive, parse and run. On a cold load
              * that is seconds, and it is exactly the window this placeholder occupies.
              *
-             * Every outcome is the same circle, so the nav's width never changes and the other
-             * controls cannot slide sideways on hydration.
+             * Signed out it is the account icon and "Sign in". Signed in it is the account icon (or
+             * the photo) and the first name, and it opens the account panel. The label shows from
+             * `lg`, the same as the tab labels.
              */}
-            <div
-              className={`flex justify-end max-md:order-3 ${hydrated ? 'content-resolved' : ''}`}
-            >
+            <div className={`flex justify-end ${hydrated ? 'content-resolved' : ''}`}>
               {!hydrated ? (
-                <NavButtonSkeleton />
+                <AccountSkeleton />
               ) : user ? (
                 <div className="relative">
-                  <ToolbarIconButton
-                    surface="nav"
-                    label="Profile menu"
-                    className="overflow-hidden"
-                    icon={
-                      user.avatar ? (
-                        <img
-                          src={user.avatar}
-                          alt=""
-                          className="h-full w-full rounded-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <span className="text-sm font-semibold text-ink">
-                          {getUserInitials(user)}
-                        </span>
-                      )
-                    }
+                  <button
+                    type="button"
+                    aria-label="Profile menu"
+                    title="Profile menu"
                     aria-expanded={profileOpen}
                     aria-haspopup="dialog"
                     onClick={() => setProfileOpen((v) => !v)}
-                  />
+                    className={`${ACCOUNT_CLASSES} ${profileOpen ? 'text-ink' : ''}`}
+                  >
+                    {user.avatar ? (
+                      <img
+                        src={user.avatar}
+                        alt=""
+                        className="h-7 w-7 shrink-0 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <UserIcon
+                        className={ACCOUNT_ICON_CLASSES}
+                        strokeWidth={1.75}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="hidden max-w-[5rem] truncate lg:inline">
+                      {accountLabel(user)}
+                    </span>
+                  </button>
 
                   <SlidePanel open={profileOpen} onClose={() => setProfileOpen(false)} width={314}>
                     <div className="absolute right-2 top-2">
@@ -411,21 +361,36 @@ export default function NavBar() {
                   </SlidePanel>
                 </div>
               ) : (
-                <ToolbarIconButton
-                  surface="nav"
-                  label="Sign in or sign up"
-                  icon={ACCOUNT_ICON}
+                <button
+                  type="button"
+                  aria-label="Sign in or sign up"
+                  title="Sign in or sign up"
                   onClick={() => openModal()}
-                />
+                  className={ACCOUNT_CLASSES}
+                >
+                  <UserIcon
+                    className={ACCOUNT_ICON_CLASSES}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                  />
+                  <span className="hidden whitespace-nowrap lg:inline">Sign in</span>
+                </button>
               )}
             </div>
 
             {hydrated ? (
-              <span className="content-resolved flex items-center max-md:hidden">
+              <span className="content-resolved flex items-center">
                 <NavMenu signedIn={!!user} onAuth={openModal} />
               </span>
             ) : (
-              <SkeletonBlock className="-mr-1 h-6 w-1 shrink-0 rounded max-md:hidden" />
+              /* The dots look the same for every visitor, so they are drawn for real before
+                 hydration. Only the menu behind them waits for the bundle. */
+              <span
+                aria-hidden="true"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-ink md:-mr-1 md:w-1 md:justify-end"
+              >
+                {MORE_ICON}
+              </span>
             )}
           </div>
         </div>
@@ -434,12 +399,25 @@ export default function NavBar() {
   );
 }
 
+/** The label beside the account icon: the first name, or "Account" when the profile has none. */
+function accountLabel(user: User): string {
+  const first = (user.firstName || user.displayName || '').trim().split(/\s+/)[0];
+  return first || 'Account';
+}
+
 /**
- * A navbar control that is not known until hydration: Apps, Account and More. Same 44px circle
- * as the loaded button, so nothing shifts when the real control arrives.
- * `aria-hidden`: the nav stays interactive, so this is one unresolved control, not a page-level
- * loading state to announce.
+ * The account control before hydration, when the user is not known. The icon is the same for a
+ * signed-in and a signed-out visitor, so it is drawn for real. Only the label is unknown ("Sign in"
+ * or a first name), so only the label is a placeholder bar, with the width of "Sign in". The box is
+ * the loaded control's (`ACCOUNT_CLASSES`), so the search pill and the tabs do not move when the
+ * real control arrives. `aria-hidden`: this is one unresolved control, not a page-level loading
+ * state to announce.
  */
-function NavButtonSkeleton({ className = '' }: { className?: string }) {
-  return <SkeletonBlock className={`h-11 w-11 shrink-0 rounded-full ${className}`} />;
+function AccountSkeleton() {
+  return (
+    <span aria-hidden="true" className={`${ACCOUNT_CLASSES} pointer-events-none`}>
+      <UserIcon className={ACCOUNT_ICON_CLASSES} strokeWidth={1.75} />
+      <SkeletonBlock className="hidden h-3.5 w-12 rounded lg:block" />
+    </span>
+  );
 }

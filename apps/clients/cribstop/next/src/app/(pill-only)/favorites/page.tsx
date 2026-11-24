@@ -79,10 +79,10 @@ export default function FavoritesPage() {
   const displayCount = loading ? savedHomes.length : visible.length;
 
   return (
-    <div className="px-6 py-8 sm:px-10 lg:px-20">
+    <div className="page-gutter py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">Saved homes</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Saved homes</h1>
           <p className="mt-1 text-sm text-ink-muted">
             {displayCount} saved home{displayCount !== 1 ? 's' : ''} ·{' '}
             {signedIn ? 'synced to your account' : 'saved on this device for now'}

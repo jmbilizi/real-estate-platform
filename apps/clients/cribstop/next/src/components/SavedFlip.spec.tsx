@@ -33,17 +33,21 @@ describe('saving a home flips every listing of that home (#25)', () => {
     mockedSave.mockReset();
   });
 
-  it('flips both cards with one click, signed out', async () => {
+  it('saves nothing for a signed-out visitor and opens the sign-in modal with the reason', () => {
+    const pushState = jest.spyOn(window.history, 'pushState').mockImplementation(() => undefined);
     renderTwoListingsOfOneHome();
-    expect(screen.getAllByRole('button', { name: 'Save' })).toHaveLength(2);
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
 
-    // Query notifies observers on the next tick, so the flip shows within the same frame.
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Unsave' })).toHaveLength(2));
+    expect(screen.getAllByRole('button', { name: 'Save' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Unsave' })).toBeNull();
     expect(mockedSave).not.toHaveBeenCalled();
+    expect(String(pushState.mock.calls[0][2])).toContain('modal=login');
+    expect(String(pushState.mock.calls[0][2])).toContain('reason=save');
+    pushState.mockRestore();
   });
 
+  // The signed-in flip of both cards is the first half of this test.
   it('rolls both cards back together when the signed-in save fails', async () => {
     mockedSave.mockImplementation(
       () => new Promise((_, reject) => setTimeout(() => reject(new Error('down')), 100)),

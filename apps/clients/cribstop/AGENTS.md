@@ -117,8 +117,15 @@ with a fixed date. A failure means a spec reads the real clock.
     a `min-h-11`/`min-w-11` wrapper) so the control reads lighter without shrinking below 44px of
     actually-tappable space.
 - All listing/marketing microcopy must be Fair-Housing compliant and attribute Real Broker, LLC
-  legibly (PRD §6.1). The header is `BrandLockup`: "CRIBSTOP at Real Broker, LLC", Cribstop first
-  (stakeholder ruling 2026-11-18, #1048).
+  legibly (PRD §6.1). The header brand is `BrandMark`: a small square in the brand color with a
+  handwritten "CS", the same at every width, with no brand text in the header (stakeholder decision
+  2026-11-24, which replaces the `BrandLockup` text of #1048). The brokerage rule is about relative
+  prominence: the Cribstop name must never show more prominently than "Real Broker, LLC"
+  (stakeholder ruling 2026-11-24). It does not require the brokerage name at the top of each page.
+  The header shows neither name, so the rule holds. Wherever the Cribstop name shows as text, the
+  brokerage name shows with it, at least as legible. The link name of the mark holds "Cribstop at
+  Real Broker, LLC", and the visible brokerage name is in the footer. `BrandLockup.tsx` stays in the
+  repo.
 - Follow existing component patterns and Tailwind config; no new dependencies unless clearly
   necessary.
 - **Listing cards are one height in any grid or carousel (#1048).** Never add a row to the info
@@ -127,8 +134,41 @@ with a fixed date. A failure means a spec reads the real clock.
   "Price reduced" pill shows only when the card has no amount, so one fact shows once.
 - **A home row never repeats a card an earlier row shows (#873, #1048).** The Coming Soon rows drop
   every repeat (`minCards: 0`) and hide when nothing is left.
-- **Header and content share one gutter:** `px-6 sm:px-10 lg:px-20` (`.section`). The header uses
-  `px-3` below `md` only, so the phone search pill keeps its width.
+- **Header and content share one gutter: `.page-gutter`** (`px-4 sm:px-6 lg:px-8`: 16px on a phone,
+  24px from `sm`, 32px from `lg`). The header, each home row, the footer, the search page and the
+  listing detail page use it at every width. Never write the three paddings by hand. Two values
+  follow it: the carousel bleed (`-mr-4` in `CarouselShell`) and the in-page search bar width
+  (`DOCK_LARGE_CLASS`).
+- **The header is one row at every width, and nothing in it moves on scroll (2026-11-24).** From
+  `md`: brand mark and search pill on the left, then primary tabs, Account and More on the right.
+  The row has no Saved button: a signed-in user has "Saved homes" in the account panel, and a phone
+  has Saved in the tab bar. Account has the shape of a tab: the account icon, then "Sign in" (signed
+  out, opens the sign-in dialog) or the first name (signed in, opens the account panel), with the
+  label from `lg`. On a phone: brand mark, search pill and Account, with the tabs in the bottom bar.
+  The phone pill (`MobileSearchPill`) has the same one-line shape as the desktop field. The search
+  bar rests as the pill on every page: one line, with the "Where" label as the placeholder and no
+  label line. A click opens it in its place: the pill grows to the right (a CSS width transition on
+  `.header-search-dock`), the location field becomes a text input in the bar, and the panel of the
+  clicked field opens below with a scrim behind it. An outside click, Escape or a completed search
+  closes the panel, and the bar shrinks back. On a phone the pill opens the full-screen sheet. There
+  is no in-page search row.
+  - The tabs come from `PRIMARY_TABS` (`MobileTabBar.tsx`): one list and one icon set for the phone
+    bar and the desktop header. They show icons from `md` and icon with label from `lg`.
+  - The pill is fixed over `NavBar`'s `.header-pill-slot`. Both read `--header-pill-left` and
+    `--header-pill-w` (globals.css). Change the variables together with the row.
+  - One destination shows once. The header does not mount the Apps grid. "List a property" and
+    "Business directory" are in the More menu, which is also the phone Settings sheet.
+    `AppsDropdown.tsx` and `NavTabIcons.tsx` stay in the repo for possible later use (stakeholder
+    decision, 2026-11-24). Do not delete them as dead code.
+- **Text and icons use the mobile sizes at every width (stakeholder rule, 2026-11-24).** The face is
+  the platform UI font (`SYSTEM_FONT` in `tailwind.config.ts`), with no web font. This replaces the
+  Manrope note in `DESIGN.md`. The scale is 11, 12, 13, 14, 15, 16, 17 (`text-lg`), 20 (`text-xl`),
+  22 (`text-2xl`) and 28px (`text-3xl`, a page title). Never add a breakpoint step that makes text
+  larger on a wide screen, and never use a weight above `font-bold`. A field is 16px on a touch
+  device, so iOS does not zoom on focus. Icons are 16px beside text, 20px for an action and 24px in
+  a bar. The header tab pictures are 28px.
+- **One fact shows once on a page.** The home trust block states the freshness in its title and the
+  brokerage with its states in one sentence. Do not add an eyebrow or a stat tile that repeats them.
 - **Never collect a protected-class signal from the searcher.** The occupancy ("Who") picker was
   removed in #34 (age bands, plus a pets counter labelled "Bringing a service animal?" — age,
   familial status, family responsibilities and disability). Do not reintroduce any of it. The
@@ -196,9 +236,8 @@ with a fixed date. A failure means a spec reads the real clock.
   - A trust-block or brokerage claim states a fact about Cribstop or Real Broker LLC, never about
     the listings: the listings come from Bright MLS via IDX and belong to many brokerages, each
     already attributed on its own card (NAR IDX policy 7.58).
-  - Title text: `text-lg sm:text-xl lg:text-[22px] font-semibold`, so it reads well from phone to
-    desktop. Every row with a "see all" link carries the round arrow chip next to its title
-    (`ListingRow`'s existing pattern).
+  - Title text: `text-xl font-semibold`, the same 20px at every width. Every row with a "see all"
+    link carries the round arrow chip next to its title (`ListingRow`'s existing pattern).
   - On a phone (below `sm`), a carousel shows about two cards with the next one peeking in, native
     touch scroll (`scroll-snap-type: x mandatory`, no visible scrollbar), and no arrow buttons — the
     card row bleeds to the screen edge on the right while the first card still lines up under the

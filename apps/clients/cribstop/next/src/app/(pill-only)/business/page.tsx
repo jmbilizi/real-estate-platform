@@ -20,7 +20,7 @@ export default function BusinessPage() {
             />
           </svg>
         </span>
-        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Business Directory</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">Business Directory</h1>
       </div>
 
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">

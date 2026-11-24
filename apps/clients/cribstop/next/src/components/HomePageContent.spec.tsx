@@ -1161,12 +1161,15 @@ describe('HomePageContent', () => {
       expect(screen.getByText('Real, licensed listings')).toBeInTheDocument();
     });
 
-    it('shows an "Updated" freshness tile from dataUpdatedAt', async () => {
+    it('states the freshness one time, in the trust-block title', async () => {
       renderWithClient(<HomePageContent />);
-      await waitFor(() => expect(screen.getByText('Updated')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getAllByText(/^Real listings, updated /)).toHaveLength(1));
+      // No tile repeats the title's freshness or the sentence's states.
+      expect(screen.queryByText('Updated')).not.toBeInTheDocument();
+      expect(screen.queryByText('States licensed')).not.toBeInTheDocument();
     });
 
-    it('omits the "Updated" tile when dataUpdatedAt is null', async () => {
+    it('states no freshness when dataUpdatedAt is null', async () => {
       mockedGetListingsMeta.mockResolvedValue({
         dataUpdatedAt: null,
         sources: ['internal'],
@@ -1175,7 +1178,7 @@ describe('HomePageContent', () => {
 
       renderWithClient(<HomePageContent />);
       await screen.findByText('Cheapest homes for sale');
-      expect(screen.queryByText('Updated')).not.toBeInTheDocument();
+      expect(screen.queryByText(/updated /)).not.toBeInTheDocument();
     });
 
     /** #438. "Updated X ago" is the last successful sync, never the newest listing timestamp. */

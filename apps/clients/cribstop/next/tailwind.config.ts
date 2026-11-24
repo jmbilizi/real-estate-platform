@@ -5,6 +5,17 @@ import { Z_LAYERS } from './src/lib/z-layers';
 // and map+grid column split. Keep this in sync with globals.css `--layout-break`.
 const LAYOUT_BREAK = '768px';
 
+const SYSTEM_FONT = [
+  '-apple-system',
+  'BlinkMacSystemFont',
+  '"SF Pro Text"',
+  '"Segoe UI"',
+  'Roboto',
+  'system-ui',
+  '"Helvetica Neue"',
+  'sans-serif',
+];
+
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
@@ -113,38 +124,24 @@ const config: Config = {
           pressed: '#ebebeb',
         },
       },
+      // The platform UI face: SF Pro on Apple, Roboto on Android, Segoe UI on Windows. It is what a
+      // native app uses, it needs no download, and it is what the app rendered before too: the
+      // web font names here never matched the imported ones, so no web font ever loaded. `sans`,
+      // `display` and `system` are one stack. Hierarchy comes from size and weight, not a face.
       fontFamily: {
-        // Manrope Variable carries the entire scale — no separate display family (DESIGN.md)
-        sans: [
-          "'Manrope Variable'",
-          "'Inter Variable'",
-          '-apple-system',
-          'system-ui',
-          'Roboto',
-          '"Helvetica Neue"',
-          'sans-serif',
-        ],
-        display: [
-          "'Manrope Variable'",
-          "'Inter Variable'",
-          '-apple-system',
-          'system-ui',
-          'Roboto',
-          '"Helvetica Neue"',
-          'sans-serif',
-        ],
-        // The platform UI face (SF Pro on Apple, Segoe UI on Windows). For small, dense reference
-        // text such as the listing card's address line, where it reads clearer than Manrope.
-        system: [
-          '-apple-system',
-          'BlinkMacSystemFont',
-          '"SF Pro Text"',
-          '"Segoe UI"',
-          'system-ui',
-          'Roboto',
-          '"Helvetica Neue"',
-          'sans-serif',
-        ],
+        sans: SYSTEM_FONT,
+        display: SYSTEM_FONT,
+        system: SYSTEM_FONT,
+      },
+      // The mobile type scale, the same at every screen width (stakeholder rule, 2026-11-24).
+      // Sizes follow the platform text styles: 11 caption, 12, 13 footnote, 14, 15 subhead,
+      // 16 body, 17 headline, 20 title, 22 large title, 28 page title. `text-[11px]`,
+      // `text-[13px]` and `text-[15px]` are part of the scale. Never add a breakpoint step
+      // (`sm:text-*`) to make text larger on a wide screen, and never go above `text-3xl`.
+      fontSize: {
+        lg: ['17px', { lineHeight: '24px' }],
+        '2xl': ['22px', { lineHeight: '28px' }],
+        '3xl': ['28px', { lineHeight: '34px' }],
       },
       boxShadow: {
         // The system's single shadow tier (DESIGN.md Elevation) — hover-floated cards & dropdowns
@@ -164,6 +161,10 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
         toastProgress: {
           '0%': { width: '100%' },
           '100%': { width: '0%' },
@@ -172,6 +173,7 @@ const config: Config = {
       animation: {
         'fade-up': 'fadeUp 0.25s ease-out both',
         fadeUp: 'fadeUp 0.4s ease-out both',
+        'fade-in': 'fadeIn 0.2s ease-out both',
         'toast-progress': 'toastProgress linear forwards',
       },
     },

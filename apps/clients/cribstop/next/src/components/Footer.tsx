@@ -55,7 +55,7 @@ export default function Footer() {
 
   return (
     <footer className="border-t border-surface-border bg-surface-alt">
-      <div className="mx-auto max-w-[1760px] px-6 py-8 sm:px-10 lg:px-20">
+      <div className="mx-auto max-w-[1760px] page-gutter py-8">
         {/*
          * Links grid (#1048). Only real destinations: an entry with no page or URL looked like a
          * link and went nowhere. "About" shows once.
@@ -84,7 +84,6 @@ export default function Footer() {
           <div>
             <h4 className="mb-2 text-sm font-semibold text-ink">Company</h4>
             <ul className="space-y-1.5 text-sm text-ink-muted">
-              <li>{BRAND.brokerageShort}</li>
               <li>
                 <a href="/about" className="hover:text-ink">
                   About Us

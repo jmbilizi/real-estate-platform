@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import MobileTabBar, { MOBILE_TABS } from './MobileTabBar';
@@ -15,21 +15,14 @@ describe('MobileTabBar (#923, #943)', () => {
     mockPath = '/';
   });
 
-  it('links four tabs to existing routes and ends with a Settings button', () => {
+  it('links the three primary tabs to existing routes and has no Saved or Settings tab', () => {
     render(<MobileTabBar />);
     const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
-    expect(hrefs).toEqual(['/', '/services', '/connect', '/favorites']);
-    expect(MOBILE_TABS.map((t) => t.label)).toEqual([
-      'Homes',
-      'Services',
-      'Connect',
-      'Saved',
-      'Settings',
-    ]);
-    expect(screen.queryByRole('link', { name: /account/i })).toBeNull();
-    const last = screen.getByTestId('mobile-tab-bar').querySelector('li:last-child') as HTMLElement;
-    expect(last).toHaveTextContent('Settings');
-    expect(last.querySelector('button')).not.toBeNull();
+    expect(hrefs).toEqual(['/', '/services', '/connect']);
+    expect(MOBILE_TABS.map((t) => t.label)).toEqual(['Homes', 'Services', 'Connect']);
+    const bar = screen.getByTestId('mobile-tab-bar');
+    expect(bar.querySelector('button')).toBeNull();
+    expect(bar.querySelector('ul')!.className).toContain('grid-cols-3');
   });
 
   it('is phone only and clears the home indicator', () => {
@@ -52,7 +45,6 @@ describe('MobileTabBar (#923, #943)', () => {
     ['/search', 'Homes'],
     ['/services', 'Services'],
     ['/connect', 'Connect'],
-    ['/favorites', 'Saved'],
   ])('marks one tab current on %s', (path, label) => {
     mockPath = path;
     render(<MobileTabBar />);
@@ -61,8 +53,8 @@ describe('MobileTabBar (#923, #943)', () => {
     expect(current[0]).toHaveTextContent(label);
   });
 
-  it('marks no tab current on /account, which now lives in the top bar', () => {
-    mockPath = '/account';
+  it.each(['/account', '/favorites'])('marks no tab current on %s', (path) => {
+    mockPath = path;
     render(<MobileTabBar />);
     expect(screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current'))).toHaveLength(
       0,
@@ -72,7 +64,7 @@ describe('MobileTabBar (#923, #943)', () => {
   it('gives each tab a 44px target', () => {
     render(<MobileTabBar />);
     const targets = screen.getByTestId('mobile-tab-bar').querySelectorAll('a, button');
-    expect(targets).toHaveLength(5);
+    expect(targets).toHaveLength(3);
     targets.forEach((el) => expect(el.className).toContain('min-h-11'));
   });
 
@@ -81,30 +73,6 @@ describe('MobileTabBar (#923, #943)', () => {
     render(<MobileTabBar />);
     expect(screen.queryByTestId('mobile-tab-bar')).toBeNull();
     expect(screen.queryByTestId('mobile-tab-bar-spacer')).toBeNull();
-  });
-
-  it('opens the former 3-dot menu items from Settings, as a bottom sheet', () => {
-    render(<MobileTabBar />);
-    expect(screen.queryByRole('dialog')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    const dialog = screen.getByRole('dialog', { name: 'Settings' });
-    expect(dialog.className).toContain('rounded-t-2xl');
-    expect(screen.getAllByRole('menuitem').map((el) => el.textContent)).toEqual([
-      'Sign in or sign up',
-      'Help',
-      'About',
-      'Fair Housing',
-      'Accessibility',
-      'Privacy Policy',
-      'Terms of Service',
-    ]);
-  });
-
-  it('closes the sheet when an item is chosen', async () => {
-    render(<MobileTabBar />);
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'About' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
   describe('never blocks content', () => {
@@ -120,8 +88,6 @@ describe('MobileTabBar (#923, #943)', () => {
       expect(css).toMatch(
         /html\[data-overlay-open\] \.mobile-tab-bar[^{]*\{\s*visibility:\s*hidden/,
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-      expect(document.documentElement).toHaveAttribute('data-overlay-open');
     });
 
     it('defines the offset sticky actions use, and zeroes it from md up', () => {

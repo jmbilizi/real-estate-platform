@@ -25,7 +25,12 @@ describe('NavMenu', () => {
     const { trigger } = setup(false);
     fireEvent.click(trigger);
 
-    expect(labels().slice(0, 3)).toEqual(['Sign in or sign up', 'Help', 'About']);
+    expect(labels().slice(0, 4)).toEqual([
+      'Sign in or sign up',
+      'List a property',
+      'Business directory',
+      'Help',
+    ]);
     expect(labels()).not.toContain('Log out');
   });
 
@@ -33,7 +38,7 @@ describe('NavMenu', () => {
     const { trigger } = setup(true);
     fireEvent.click(trigger);
 
-    expect(labels().slice(0, 2)).toEqual(['Help', 'About']);
+    expect(labels().slice(0, 3)).toEqual(['List a property', 'Business directory', 'Help']);
     for (const l of ['Account', 'Saved homes', 'Log out', 'Sign in or sign up']) {
       expect(labels()).not.toContain(l);
     }
@@ -81,7 +86,7 @@ describe('NavMenu', () => {
     expect(items[items.length - 1]).toHaveFocus();
   });
 
-  it('uses the same SlidePanel width as the Apps dropdown', () => {
+  it('uses the 314px SlidePanel width, the same as the profile panel', () => {
     const { trigger } = setup(false);
     fireEvent.click(trigger);
 

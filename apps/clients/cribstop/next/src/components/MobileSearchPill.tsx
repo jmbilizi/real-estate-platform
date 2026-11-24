@@ -7,6 +7,9 @@ import { LISTING_TYPE_SUMMARY_LABELS } from '@/lib/listing-type-labels';
 import { SkeletonBar } from './Skeleton';
 import { parseSearchPath } from '@cribstop/property-contracts';
 
+/** The "Where" label, shown as the placeholder. The same text as the desktop header field. */
+const WHERE_PLACEHOLDER = 'Where?';
+
 /**
  * Shared mobile search pill used in both ScrollSentinel (in-page, pre-scroll)
  * and NavBar (overlay, post-scroll). Reads everything from context so both
@@ -35,67 +38,58 @@ export default function MobileSearchPill() {
   })();
 
   /*
-   * On `/search` only, this component cannot pick its layout before hydration.
-   * `SearchExperience` seeds `searchLocation` from the URL in an effect, mounted only on that
-   * route. So `/search?q=...` sees an empty string server-side, and without a placeholder would
-   * render the one-line "Start your search" button, then swap to the two-line pill. That is a
-   * height change, not just a text change. The placeholder takes the two-line shape so the swap
-   * lands inside a box that is already the right size. Every other route has no such effect, so
-   * `searchLocation` is already the settled answer server-side.
+   * One shape in every state, the same as the desktop header field: one line, with the "Where"
+   * label as the placeholder. On a search path `SearchExperience` seeds `searchLocation` from the
+   * URL in an effect, so the server does not know the location. The bar below stands in for it and
+   * has the size of the text line, so nothing moves on hydration.
    */
-  if (!hydrated && onSearchRoute) {
-    return (
-      <div className="flex-1 flex items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden">
-        <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-4 py-2.5">
-          <span className="text-[13px] font-semibold leading-snug w-full">
-            <SkeletonBar className="w-32" />
-          </span>
-          <span className="text-[11px] leading-snug">
-            <SkeletonBar className="w-24" />
-          </span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!searchLocation) {
-    return (
-      <button
-        type="button"
-        onClick={() => setMobileSearchOpen(true)}
-        aria-label="Search"
-        className="flex-1 flex items-center justify-center gap-2 rounded-full border border-surface-border bg-white px-4 py-3 shadow-card active:scale-[0.99] transition-transform"
-      >
-        <svg
-          className="h-4 w-4 flex-shrink-0 text-ink"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.5}
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-        <span className="text-[14px] text-ink font-medium content-resolved">Start your search</span>
-      </button>
-    );
-  }
+  const pending = !hydrated && onSearchRoute;
 
   return (
-    <div className="flex-1 flex items-center rounded-full border border-surface-border bg-white shadow-card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setMobileSearchOpen(true)}
-        className="flex-1 min-w-0 flex flex-col items-center justify-center text-center px-4 py-2.5"
-      >
-        <span className="text-[13px] font-semibold text-ink leading-snug truncate w-full text-center content-resolved">
-          {searchLocation}
+    <button
+      type="button"
+      onClick={() => setMobileSearchOpen(true)}
+      aria-label="Search"
+      className="flex h-11 min-w-0 flex-1 items-center overflow-hidden rounded-full border border-surface-border bg-surface-alt text-left transition-transform active:scale-[0.99]"
+    >
+      <span className="flex h-full min-w-0 flex-1 items-center gap-2 pl-4 pr-2.5">
+        {/* The icon gives its room to the place name once there is one: the row is narrow. */}
+        {!searchLocation && (
+          <svg
+            aria-hidden="true"
+            className="h-5 w-5 flex-shrink-0 text-ink-muted"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+        )}
+        <span
+          className={`min-w-0 flex-1 truncate text-[15px] leading-none ${
+            searchLocation ? 'font-semibold text-ink' : 'text-ink-muted'
+          }`}
+        >
+          {pending ? (
+            <SkeletonBar className="w-28" />
+          ) : (
+            <span className="content-resolved">{searchLocation || WHERE_PLACEHOLDER}</span>
+          )}
         </span>
-        <span className="text-[11px] text-ink-muted leading-snug content-resolved">{summary}</span>
-      </button>
-    </div>
+      </span>
+      {/* Below 390px the row has no room for the listing type beside the place: the sheet shows it. */}
+      <span
+        aria-hidden="true"
+        className="h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] max-[389px]:hidden"
+      />
+      <span className="flex-shrink-0 whitespace-nowrap pl-2.5 pr-3.5 text-sm font-medium leading-none text-ink max-[389px]:hidden">
+        {summary}
+      </span>
+    </button>
   );
 }

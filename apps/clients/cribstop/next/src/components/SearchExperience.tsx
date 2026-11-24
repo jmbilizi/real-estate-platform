@@ -955,7 +955,7 @@ export default function SearchExperience({
           className="search-map-column absolute inset-0 z-0
                      md:relative md:inset-auto md:order-last md:w-[52%]"
         >
-          <div className="sticky top-[65px] h-[45vh] search-map-sticky md:py-6 md:pl-3 md:pr-10 lg:pl-5 lg:pr-20">
+          <div className="sticky top-[65px] h-[45vh] search-map-sticky md:py-6 md:pl-3 md:pr-6 lg:pl-4 lg:pr-8">
             <ListingsMap
               listings={results}
               savedIds={savedPinIds}
@@ -1012,7 +1012,7 @@ export default function SearchExperience({
                      rounded-t-3xl bg-white shadow-[0_-8px_30px_rgba(0,0,0,0.10)]
                      md:order-first md:w-[48%] md:mt-0 md:rounded-none
                      md:shadow-none md:z-auto
-                     md:pb-6 md:pl-10 md:pr-3 lg:pl-20 lg:pr-5"
+                     md:pb-6 md:pl-6 md:pr-3 lg:pl-8 lg:pr-4"
         >
           {/* Drag handle — visible on mobile only */}
           <div className="flex justify-center pt-3 pb-1 md:hidden" aria-hidden="true">
@@ -1020,7 +1020,7 @@ export default function SearchExperience({
           </div>
 
           {/* Slim sticky bar */}
-          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-x-2 px-5 py-1 md:px-0 border-b border-surface-border mb-6">
+          <div className="search-results-bar sticky top-[65px] z-20 bg-white flex items-center justify-between gap-x-2 px-4 py-1 md:px-0 border-b border-surface-border mb-6">
             <div className="flex min-w-0 flex-1 items-center gap-x-1">
               {!grouped && drilledName && (
                 <button
@@ -1217,7 +1217,7 @@ export default function SearchExperience({
             </div>
           </div>
 
-          <div className="px-5 pb-10 md:px-0 md:pb-0">
+          <div className="px-4 pb-10 md:px-0 md:pb-0">
             {grouped ? (
               isGroupsLoading ? (
                 zipGrouped || brokerGrouped ? (
