@@ -292,16 +292,20 @@ Provider mapping (Claude only — keep vendor names out of the rest of this guid
   (`tools/infra/wait-ingress-admission.js`) waits for the admission webhook. `run-skaffold.js` also
   pins the `skaffold.dev/run-id` label, because a fresh value restarts every Deployment, the
   controller included, on each deploy.
-- **A CI deploy pins Deployment images by digest. A tag pull can return an old image.** The Hetzner
-  clusters enable the k3s embedded registry mirror (`embedded_registry_mirror` in
+- **A CI deploy never applies a first-party image by tag. One rule for dev, test and prod.** The
+  Hetzner clusters enable the k3s embedded registry mirror (`embedded_registry_mirror` in
   `cluster-config.yaml`). The mirror answers a mutable tag (`:dev`, `:test`, `:latest`) from the
   image store of a cluster node, so a restarted pod can pull the image another node holds. Dev ran
   the 2026-11-10 `cribstop-web` and `property-service` images until 2026-11-23, and each deploy
-  reported success. `tools/infra/pin-image-digests.js` rewrites each first-party image of an
-  in-scope Deployment to `name:tag@sha256:...` before the apply. A new image then changes the pod
-  template, and the apply rolls it out. The script stops the deploy when a digest does not resolve.
-  A StatefulSet keeps its tag, because a template change there restarts a database. To see what a
-  cluster runs, read "Running image digests" in the deploy log. Never read the tag.
+  reported success. Prod had the same fault in a second form: `:latest` with
+  `imagePullPolicy: IfNotPresent` never pulls again on a node that holds the tag.
+  `tools/infra/pin-image-digests.js` rewrites each first-party image of an in-scope Deployment,
+  StatefulSet or DaemonSet to `name:tag@sha256:...` before the apply. A new image then changes the
+  pod template, and the apply rolls it out. A StatefulSet restarts when its image changes, and only
+  then. The script stops the deploy when a digest does not resolve, so an environment needs its
+  images in the registry before its first deploy. A CronJob or Job is not pinned. The script prints
+  a warning for a first-party tag there. To see what a cluster runs, read "Running image digests" in
+  the deploy log. Never read the tag.
 - **The inverse is just as silent: a gateway can advertise a service that is gated off.**
   `apps/api-gateway/Startup.cs` loads every `Configuration/Routes/*.json` unconditionally, so a
   route file ships routes _and_ a `SwaggerEndPoints` entry regardless of whether

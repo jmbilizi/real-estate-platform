@@ -7,7 +7,7 @@
  * only churns pods. This script compares the digest the registry serves for each first-party
  * image with the digest each running pod reports in `imageID`.
  *
- * The deploy pins Deployment images by digest (`tools/infra/pin-image-digests.js`). A pinned
+ * The deploy pins workload images by digest (`tools/infra/pin-image-digests.js`). A pinned
  * image needs no restart: a new digest changes the pod template, so the apply rolls it out.
  * Only an image that still uses a tag gets the comparison.
  *

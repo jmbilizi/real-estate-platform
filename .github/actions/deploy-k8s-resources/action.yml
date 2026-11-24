@@ -494,10 +494,13 @@ runs:
           --services "$SCOPE_SERVICES" \
           --first-party-image-prefix "ghcr.io/${GITHUB_REPOSITORY}/"
 
-    - name: Pin in-scope Deployment images to registry digests
+    - name: Pin in-scope first-party images to registry digests
       shell: bash
       run: |
         set -eo pipefail
+        # One rule for dev, test and prod, and for every workload kind: a deploy never applies
+        # a first-party image by tag.
+        #
         # A mutable tag (:dev, :test, :latest) does not name one image. The k3s embedded
         # registry mirror (cluster-config.yaml, embedded_registry_mirror) answers a tag from
         # the image store of a cluster node. A restarted pod then pulls the image another
@@ -509,16 +512,19 @@ runs:
         # image also changes the pod template, so the apply below starts the rollout and
         # waits for it. The restart step stays only for an image that still uses a tag.
         #
-        # Scope: restart-deployments.txt, the first-party Deployments this run applies. A
-        # service that deploy-control gates off can have no image in the registry. A
-        # StatefulSet keeps its tag: a template change there restarts a database.
+        # Scope: scope.txt, the Deployments, StatefulSets and DaemonSets this run applies. A
+        # service that deploy-control gates off can have no image in the registry.
+        #
+        # A pinned StatefulSet restarts when its image changes, and only then. Before, a
+        # rebuilt postgres image never reached a node that held the tag (IfNotPresent).
+        # "Restart only on template change (StatefulSets)" does that restart and waits.
         #
         # The script fails closed. A deploy that falls back to the tag can replace a pinned
         # image with an older one. It edits manifests.yaml, the file every apply reads.
         node tools/infra/pin-image-digests.js \
           --manifests manifests.yaml \
           --prefix "ghcr.io/${GITHUB_REPOSITORY}/" \
-          --deployments restart-deployments.txt
+          --scope scope.txt
 
     - name: PVC cleanup (BadgerDB corruption handling)
       id: pvc_cleanup
@@ -999,7 +1005,7 @@ runs:
         # Scope, not manifests — restarting a Deployment this run never applied is what
         # produced "Error from server (NotFound)" and a cluster-wide rollback.
         #
-        # "Pin in-scope Deployment images to registry digests" pins every image this step
+        # "Pin in-scope first-party images to registry digests" pins every image this step
         # reads, so a normal run restarts nothing here. The step stays for a Deployment whose
         # spec still names a tag. A restart cannot repair a stale mirror: the pod pulls the
         # same tag again.
