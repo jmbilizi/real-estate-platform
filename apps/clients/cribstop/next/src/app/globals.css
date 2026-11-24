@@ -6,9 +6,14 @@
   display: none; /* Chrome/Safari/Webkit */
 }
 
-/* Thin overlay scrollbar — floats over content, no extra width reserved */
+/*
+ * Thin scrollbar with the same space on both sides. Browsers removed `overflow-y: overlay`, so a
+ * classic scrollbar takes 6px on the right. `both-edges` keeps the same 6px on the left, and the
+ * content stays centered. A touch scrollbar takes no room, so nothing is kept there.
+ */
 .scrollbar-overlay {
-  overflow-y: overlay !important; /* Chrome/Safari/Edge: overlay doesn't push content */
+  overflow-y: auto !important;
+  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin; /* Firefox */
   scrollbar-color: rgba(0, 0, 0, 0.18) transparent; /* Firefox */
 }
