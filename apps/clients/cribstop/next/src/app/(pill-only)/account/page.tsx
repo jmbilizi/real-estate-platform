@@ -120,25 +120,25 @@ export default function AccountPage() {
           </h2>
         </div>
         <ul className="divide-y divide-surface-border">
-          <li>
-            <Link
-              href="/favorites"
-              className="flex min-h-14 items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-surface-alt focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
-            >
-              <span className="flex min-w-0 items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand">
-                  <Heart className="h-4 w-4" aria-hidden="true" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[15px] font-medium text-ink">Saved homes</span>
-                  <span className="block text-[13px] text-ink-muted">
-                    The homes you saved with the heart
+          {ACTIVITY_LINKS.map(({ label, description, href, icon: Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                className="flex min-h-14 items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-surface-alt focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand">
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-medium text-ink">{label}</span>
+                    <span className="block text-[13px] text-ink-muted">{description}</span>
                   </span>
                 </span>
-              </span>
-              <ChevronRight className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-            </Link>
-          </li>
+                <ChevronRight className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
           {/* Not built yet. A row with no link and no button, so it promises no action. */}
           {COMING_SOON_ITEMS.map(({ label, description, icon: Icon }) => (
             <li key={label} className="flex min-h-14 items-center justify-between gap-3 px-5 py-3">
@@ -501,9 +501,23 @@ function ComingSoonToggle({ label }: { label: string }) {
   );
 }
 
+const ACTIVITY_LINKS: { label: string; description: string; href: string; icon: LucideIcon }[] = [
+  {
+    label: 'Saved',
+    description: 'What you saved with the heart',
+    href: '/account/favorites',
+    icon: Heart,
+  },
+  {
+    label: 'Recently viewed',
+    description: 'What you opened, newest first',
+    href: '/account/recently-viewed',
+    icon: Clock,
+  },
+];
+
 const COMING_SOON_ITEMS: { label: string; description: string; icon: LucideIcon }[] = [
   { label: 'Saved searches', description: 'Search filters you save', icon: Search },
-  { label: 'Recently viewed', description: 'Listings you opened', icon: Clock },
   { label: 'My listings', description: 'Your active and past listings', icon: Home },
   { label: 'Agent profile', description: 'Public profile and credentials', icon: BadgeCheck },
 ];

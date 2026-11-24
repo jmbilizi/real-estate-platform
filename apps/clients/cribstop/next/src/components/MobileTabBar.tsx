@@ -30,7 +30,7 @@ const BAR_HEIGHT = '3.5rem';
 function isActive(id: (typeof MOBILE_TABS)[number]['id'], pathname: string): boolean {
   switch (id) {
     case 'homes':
-      return !['/services', '/connect', '/favorites', '/account'].some(
+      return !['/services', '/connect', '/account'].some(
         (p) => pathname === p || pathname.startsWith(`${p}/`),
       );
     case 'services':

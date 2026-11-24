@@ -141,8 +141,8 @@ with a fixed date. A failure means a spec reads the real clock.
   (`DOCK_LARGE_CLASS`).
 - **The header is one row at every width, and nothing in it moves on scroll (2026-11-24).** From
   `md`: brand mark and search pill on the left, then primary tabs, Account and More on the right.
-  The row has no Saved button: a signed-in user has "Saved homes" in the account panel, and a phone
-  has Saved in the tab bar. Account has the shape of a tab: the account icon, then "Sign in" (signed
+  The row has no Saved button: a signed-in user has "Saved" in the account panel, and a phone has
+  Saved in the tab bar. Account has the shape of a tab: the account icon, then "Sign in" (signed
   out, opens the sign-in dialog) or the first name (signed in, opens the account panel), with the
   label from `lg`. On a phone: brand mark, search pill and Account, with the tabs in the bottom bar.
   The phone pill (`MobileSearchPill`) has the same one-line shape as the desktop field. The search
@@ -152,9 +152,15 @@ with a fixed date. A failure means a spec reads the real clock.
   clicked field opens below with a scrim behind it. An outside click, Escape or a completed search
   closes the panel, and the bar shrinks back. On a phone the pill opens the full-screen sheet. There
   is no in-page search row.
-  - Account is a nav item. On `/account` and `/favorites` (`isAccountPath` in `NavBar.tsx`) it is
-    the active item and no tab is. It gets the tab underline from `md`, and the brand color on a
-    phone.
+  - Account is a nav item. On `/account` and every page below it (`isAccountPath` in `NavBar.tsx`)
+    it is the active item and no tab is. It gets the tab underline from `md`, and the brand color on
+    a phone.
+  - **Account activity pages live below `/account`, never on the feed.** `/account/favorites`
+    (Saved) and `/account/recently-viewed` each have one section for Homes, Services and Connect
+    (`ActivitySection`). A product with no activity yet shows `ActivityNotYet`, with no link and no
+    button. The account panel and "Your activity" on `/account` link to both pages. `/favorites`
+    redirects to `/account/favorites` (`next.config.js`). The home feed has no "Recently viewed"
+    row.
   - The tabs come from `PRIMARY_TABS` (`MobileTabBar.tsx`): one list and one icon set for the phone
     bar and the desktop header. They show icons from `md` and icon with label from `lg`.
   - The pill is fixed over `NavBar`'s `.header-pill-slot`. Both read `--header-pill-left` and

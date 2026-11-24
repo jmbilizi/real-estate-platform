@@ -128,7 +128,7 @@ const APPS: AppTile[] = [
   // Row 3 — Personal tools
   {
     label: 'Saved',
-    href: '/favorites',
+    href: '/account/favorites',
     icon: (
       <svg
         className="h-5 w-5"

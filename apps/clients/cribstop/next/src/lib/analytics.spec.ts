@@ -62,7 +62,7 @@ describe('analytics', () => {
   });
 
   it('maps a path to a surface', () => {
-    expect(surfaceFromPath('/favorites')).toBe('favorites');
+    expect(surfaceFromPath('/account/favorites')).toBe('favorites');
     expect(surfaceFromPath('/listing/abc')).toBe('detail');
     expect(surfaceFromPath('/search')).toBe('search');
   });

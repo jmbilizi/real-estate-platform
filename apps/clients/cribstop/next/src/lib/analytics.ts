@@ -48,7 +48,7 @@ export function getAnalyticsSessionId(now: number = Date.now()): string {
 
 /** The page area for a path, when the caller does not know it. */
 export function surfaceFromPath(pathname: string): AnalyticsSurface {
-  if (pathname.startsWith('/favorites')) return 'favorites';
+  if (pathname.startsWith('/account/favorites')) return 'favorites';
   if (pathname.startsWith('/listing') || pathname.startsWith('/property')) return 'detail';
   if (pathname === '/') return 'home';
   if (/^\/(login|signup|forgot-password|secure-account)/.test(pathname)) return 'auth';
@@ -67,13 +67,15 @@ export function pathTemplate(pathname: string): string {
       ? `/${first}/leads/[id]`
       : `/${first}/${second === 'agents' ? 'agents' : 'leads'}`;
   }
+  if (first === 'account' && (second === 'favorites' || second === 'recently-viewed')) {
+    return `/account/${second}`;
+  }
   const STATIC = [
     'about',
     'accessibility',
     'account',
     'business',
     'fair-housing',
-    'favorites',
     'list',
     'privacy',
     'terms',

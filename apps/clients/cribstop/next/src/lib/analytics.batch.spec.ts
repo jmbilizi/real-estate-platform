@@ -152,13 +152,13 @@ describe('path helpers', () => {
     expect(pathTemplate('/listing/abc-123')).toBe('/listing/[id]');
     expect(pathTemplate('/property/12-main-st/0190a000')).toBe('/property/[slug]/[id]');
     expect(pathTemplate('/arlington-va/homes')).toBe('/[city]/[...rest]');
-    expect(pathTemplate('/favorites')).toBe('/favorites');
+    expect(pathTemplate('/account/favorites')).toBe('/account/favorites');
     expect(pathTemplate('/admin/leads/42')).toBe('/admin/leads/[id]');
   });
 
   it('maps a path to a surface', () => {
     expect(surfaceFromPath('/')).toBe('home');
     expect(surfaceFromPath('/login')).toBe('auth');
-    expect(surfaceFromPath('/favorites')).toBe('favorites');
+    expect(surfaceFromPath('/account/favorites')).toBe('favorites');
   });
 });

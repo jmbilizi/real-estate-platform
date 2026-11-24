@@ -12,6 +12,7 @@ import { listAllSavedHomes } from '@/lib/api/saved-homes';
 import type { SavedHome } from '@cribstop/property-contracts';
 import type { ListingCardRow } from '@/lib/types';
 import { ListingErrorState, ListingGridSkeleton } from '@/components/listing/ListingStates';
+import { ActivityNotYet, ActivitySection } from '@/components/ActivitySection';
 import Link from 'next/link';
 
 const DEFAULT_ERROR_MESSAGE = "We couldn't load your saved homes. Please try again.";
@@ -82,7 +83,7 @@ export default function FavoritesPage() {
     <div className="page-gutter py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold tracking-tight">Saved homes</h1>
+          <h1 className="font-display text-3xl font-bold tracking-tight">Saved</h1>
           <p className="mt-1 text-sm text-ink-muted">
             {displayCount} saved home{displayCount !== 1 ? 's' : ''} ·{' '}
             {signedIn ? 'synced to your account' : 'saved on this device for now'}
@@ -111,59 +112,69 @@ export default function FavoritesPage() {
         </div>
       )}
 
-      {loading ? (
-        <div className="mt-8">
-          <ListingGridSkeleton count={Math.min(savedHomes.length, 8) || 4} />
-        </div>
-      ) : failed ? (
-        <ListingErrorState
-          className="mt-10"
-          message={errorMessage ?? DEFAULT_ERROR_MESSAGE}
-          onRetry={() => void refetch()}
-        />
-      ) : visible.length === 0 ? (
-        <div className="mt-10 rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 px-6 py-16 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-            <svg
-              className="h-7 w-7 text-brand"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
+      <ActivitySection id="saved-homes" title="Homes">
+        {loading ? (
+          <div className="mt-4">
+            <ListingGridSkeleton count={Math.min(savedHomes.length, 8) || 4} />
           </div>
-          <p className="mt-5 font-display text-xl font-bold">No saved homes yet</p>
-          <p className="mt-1 text-sm text-ink-muted">
-            Tap the heart on any listing and it will appear here for easy access.
-          </p>
-          <Link href="/homes-for-sale?type=all" className="btn-primary mt-6 inline-flex">
-            Browse homes
-          </Link>
-        </div>
-      ) : (
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {/* min-w-0: a grid item's min width is its content, so a truncated address would widen the
-              single mobile column and scroll the page sideways. */}
-          {visible.map((item, i) => (
-            <div key={item.propertyId} className="min-w-0" data-favorite-cell>
-              {item.kind === 'listed' ? (
-                <ListingCard
-                  listing={item.card}
-                  track={{ listType: 'favorites', rowId: 'favorites', position: i }}
+        ) : failed ? (
+          <ListingErrorState
+            className="mt-4"
+            message={errorMessage ?? DEFAULT_ERROR_MESSAGE}
+            onRetry={() => void refetch()}
+          />
+        ) : visible.length === 0 ? (
+          <div className="mt-4 rounded-3xl border border-dashed border-surface-border bg-surface-alt/60 px-6 py-16 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
+              <svg
+                className="h-7 w-7 text-brand"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
                 />
-              ) : (
-                <OffMarketHomeCard home={item.home} onRemove={removeSaved} />
-              )}
+              </svg>
             </div>
-          ))}
-        </div>
-      )}
+            <p className="mt-5 font-display text-xl font-bold">No saved homes yet</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              Tap the heart on any listing and it will appear here for easy access.
+            </p>
+            <Link href="/homes-for-sale?type=all" className="btn-primary mt-6 inline-flex">
+              Browse homes
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {/* min-w-0: a grid item's min width is its content, so a truncated address would widen the
+              single mobile column and scroll the page sideways. */}
+            {visible.map((item, i) => (
+              <div key={item.propertyId} className="min-w-0" data-favorite-cell>
+                {item.kind === 'listed' ? (
+                  <ListingCard
+                    listing={item.card}
+                    track={{ listType: 'favorites', rowId: 'favorites', position: i }}
+                  />
+                ) : (
+                  <OffMarketHomeCard home={item.home} onRemove={removeSaved} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </ActivitySection>
+
+      <ActivitySection id="saved-services" title="Services">
+        <ActivityNotYet>The services you save will show here when Services opens.</ActivityNotYet>
+      </ActivitySection>
+
+      <ActivitySection id="saved-connect" title="Connect">
+        <ActivityNotYet>What you save in Connect will show here when Connect opens.</ActivityNotYet>
+      </ActivitySection>
     </div>
   );
 }
