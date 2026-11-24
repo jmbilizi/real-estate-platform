@@ -98,29 +98,31 @@ export default function ServicesPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <section className="relative overflow-hidden bg-gradient-to-br from-surface-soft to-white">
-        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-24 text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand/5 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand mb-6">
+      <section className="bg-gradient-to-b from-surface-soft to-white">
+        <div className="page-gutter mx-auto max-w-6xl pb-2 pt-12 text-center sm:pt-16">
+          <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand-50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700">
             <Home className="h-3.5 w-3.5" aria-hidden="true" />
             Coming Soon
           </span>
           <h1 className="font-display text-3xl font-bold tracking-tight text-ink">
             {BRAND.siteName} {PILLAR} is coming.
           </h1>
-          <p className="mt-4 text-lg text-ink-muted max-w-2xl mx-auto">
+          <p className="mx-auto mt-3 max-w-2xl text-lg text-ink-muted">
             Soon you can find the professionals who help with a home, from the first showing to the
             last repair. {PILLAR} is not open yet.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
+      <section className="page-gutter mx-auto max-w-6xl py-10 sm:py-14">
         <h2 className="sr-only">What {PILLAR} will include</h2>
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {WILL_INCLUDE.map(({ icon: Icon, title, body }) => (
-            <li key={title} className="rounded-2xl border border-surface-border p-5">
-              <Icon className="h-5 w-5 text-brand" aria-hidden="true" />
-              <h3 className="mt-3 text-base font-bold text-ink">{title}</h3>
+            <li key={title} className="rounded-lg border border-surface-border bg-white p-5">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand">
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <h3 className="mt-4 text-base font-semibold text-ink">{title}</h3>
               <p className="mt-1 text-sm text-ink-muted">{body}</p>
             </li>
           ))}
@@ -131,11 +133,11 @@ export default function ServicesPage() {
         aria-labelledby="services-consumer-heading"
         className="border-t border-surface-border bg-surface-soft"
       >
-        <div className="mx-auto max-w-3xl px-4 py-14 text-center sm:py-16">
-          <h2 id="services-consumer-heading" className="text-2xl font-bold text-ink mb-3">
+        <div className="page-gutter mx-auto max-w-3xl py-12 text-center sm:py-14">
+          <h2 id="services-consumer-heading" className="mb-2 text-2xl font-bold text-ink">
             Be the first to know
           </h2>
-          <p className="text-ink-muted mb-6">
+          <p className="mb-6 text-[15px] text-ink-muted">
             Join the waitlist for early access to {PILLAR}. You need a {BRAND.siteName} account.
           </p>
           <WaitlistButton
@@ -146,7 +148,7 @@ export default function ServicesPage() {
           />
           <p
             id="services-consumer-consent"
-            className="mt-4 text-xs text-ink-muted max-w-md mx-auto"
+            className="mx-auto mt-4 max-w-md text-xs text-ink-muted"
           >
             We use your account email only to tell you when {PILLAR} opens. You can leave the list
             at any time.
@@ -158,11 +160,11 @@ export default function ServicesPage() {
         aria-labelledby="services-provider-heading"
         className="border-t border-surface-border"
       >
-        <div className="mx-auto max-w-3xl px-4 py-14 text-center sm:py-16">
-          <h2 id="services-provider-heading" className="text-2xl font-bold text-ink mb-3">
+        <div className="page-gutter mx-auto max-w-3xl py-12 text-center sm:py-14">
+          <h2 id="services-provider-heading" className="mb-2 text-2xl font-bold text-ink">
             Do you offer a home service?
           </h2>
-          <p className="text-ink-muted mb-6">
+          <p className="mb-6 text-[15px] text-ink-muted">
             Tell us you want to be listed on {PILLAR} when it opens. This is not a sign-up for a
             business account. You need a {BRAND.siteName} account.
           </p>
@@ -174,7 +176,7 @@ export default function ServicesPage() {
           />
           <p
             id="services-provider-consent"
-            className="mt-4 text-xs text-ink-muted max-w-md mx-auto"
+            className="mx-auto mt-4 max-w-md text-xs text-ink-muted"
           >
             We use your account email only to tell you when {PILLAR} opens to providers. You can
             leave the list at any time.

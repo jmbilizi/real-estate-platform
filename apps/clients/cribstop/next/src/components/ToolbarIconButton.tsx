@@ -255,7 +255,7 @@ export default function ToolbarIconButton({
         <span
           aria-hidden="true"
           data-testid={countTestId}
-          className="absolute -right-0.5 -top-0.5 box-border h-[18px] min-w-[18px] rounded-full bg-ink px-1 text-center text-[11px] font-bold leading-[18px] text-white"
+          className="absolute -right-0.5 -top-0.5 box-border h-[18px] min-w-[18px] rounded-full bg-brand-700 px-1 text-center text-[11px] font-bold leading-[18px] text-white"
         >
           {count}
         </span>

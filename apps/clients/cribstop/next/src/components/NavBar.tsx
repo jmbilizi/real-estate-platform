@@ -25,6 +25,15 @@ import { MORE_ICON } from './ToolbarIconButton';
 const ACCOUNT_CLASSES =
   'flex h-11 min-w-11 items-center justify-center gap-1.5 rounded-full px-3 text-[15px] font-semibold text-ink-muted transition-colors duration-150 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand';
 const ACCOUNT_ICON_CLASSES = 'h-6 w-6 shrink-0 lg:h-5 lg:w-5';
+/** Active on an account page: the brand color on a phone (as the tab bar), ink from `md` (as a tab). */
+const ACCOUNT_ACTIVE_CLASSES = 'text-brand md:text-ink';
+
+/** The pages the account control owns. On them it is the active item, and no primary tab is. */
+const ACCOUNT_PREFIXES = ['/account', '/favorites'];
+
+export function isAccountPath(pathname: string): boolean {
+  return ACCOUNT_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 export default function NavBar() {
   const {
@@ -70,6 +79,16 @@ export default function NavBar() {
    * rendering off the path alone would leave the underline behind until the route caught up.
    */
   const displayTab = hydrated ? activeTab : tabFromPath;
+
+  /*
+   * An account page makes the account control the active item. A tab click clears it at once
+   * (`leftPath`), because the click sets the tab and then navigates, so the route is late.
+   */
+  const [leftPath, setLeftPath] = useState<string | null>(null);
+  useEffect(() => {
+    setLeftPath(null);
+  }, [pathname]);
+  const accountActive = isAccountPath(pathname) && leftPath !== pathname;
 
   // Keep the store in step with the route for everything else that reads `activeTab`.
   useEffect(() => {
@@ -171,7 +190,7 @@ export default function NavBar() {
           <nav aria-label="Primary" className="ml-auto hidden h-16 items-stretch gap-1 md:flex">
             {PRIMARY_TABS.map((tab) => {
               const Icon = tab.icon;
-              const isActive = displayTab === tab.id;
+              const isActive = !accountActive && displayTab === tab.id;
               return (
                 <Link
                   key={tab.id}
@@ -179,7 +198,10 @@ export default function NavBar() {
                   aria-label={tab.label}
                   aria-current={isActive ? 'page' : undefined}
                   title={tab.label}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setLeftPath(pathname);
+                  }}
                   className={`relative flex min-w-12 items-center justify-center gap-1.5 px-3 text-[15px] font-semibold transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand ${
                     isActive ? 'text-ink' : 'text-ink-muted hover:text-ink'
                   }`}
@@ -235,9 +257,20 @@ export default function NavBar() {
              * the photo) and the first name, and it opens the account panel. The label shows from
              * `lg`, the same as the tab labels.
              */}
-            <div className={`flex justify-end ${hydrated ? 'content-resolved' : ''}`}>
+            <div
+              className={`relative flex h-16 items-center justify-end ${hydrated ? 'content-resolved' : ''}`}
+            >
+              {/* The same underline as the tabs (one `layoutId`), so it slides to Account. */}
+              {accountActive && (
+                <motion.span
+                  layoutId="nav-tab-underline"
+                  data-testid="account-active-underline"
+                  className="absolute inset-x-2 bottom-0 hidden h-[2px] rounded-full bg-brand md:block"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
               {!hydrated ? (
-                <AccountSkeleton />
+                <AccountSkeleton active={accountActive} />
               ) : user ? (
                 <div className="relative">
                   <button
@@ -246,8 +279,11 @@ export default function NavBar() {
                     title="Profile menu"
                     aria-expanded={profileOpen}
                     aria-haspopup="dialog"
+                    aria-current={accountActive ? 'page' : undefined}
                     onClick={() => setProfileOpen((v) => !v)}
-                    className={`${ACCOUNT_CLASSES} ${profileOpen ? 'text-ink' : ''}`}
+                    className={`${ACCOUNT_CLASSES} ${
+                      accountActive ? ACCOUNT_ACTIVE_CLASSES : profileOpen ? 'text-ink' : ''
+                    }`}
                   >
                     {user.avatar ? (
                       <img
@@ -259,7 +295,7 @@ export default function NavBar() {
                     ) : (
                       <UserIcon
                         className={ACCOUNT_ICON_CLASSES}
-                        strokeWidth={1.75}
+                        strokeWidth={accountActive ? 2.25 : 1.75}
                         aria-hidden="true"
                       />
                     )}
@@ -365,12 +401,13 @@ export default function NavBar() {
                   type="button"
                   aria-label="Sign in or sign up"
                   title="Sign in or sign up"
+                  aria-current={accountActive ? 'page' : undefined}
                   onClick={() => openModal()}
-                  className={ACCOUNT_CLASSES}
+                  className={`${ACCOUNT_CLASSES} ${accountActive ? ACCOUNT_ACTIVE_CLASSES : ''}`}
                 >
                   <UserIcon
                     className={ACCOUNT_ICON_CLASSES}
-                    strokeWidth={1.75}
+                    strokeWidth={accountActive ? 2.25 : 1.75}
                     aria-hidden="true"
                   />
                   <span className="hidden whitespace-nowrap lg:inline">Sign in</span>
@@ -413,10 +450,13 @@ function accountLabel(user: User): string {
  * real control arrives. `aria-hidden`: this is one unresolved control, not a page-level loading
  * state to announce.
  */
-function AccountSkeleton() {
+function AccountSkeleton({ active }: { active: boolean }) {
   return (
-    <span aria-hidden="true" className={`${ACCOUNT_CLASSES} pointer-events-none`}>
-      <UserIcon className={ACCOUNT_ICON_CLASSES} strokeWidth={1.75} />
+    <span
+      aria-hidden="true"
+      className={`${ACCOUNT_CLASSES} pointer-events-none ${active ? ACCOUNT_ACTIVE_CLASSES : ''}`}
+    >
+      <UserIcon className={ACCOUNT_ICON_CLASSES} strokeWidth={active ? 2.25 : 1.75} />
       <SkeletonBlock className="hidden h-3.5 w-12 rounded lg:block" />
     </span>
   );

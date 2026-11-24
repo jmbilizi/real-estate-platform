@@ -5,6 +5,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/lib/context';
 import { openAuthModal } from '@/lib/auth-modal';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import type { LucideIcon } from 'lucide-react';
+import {
+  BadgeCheck,
+  ChevronRight,
+  Clock,
+  Heart,
+  Home,
+  LogOut,
+  Search,
+  User as UserIcon,
+} from 'lucide-react';
 import { getUserDisplayName, getUserInitials } from '@/lib/store/types';
 import { type ProfileUpdateRequest, updateProfile as updateProfileApi } from '@/lib/api/account';
 import { accountKeys, profileOptions } from '@/lib/query/account';
@@ -13,6 +25,11 @@ import { updateProfile } from '@/lib/store/slices/authSlice';
 import { addToast } from '@/lib/store/slices/toastSlice';
 import { selectUser } from '@/lib/store/selectors';
 import AccountSecuritySection from '@/components/AccountSecuritySection';
+import {
+  ACCOUNT_CARD_CLASSES,
+  ACCOUNT_CARD_HEADER_CLASSES,
+  ACCOUNT_CARD_TITLE_CLASSES,
+} from '@/components/account-card';
 import EmailConsentNotice, { useConsentWording } from '@/components/EmailConsentNotice';
 import { optInToEmail } from '@/lib/api/notification-preferences';
 import LookingForSection from '@/components/LookingForSection';
@@ -28,33 +45,19 @@ export default function AccountPage() {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-24 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-brand/10">
-          <svg
-            className="h-8 w-8 text-brand"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
+      <div className="page-gutter mx-auto max-w-xl py-16 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-50">
+          <UserIcon className="h-8 w-8 text-brand" strokeWidth={1.75} aria-hidden="true" />
         </div>
-        <h1 className="mt-6 font-display text-2xl font-bold tracking-tight">
-          Sign in to your account
-        </h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          Access your saved searches, listing history, messages, and account settings.
+        <h1 className="mt-6 text-2xl font-bold tracking-tight">Sign in to your account</h1>
+        <p className="mt-2 text-[15px] text-ink-muted">
+          See your saved homes and manage your account settings.
         </p>
-        <div className="mt-6 flex items-center justify-center gap-2">
-          <button onClick={() => openModal('login')} className="btn-primary">
+        <div className="mt-6 flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
+          <button onClick={() => openModal('login')} className="btn-primary min-h-11">
             Sign in
           </button>
-          <button onClick={() => openModal('signup')} className="btn-secondary">
+          <button onClick={() => openModal('signup')} className="btn-secondary min-h-11">
             Create account
           </button>
         </div>
@@ -66,104 +69,104 @@ export default function AccountPage() {
   const initials = getUserInitials(user);
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8">
+    <div className="page-gutter mx-auto max-w-2xl py-8 sm:py-12">
       {/* Profile header */}
-      <div className="flex items-center gap-5">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand text-xl font-bold text-white">
-          {initials}
-        </div>
-        <div>
-          <h1 className="font-display text-2xl font-bold">{displayName}</h1>
-          {displayName !== user.email && <p className="text-sm text-ink-muted">{user.email}</p>}
+      <div className="flex items-center gap-4">
+        {user.avatar ? (
+          <img
+            src={user.avatar}
+            alt=""
+            className="h-16 w-16 shrink-0 rounded-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand text-xl font-bold text-white"
+          >
+            {initials}
+          </div>
+        )}
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-bold tracking-tight">{displayName}</h1>
+          {displayName !== user.email && (
+            <p className="break-words text-sm text-ink-muted">{user.email}</p>
+          )}
         </div>
       </div>
+
+      {/* Editable profile section */}
+      <ProfileSection />
 
       <AccountSecuritySection />
 
       <LookingForSection />
 
-      <section className="mt-10">
-        <h2 className="mb-2 font-display text-lg font-bold">Home page</h2>
-        <PersonaliseSwitch />
+      <section aria-labelledby="home-page-heading" className={ACCOUNT_CARD_CLASSES}>
+        <div className={ACCOUNT_CARD_HEADER_CLASSES}>
+          <h2 id="home-page-heading" className={ACCOUNT_CARD_TITLE_CLASSES}>
+            Home page
+          </h2>
+        </div>
+        <div className="px-5 py-3">
+          <PersonaliseSwitch />
+        </div>
       </section>
 
-      {/* Editable profile section */}
-      <ProfileSection />
-
-      {/* Account sections */}
-      <div className="mt-10 space-y-3">
-        {ACCOUNT_SECTIONS.map((section) => (
-          <div
-            key={section.title}
-            className="rounded-2xl border border-surface-border bg-white shadow-card"
-          >
-            <div className="px-5 py-4 border-b border-surface-border">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide">
-                {section.title}
-              </h2>
-            </div>
-            <ul className="divide-y divide-surface-border">
-              {section.items.map((item) => (
-                <li key={item.label}>
-                  <button
-                    disabled
-                    className="flex w-full items-center justify-between px-5 py-4 text-left opacity-60 cursor-not-allowed"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand/10 text-brand">
-                        {item.icon}
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium">{item.label}</p>
-                        {item.description && (
-                          <p className="text-xs text-ink-muted">{item.description}</p>
-                        )}
-                      </div>
-                    </div>
-                    <svg
-                      className="h-4 w-4 text-ink-muted"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-medium text-amber-700 ring-1 ring-amber-200">
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-        Full account management coming soon
-      </div>
+      <section aria-labelledby="activity-heading" className={ACCOUNT_CARD_CLASSES}>
+        <div className={ACCOUNT_CARD_HEADER_CLASSES}>
+          <h2 id="activity-heading" className={ACCOUNT_CARD_TITLE_CLASSES}>
+            Your activity
+          </h2>
+        </div>
+        <ul className="divide-y divide-surface-border">
+          <li>
+            <Link
+              href="/favorites"
+              className="flex min-h-14 items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-surface-alt focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand">
+                  <Heart className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-medium text-ink">Saved homes</span>
+                  <span className="block text-[13px] text-ink-muted">
+                    The homes you saved with the heart
+                  </span>
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+            </Link>
+          </li>
+          {/* Not built yet. A row with no link and no button, so it promises no action. */}
+          {COMING_SOON_ITEMS.map(({ label, description, icon: Icon }) => (
+            <li key={label} className="flex min-h-14 items-center justify-between gap-3 px-5 py-3">
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-alt text-ink-subtle">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-medium text-ink-muted">{label}</span>
+                  <span className="block text-[13px] text-ink-subtle">{description}</span>
+                </span>
+              </span>
+              <span className="badge shrink-0 bg-surface-alt text-ink-muted">Soon</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {/* Sign out */}
-      <div className="mt-10">
+      <div className="mt-8">
         <button
           onClick={() => {
             logout();
             router.push('/');
           }}
-          className="flex items-center gap-2 rounded-full border border-surface-border bg-white px-5 py-2.5 text-sm font-medium text-ink hover:bg-surface-alt transition-colors"
+          className="btn-secondary min-h-11 w-full gap-2 sm:w-auto"
         >
-          <svg
-            className="h-4 w-4 text-ink-muted"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-            />
-          </svg>
+          <LogOut className="h-4 w-4 text-ink-muted" aria-hidden="true" />
           Sign out
         </button>
       </div>
@@ -295,7 +298,7 @@ function ProfileSection() {
 
   if (loading && editing) {
     return (
-      <div className="mt-10 rounded-2xl border border-surface-border bg-white p-6 shadow-card animate-pulse">
+      <div className={`${ACCOUNT_CARD_CLASSES} animate-pulse p-5`}>
         <div className="h-5 w-32 bg-surface-border rounded" />
         <div className="mt-4 space-y-3">
           <div className="h-10 bg-surface-border rounded" />
@@ -306,15 +309,13 @@ function ProfileSection() {
   }
 
   return (
-    <div className="mt-10 rounded-2xl border border-surface-border bg-white shadow-card overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-surface-border">
-        <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide">
-          Personal Information
-        </h2>
+    <div className={`${ACCOUNT_CARD_CLASSES} overflow-hidden`}>
+      <div className={ACCOUNT_CARD_HEADER_CLASSES}>
+        <h2 className={ACCOUNT_CARD_TITLE_CLASSES}>Personal information</h2>
         {!editing && (
           <button
             onClick={handleEdit}
-            className="text-sm font-medium text-brand hover:text-brand/80 transition-colors"
+            className="-mr-3 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-medium text-brand hover:bg-brand/10"
           >
             Edit
           </button>
@@ -350,7 +351,7 @@ function ProfileSection() {
             placeholder="A little about yourself"
             rows={3}
             maxLength={280}
-            className="w-full rounded-xl border border-surface-border bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted/50 disabled:bg-surface-alt disabled:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand resize-none"
+            className="input-field resize-none disabled:bg-surface-alt disabled:text-ink-muted"
           />
         </div>
 
@@ -365,9 +366,7 @@ function ProfileSection() {
 
         {/* Notification preferences */}
         <div className="border-t border-surface-border pt-5">
-          <h3 className="text-xs font-medium text-ink-muted mb-3 uppercase tracking-wide">
-            Notifications
-          </h3>
+          <h3 className="mb-3 text-[15px] font-semibold text-ink">Notifications</h3>
           <div className="space-y-3">
             <ToggleField
               label="Email notifications"
@@ -395,15 +394,11 @@ function ProfileSection() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="btn-primary rounded-full px-6 py-2.5 text-sm font-semibold"
+              className="btn-primary min-h-11 px-6 disabled:opacity-60"
             >
               {saving ? 'Saving...' : 'Save changes'}
             </button>
-            <button
-              onClick={handleCancel}
-              disabled={saving}
-              className="text-sm font-medium text-ink-muted hover:text-ink transition-colors"
-            >
+            <button onClick={handleCancel} disabled={saving} className="btn-secondary min-h-11">
               Cancel
             </button>
           </div>
@@ -439,7 +434,7 @@ function InputField({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-surface-border bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted/50 disabled:bg-surface-alt disabled:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand"
+        className="input-field min-h-11 disabled:bg-surface-alt disabled:text-ink-muted"
       />
     </div>
   );
@@ -461,7 +456,7 @@ function ToggleField({
   return (
     <label className="flex items-center justify-between gap-4 cursor-pointer">
       <div>
-        <p className="text-sm font-medium text-ink">{label}</p>
+        <p className="text-[15px] font-medium text-ink">{label}</p>
         <p className="text-xs text-ink-muted">{description}</p>
       </div>
       <button
@@ -471,7 +466,7 @@ function ToggleField({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-50 disabled:cursor-not-allowed ${
-          checked ? 'bg-brand' : 'bg-gray-200'
+          checked ? 'bg-brand' : 'bg-surface-border'
         }`}
       >
         <span
@@ -489,7 +484,7 @@ function ComingSoonToggle({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-medium text-ink">{label}</p>
+        <p className="text-[15px] font-medium text-ink">{label}</p>
         <p className="text-xs text-ink-muted">Coming soon</p>
       </div>
       <button
@@ -498,7 +493,7 @@ function ComingSoonToggle({ label }: { label: string }) {
         aria-checked={false}
         aria-label={`${label}, coming soon`}
         disabled
-        className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-not-allowed rounded-full border-2 border-transparent bg-gray-200 opacity-50"
+        className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-not-allowed rounded-full border-2 border-transparent bg-surface-border opacity-50"
       >
         <span className="pointer-events-none inline-block h-5 w-5 translate-x-0 rounded-full bg-white shadow ring-0" />
       </button>
@@ -506,134 +501,9 @@ function ComingSoonToggle({ label }: { label: string }) {
   );
 }
 
-const ACCOUNT_SECTIONS = [
-  {
-    title: 'Profile',
-    items: [
-      {
-        label: 'Personal information',
-        description: 'Name, email, phone number',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    title: 'My Activity',
-    items: [
-      {
-        label: 'Saved homes',
-        description: 'Homes you have hearted',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-            />
-          </svg>
-        ),
-      },
-      {
-        label: 'Saved searches',
-        description: 'Search filters you have saved',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-        ),
-      },
-      {
-        label: 'Recently viewed',
-        description: 'Listings you have visited',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    title: 'For Agents & Owners',
-    items: [
-      {
-        label: 'My listings',
-        description: 'Manage your active and past listings',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
-            />
-          </svg>
-        ),
-      },
-      {
-        label: 'Agent profile',
-        description: 'Public profile, credentials, reviews',
-        icon: (
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.75}
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-            />
-          </svg>
-        ),
-      },
-    ],
-  },
+const COMING_SOON_ITEMS: { label: string; description: string; icon: LucideIcon }[] = [
+  { label: 'Saved searches', description: 'Search filters you save', icon: Search },
+  { label: 'Recently viewed', description: 'Listings you opened', icon: Clock },
+  { label: 'My listings', description: 'Your active and past listings', icon: Home },
+  { label: 'Agent profile', description: 'Public profile and credentials', icon: BadgeCheck },
 ];

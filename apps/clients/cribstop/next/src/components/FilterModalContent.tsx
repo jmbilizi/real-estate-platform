@@ -1,4 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Building,
+  Building2,
+  Caravan,
+  Construction,
+  Factory,
+  House,
+  Minus,
+  Plus,
+  Trees,
+  Warehouse,
+} from 'lucide-react';
 import {
   AMENITIES,
   DEFAULT_STATUS_FILTER,
@@ -43,17 +56,33 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   Pending: 'Under Contract',
 };
 
-/** Icons are decorative; the label is the accessible name. */
-const PROPERTY_TYPE_ICONS: Record<PropertyType, string> = {
-  'Single Family': '🏠',
-  Condo: '🏢',
-  Townhome: '🏘️',
-  'Multi-Family': '🏡',
-  Loft: '🏬',
-  Land: '🌳',
-  'New Construction': '🏗️',
-  'Manufactured/Mobile': '🏚️',
+/** Line icons, the same set as the header. Decorative: the label is the accessible name. */
+const PROPERTY_TYPE_ICONS: Record<PropertyType, LucideIcon> = {
+  'Single Family': House,
+  Condo: Building2,
+  Townhome: Warehouse,
+  'Multi-Family': Building,
+  Loft: Factory,
+  Land: Trees,
+  'New Construction': Construction,
+  'Manufactured/Mobile': Caravan,
 };
+
+/*
+ * One look for the whole panel. A selected control is the brand color on a brand tint, never a
+ * black fill. `brand-700` on `brand-50` passes 4.5:1 for text.
+ */
+const SECTION_CLASSES = 'py-6 first:pt-0 last:pb-0';
+const SECTION_TITLE_CLASSES = 'text-base font-semibold text-ink';
+const FOCUS_RING_CLASSES =
+  'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1';
+const SELECTED_CLASSES = 'border-brand bg-brand-50 text-brand-700';
+const UNSELECTED_CLASSES = 'border-surface-border bg-white text-ink hover:border-ink';
+const CHIP_CLASSES = `inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium transition-colors ${FOCUS_RING_CLASSES}`;
+const chipClasses = (active: boolean) =>
+  `${CHIP_CLASSES} ${active ? SELECTED_CLASSES : UNSELECTED_CLASSES}`;
+const FIELD_CLASSES =
+  'h-11 w-32 rounded-full border bg-white px-3 text-center text-[15px] text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-2';
 
 /** The stepper's rungs: `0` reads as "Any" and is sent as no filter at all. */
 const COUNT_MIN = 0;
@@ -85,8 +114,14 @@ function sanitizeMaxPriceInput(raw: string): { digits: string; invalid: boolean 
  * element — each is a pair of buttons plus a live-region span — so those stay a `<span>`; the
  * buttons carry their own `aria-label`.
  */
-function rowLabel(text: string, { htmlFor, disabled }: { htmlFor?: string; disabled?: boolean }) {
-  const className = `text-sm font-medium ${disabled ? 'text-ink-subtle' : 'text-ink'}`;
+function rowLabel(
+  text: string,
+  { htmlFor, disabled, title }: { htmlFor?: string; disabled?: boolean; title?: boolean },
+) {
+  // `title`: the row is a section of its own (Price), so its label has the section title look.
+  const className = title
+    ? SECTION_TITLE_CLASSES
+    : `text-[15px] ${disabled ? 'text-ink-subtle' : 'text-ink'}`;
   return htmlFor ? (
     <label htmlFor={htmlFor} className={className}>
       {text}
@@ -217,9 +252,9 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
     };
 
     return (
-      <div className="flex flex-wrap items-center justify-between gap-y-2 py-1">
+      <div className="flex flex-wrap items-center justify-between gap-y-2">
         {rowLabel(label, { disabled })}
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-1">
           {stepperButton({
             label: '–',
             accessibleName: `Fewer ${label.toLowerCase()}`,
@@ -229,7 +264,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
           })}
           <span
             aria-live="polite"
-            className={`w-10 text-center text-[15px] font-normal ${
+            className={`w-12 text-center text-[15px] font-medium ${
               disabled ? 'text-ink-subtle' : 'text-ink'
             }`}
           >
@@ -248,32 +283,31 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
   };
 
   return (
-    <div className="grid grid-cols-1 gap-y-6">
+    <div className="divide-y divide-surface-border">
       {/* ── Home type ── Multi-select. A listing matches any selected type. */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Home Type
-        </legend>
-        <div className="grid grid-cols-4 gap-2">
+      <fieldset className={SECTION_CLASSES}>
+        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Home Type</legend>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {PROPERTY_TYPES.map((type) => {
             const selected = value.propertyType ?? [];
             const active = selected.includes(type);
             const next = active ? selected.filter((t) => t !== type) : [...selected, type];
+            const Icon = PROPERTY_TYPE_ICONS[type];
             return (
               <button
                 key={type}
                 type="button"
                 aria-pressed={active}
                 onClick={() => set({ propertyType: next.length > 0 ? next : undefined })}
-                className={`flex flex-col items-center rounded-xl border px-1 py-3 text-[11px] font-normal transition ${
-                  active
-                    ? 'bg-ink text-white border-ink'
-                    : 'bg-white text-ink border-surface-border hover:bg-surface-alt'
+                className={`flex min-h-[76px] flex-col items-start justify-between gap-2 rounded-md border p-3 text-left text-[13px] font-medium leading-tight transition-colors ${FOCUS_RING_CLASSES} ${
+                  active ? `${SELECTED_CLASSES} ring-1 ring-inset ring-brand` : UNSELECTED_CLASSES
                 }`}
               >
-                <span className="text-xl mb-0.5" aria-hidden="true">
-                  {PROPERTY_TYPE_ICONS[type]}
-                </span>
+                <Icon
+                  className="h-6 w-6 shrink-0"
+                  strokeWidth={active ? 2 : 1.75}
+                  aria-hidden="true"
+                />
                 {type}
               </button>
             );
@@ -284,10 +318,8 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
       {/* ── Listing status ── Multi-select, matching Home Type's chip style. Defaults to
            `DEFAULT_STATUS_FILTER` (Active, Coming Soon) when `value.status` is unset, so the
            chips read as checked even before the user has touched this filter. */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Listing Status
-        </legend>
+      <fieldset className={SECTION_CLASSES}>
+        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Listing Status</legend>
         <div className="flex flex-wrap gap-2">
           {STATUS_FILTER_VALUES.map((status) => {
             const active = (value.status ?? DEFAULT_STATUS_FILTER).includes(status);
@@ -297,11 +329,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
                 type="button"
                 aria-pressed={active}
                 onClick={() => toggleStatus(status)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? 'border-ink bg-ink text-white'
-                    : 'border-surface-border text-ink-muted hover:border-ink-subtle'
-                }`}
+                className={chipClasses(active)}
               >
                 {STATUS_FILTER_LABELS[status]}
               </button>
@@ -316,10 +344,10 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
 
           Label-left/control-right, matching Bedrooms and Bathrooms below (#256) — the row's own
           "Price" label replaces the section-title styling #254 gave it, so no separate legend. */}
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-y-2 py-1">
-          {rowLabel('Price', { htmlFor: 'filter-max-price' })}
-          <div className="flex items-center gap-5">
+      <div className={SECTION_CLASSES}>
+        <div className="flex flex-wrap items-center justify-between gap-y-2">
+          {rowLabel('Price', { htmlFor: 'filter-max-price', title: true })}
+          <div className="flex items-center gap-1">
             {stepperButton({
               label: '–',
               accessibleName: 'Decrease maximum price',
@@ -343,10 +371,10 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
                 commitMaxPrice();
                 event.currentTarget.blur();
               }}
-              className={`w-28 rounded-full border px-3 py-1.5 text-center text-[15px] font-normal focus:outline-none focus:ring-1 ${
+              className={`${FIELD_CLASSES} ${
                 maxPriceError
-                  ? 'border-red-400 text-red-600 focus:ring-red-400'
-                  : 'border-surface-border text-ink focus:ring-surface-border-strong'
+                  ? 'border-brand-700 text-brand-700 focus:ring-brand/20'
+                  : 'border-surface-border focus:border-brand focus:ring-brand/20'
               }`}
             />
             {stepperButton({
@@ -358,17 +386,15 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
           </div>
         </div>
         {maxPriceError && (
-          <p id="filter-max-price-error" className="text-xs text-red-600">
+          <p id="filter-max-price-error" className="mt-2 text-right text-xs text-brand-700">
             Enter a whole number, like 450000.
           </p>
         )}
       </div>
 
       {/* ── Beds / Baths / Square Feet — the dwelling group the interlock governs ── */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Size
-        </legend>
+      <fieldset className={SECTION_CLASSES}>
+        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Size</legend>
         {parcelOnly && (
           <p id={PARCEL_HINT_ID} className="mb-3 text-xs text-ink-muted">
             {PARCEL_INTERLOCK_HINT}
@@ -377,7 +403,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
         <div className="flex flex-col gap-3">
           {stepper('beds', 'Bedrooms', parcelOnly)}
           {stepper('baths', 'Bathrooms', parcelOnly)}
-          <div className="flex flex-wrap items-center justify-between gap-y-2 py-1">
+          <div className="flex flex-wrap items-center justify-between gap-y-2">
             {rowLabel('Square Feet', { htmlFor: 'filter-sqft', disabled: parcelOnly })}
             <input
               id="filter-sqft"
@@ -388,7 +414,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
               placeholder={parcelOnly ? 'Not applicable to land' : 'No min'}
               disabled={parcelOnly}
               aria-describedby={parcelHintId}
-              className="w-28 rounded-full border border-surface-border px-3 py-1.5 text-center text-[15px] font-normal focus:outline-none focus:ring-1 focus:ring-surface-border-strong disabled:bg-surface-alt disabled:text-ink-subtle disabled:cursor-not-allowed"
+              className={`${FIELD_CLASSES} border-surface-border focus:border-brand focus:ring-brand/20 disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-ink-subtle`}
               value={parcelOnly ? '' : (value.minSqft ?? '')}
               onChange={(event) => set({ minSqft: wholeNumberOrUndefined(event.target.value) })}
             />
@@ -400,10 +426,8 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
           `openHouse` and `newConstruction` are the only two booleans with a predicate of their own.
           `waterfront` and `petFriendly` are not here because server-side they *are* the amenities
           of the same name (see `parseFiltersFromSearchParams`), so they appear once, as chips. */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Show Only
-        </legend>
+      <fieldset className={SECTION_CLASSES}>
+        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Show Only</legend>
         <div className="flex flex-wrap gap-2">
           {(
             [
@@ -416,11 +440,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
               type="button"
               aria-pressed={!!value[key]}
               onClick={() => set({ [key]: value[key] ? undefined : true })}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                value[key]
-                  ? 'border-ink bg-ink text-white'
-                  : 'border-surface-border text-ink-muted hover:border-ink-subtle'
-              }`}
+              className={chipClasses(!!value[key])}
             >
               {label}
             </button>
@@ -429,10 +449,8 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
       </fieldset>
 
       {/* ── Amenities — the contract's closed 15-value set ───────────── */}
-      <fieldset>
-        <legend className="mb-2 font-semibold uppercase text-xs tracking-wider text-ink">
-          Amenities
-        </legend>
+      <fieldset className={SECTION_CLASSES}>
+        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Amenities</legend>
         <div className="flex flex-wrap gap-2">
           {AMENITIES.map((amenity) => {
             const active = value.amenities?.includes(amenity) ?? false;
@@ -442,11 +460,7 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
                 type="button"
                 aria-pressed={active}
                 onClick={() => toggleAmenity(amenity)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  active
-                    ? 'border-ink bg-ink text-white'
-                    : 'border-surface-border text-ink-muted hover:border-ink-subtle'
-                }`}
+                className={chipClasses(active)}
               >
                 {amenity}
               </button>
@@ -479,14 +493,21 @@ function stepperButton({
       aria-label={accessibleName}
       aria-describedby={describedBy}
       onClick={onClick}
-      className={`h-8 w-8 rounded-full border inline-flex items-center justify-center leading-none select-none transition-colors ${
-        disabled
-          ? 'border-[rgba(0,0,0,0.12)] text-[rgba(0,0,0,0.2)] cursor-default'
-          : 'border-[rgba(0,0,0,0.4)] text-ink hover:border-ink cursor-pointer'
+      className={`group inline-flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-full ${FOCUS_RING_CLASSES} ${
+        disabled ? 'cursor-default' : 'cursor-pointer'
       }`}
-      style={{ fontSize: '18px', paddingBottom: label === '–' ? '1px' : '0' }}
     >
-      <span aria-hidden="true">{label}</span>
+      {/* A 36px circle inside the 44px tap area. */}
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
+          disabled
+            ? 'border-surface-border text-ink-subtle/60'
+            : 'border-surface-border-strong text-ink group-hover:border-brand group-hover:text-brand-700'
+        }`}
+      >
+        {label === '+' ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+      </span>
     </button>
   );
 }

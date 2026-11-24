@@ -152,6 +152,9 @@ with a fixed date. A failure means a spec reads the real clock.
   clicked field opens below with a scrim behind it. An outside click, Escape or a completed search
   closes the panel, and the bar shrinks back. On a phone the pill opens the full-screen sheet. There
   is no in-page search row.
+  - Account is a nav item. On `/account` and `/favorites` (`isAccountPath` in `NavBar.tsx`) it is
+    the active item and no tab is. It gets the tab underline from `md`, and the brand color on a
+    phone.
   - The tabs come from `PRIMARY_TABS` (`MobileTabBar.tsx`): one list and one icon set for the phone
     bar and the desktop header. They show icons from `md` and icon with label from `lg`.
   - The pill is fixed over `NavBar`'s `.header-pill-slot`. Both read `--header-pill-left` and
@@ -167,6 +170,11 @@ with a fixed date. A failure means a spec reads the real clock.
   larger on a wide screen, and never use a weight above `font-bold`. A field is 16px on a touch
   device, so iOS does not zoom on focus. Icons are 16px beside text, 20px for an action and 24px in
   a bar. The header tab pictures are 28px.
+- **A selected control is the brand color, never a black fill (2026-11-24).** A selected chip or
+  tile is `border-brand bg-brand-50 text-brand-700`. A primary action is `btn-primary`. An error is
+  `text-brand-700`. Icons are `lucide-react` line icons, never emoji. The filter panel
+  (`FilterModalContent.tsx`) holds the pattern. The account page sections share
+  `components/account-card.ts`.
 - **One fact shows once on a page.** The home trust block states the freshness in its title and the
   brokerage with its states in one sentence. Do not add an eyebrow or a stat tile that repeats them.
 - **Never collect a protected-class signal from the searcher.** The occupancy ("Who") picker was

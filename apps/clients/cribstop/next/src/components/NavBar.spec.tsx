@@ -207,6 +207,50 @@ describe('NavBar before hydration', () => {
         expect(buttons[i].includes('aria-current="page"')).toBe(isExpected);
       });
     });
+
+    /** On an account page the account control is the active item, and no tab is. */
+    it.each(['/account', '/favorites'])(
+      'marks Account active on %s in the server-rendered HTML, and no tab',
+      (path) => {
+        mockPathname.mockReturnValue(path);
+        const html = serverHtml();
+
+        const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+        expect(nav).not.toContain('aria-current="page"');
+        expect(nav).not.toContain('rounded-full bg-brand');
+        expect(html).toContain('data-testid="account-active-underline"');
+      },
+    );
+
+    it('does not mark Account active on a tab page', () => {
+      mockPathname.mockReturnValue('/services');
+
+      expect(serverHtml()).not.toContain('data-testid="account-active-underline"');
+    });
+  });
+});
+
+describe('NavBar account item', () => {
+  it.each([
+    ['signed out', null, 'Sign in or sign up'],
+    ['signed in', A_USER, 'Profile menu'],
+  ])('is the current item on /account when %s', (_case, user, name) => {
+    mockUseApp.mockReturnValue(appValue(user));
+    mockPathname.mockReturnValue('/account');
+    render(<NavBar />);
+
+    expect(screen.getByRole('button', { name })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Homes' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('moves the active state to a tab at the click, before the route changes', () => {
+    mockPathname.mockReturnValue('/account');
+    render(<NavBar />);
+
+    fireEvent.click(screen.getByRole('link', { name: 'Homes' }));
+
+    expect(screen.getByRole('link', { name: 'Homes' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByTestId('account-active-underline')).not.toBeInTheDocument();
   });
 });
 

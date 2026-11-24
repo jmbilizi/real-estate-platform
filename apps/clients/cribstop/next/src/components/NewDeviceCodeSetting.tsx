@@ -105,7 +105,7 @@ export default function NewDeviceCodeSetting() {
         <input
           type="checkbox"
           role="switch"
-          className="mt-1 h-5 w-5 shrink-0"
+          className="mt-1 h-5 w-5 shrink-0 accent-brand"
           checked={target ?? enabled}
           disabled={setting === null || busy}
           aria-describedby="new-device-help"
@@ -116,7 +116,7 @@ export default function NewDeviceCodeSetting() {
           }}
         />
         <span className="min-w-0">
-          <span className="block text-sm font-medium text-ink">
+          <span className="block text-[15px] font-medium text-ink">
             Ask for an email code when I sign in on a new device
           </span>
           <span id="new-device-help" className="block text-xs text-ink-muted">
