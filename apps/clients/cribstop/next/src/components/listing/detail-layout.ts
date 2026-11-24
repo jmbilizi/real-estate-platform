@@ -24,6 +24,9 @@ export const DETAIL_SECTION = 'border-b border-surface-border py-6 sm:py-8';
 export const DETAIL_ASIDE_CARD =
   'lg:rounded-2xl lg:border lg:border-surface-border lg:px-6 lg:shadow-[0_6px_16px_rgba(0,0,0,0.12)] lg:[&>*:last-child]:border-b-0';
 
-/** The sidebar column. Its last section has no hairline from `lg`. */
+/**
+ * The sidebar column. Its last section has no hairline from `lg`. `.listing-aside` (globals.css)
+ * sets where it sticks: close under the detail header, in the modal and on the page.
+ */
 export const DETAIL_ASIDE =
-  'lg:sticky lg:top-24 lg:mt-8 lg:self-start lg:[&>*:last-child]:border-b-0';
+  'listing-aside lg:sticky lg:mt-8 lg:self-start lg:[&>*:last-child]:border-b-0';

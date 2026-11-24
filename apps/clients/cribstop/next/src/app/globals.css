@@ -110,6 +110,16 @@ html:has([data-overlay]) {
   overflow: hidden;
   scrollbar-gutter: stable;
 }
+/*
+ * A dialog that covers the window, such as the listing detail. The page keeps no scrollbar
+ * gutter, so the dialog reaches the right edge of the window and its own scrollbar sits there.
+ * Padding of the same width keeps the page behind it at the same width. `lockScroll` sets
+ * `--root-gutter`. `!important` wins over the inline `scrollbar-gutter` that `lockScroll` writes.
+ */
+html:has([data-overlay-cover]) {
+  scrollbar-gutter: auto !important;
+  padding-right: var(--root-gutter, 0px);
+}
 
 body {
   @apply antialiased text-ink bg-white;
@@ -692,6 +702,17 @@ html[data-map-expanded] {
 [role='dialog'] .listing-header {
   /* The full-screen modal card already pads the top inset (`Modal.tsx`, #918). */
   top: 0;
+}
+/*
+ * The detail sidebar sticks 16px under the detail header. In the modal the header is outside the
+ * scrolling body, so the offset is the 16px alone. On the page the window scrolls under the site
+ * header and the 73px detail header.
+ */
+.listing-aside {
+  top: calc(var(--navbar-h, 65px) + 73px + 1rem);
+}
+[role='dialog'] .listing-aside {
+  top: 1rem;
 }
 /* The section links hide before the price or the address squeeze. */
 @container (max-width: 900px) {
