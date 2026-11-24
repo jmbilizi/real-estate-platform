@@ -3,9 +3,13 @@
 /**
  * Decides whether a Deployment needs `kubectl rollout restart` (#954).
  *
- * Our images use mutable tags, so the restart exists to pull a newer image. A restart with no
- * newer image only churns pods. This script compares the digest the registry serves for each
- * first-party image with the digest each running pod reports in `imageID`.
+ * The restart exists to pull a newer image behind a mutable tag. A restart with no newer image
+ * only churns pods. This script compares the digest the registry serves for each first-party
+ * image with the digest each running pod reports in `imageID`.
+ *
+ * The deploy pins workload images by digest (`tools/infra/pin-image-digests.js`). A pinned
+ * image needs no restart: a new digest changes the pod template, so the apply rolls it out.
+ * Only an image that still uses a tag gets the comparison.
  *
  * Fail-safe rule: any doubt means restart. A failed probe never reads as "unchanged".
  *
@@ -82,10 +86,14 @@ function runningPods(pods) {
 async function decide({ deployment, pods, prefix, resolveDigest = fetchRegistryDigest }) {
   const images = firstPartyImages(deployment, prefix);
   if (images.length === 0) return { restart: true, reason: 'no first-party image found in spec' };
+  const tagged = images.filter((image) => !image.includes('@'));
+  if (tagged.length === 0) {
+    return { restart: false, reason: `the spec pins ${images.join(', ')} by digest` };
+  }
   const running = runningPods(pods);
   if (running.length === 0) return { restart: true, reason: 'no running pod to compare' };
 
-  for (const image of images) {
+  for (const image of tagged) {
     let digest;
     try {
       digest = await resolveDigest(image);
@@ -109,7 +117,7 @@ async function decide({ deployment, pods, prefix, resolveDigest = fetchRegistryD
   }
   return {
     restart: false,
-    reason: `all running pods use the registry digest for ${images.join(', ')}`,
+    reason: `all running pods use the registry digest for ${tagged.join(', ')}`,
   };
 }
 

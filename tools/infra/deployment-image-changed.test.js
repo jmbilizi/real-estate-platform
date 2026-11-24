@@ -73,6 +73,50 @@ test('restarts when a pod has no imageID', async () => {
   assert.equal(r.restart, true);
 });
 
+test('skips a digest-pinned image without a registry probe or a pod', async () => {
+  const pinned = `${IMAGE}@sha256:new`;
+  const r = await decide({
+    deployment: { spec: { template: { spec: { containers: [{ image: pinned }] } } } },
+    pods: { items: [] },
+    prefix: PREFIX,
+    resolveDigest: async () => {
+      throw new Error('a pinned image must not reach the registry');
+    },
+  });
+  assert.equal(r.restart, false);
+  assert.match(r.reason, /pins .* by digest/);
+});
+
+test('compares only the tagged image when the spec mixes a tag and a digest', async () => {
+  const tagged = `${PREFIX}worker:dev`;
+  const probed = [];
+  const r = await decide({
+    deployment: {
+      spec: {
+        template: { spec: { containers: [{ image: `${IMAGE}@sha256:new` }, { image: tagged }] } },
+      },
+    },
+    pods: {
+      items: [
+        {
+          metadata: { name: 'p1' },
+          status: {
+            phase: 'Running',
+            containerStatuses: [{ image: tagged, imageID: 'ghcr.io/o/r/worker@sha256:old' }],
+          },
+        },
+      ],
+    },
+    prefix: PREFIX,
+    resolveDigest: async (image) => {
+      probed.push(image);
+      return DIGEST;
+    },
+  });
+  assert.deepEqual(probed, [tagged]);
+  assert.equal(r.restart, true);
+});
+
 test('fetchRegistryDigest reads the digest header and rejects bad responses', async () => {
   const ok = async (url) =>
     url.includes('/token')
