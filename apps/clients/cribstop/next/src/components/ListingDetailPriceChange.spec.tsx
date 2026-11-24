@@ -57,6 +57,19 @@ describe('ListingDetailContent price change (#717)', () => {
     expect(earlier.parentElement?.textContent).toContain('$2,197,500');
   });
 
+  it('shows no Price Reduced label when the struck earlier price shows', async () => {
+    await renderDetail({ ...CUT, priceReduced: true });
+
+    expect(screen.getByTestId('price-change')).toBeInTheDocument();
+    expect(screen.queryByText('Price Reduced')).toBeNull();
+  });
+
+  it('keeps the Price Reduced label when there is no earlier price to show', async () => {
+    await renderDetail({ price: 2_197_500, priceReduced: true });
+
+    expect(screen.getByText('Price Reduced')).toBeInTheDocument();
+  });
+
   it('writes an increase the same way', async () => {
     await renderDetail({ ...CUT, price: 2_397_500 });
 

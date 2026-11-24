@@ -296,7 +296,8 @@ export default function ListingDetailContent({
                 <div className="mb-3 flex flex-wrap items-center gap-1.5 empty:hidden">
                   {listing.isSample && <SampleBadge />}
                   {listing.sponsored && <SponsoredBadge />}
-                  {listing.priceReduced && priceChange?.direction !== 'up' && (
+                  {/* Only with no struck earlier price beside the price: that price says it already. */}
+                  {listing.priceReduced && !priceChange && (
                     <span className="badge bg-brand-50 text-brand-700">Price Reduced</span>
                   )}
                   {listing.newConstruction && (
