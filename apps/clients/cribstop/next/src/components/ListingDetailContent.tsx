@@ -10,6 +10,7 @@ import Link from 'next/link';
 import type { InquiryKind } from '@cribstop/property-contracts';
 import BuyerAgentRequestDialog from '@/components/listing/BuyerAgentRequestDialog';
 import PropertyGallery from '@/components/PropertyGallery';
+import ExpandableText from '@/components/ExpandableText';
 import AmenityChips from '@/components/AmenityChips';
 import MortgageTeaser from '@/components/MortgageTeaser';
 import ListingRow from '@/components/ListingRow';
@@ -208,7 +209,8 @@ export default function ListingDetailContent({
 
   // #716. The MLS day count when the feed carries it. Otherwise the oldest list date of the home.
   // Never a number we worked out ourselves. The API sends null when the record's #146 flag
-  // (`daysOnMarketDisplayAllowed`) is false, so a null count shows no line.
+  // (`daysOnMarketDisplayAllowed`) is false, so a null count shows no text. It shows once, in the
+  // status badge on the gallery, never under the price.
   const marketTimeText =
     listing.daysOnMarket !== null
       ? listing.daysOnMarket === 0
@@ -286,7 +288,11 @@ export default function ListingDetailContent({
             viewerActions={shareSaveButtons}
             altFallback={listingPhotoAlt(listing)}
           >
-            <GalleryStatusBadge {...listing} statusLabel={statusLabel} />
+            <GalleryStatusBadge
+              {...listing}
+              statusLabel={statusLabel}
+              marketTime={marketTimeText}
+            />
           </PropertyGallery>
         </div>
 
@@ -304,10 +310,10 @@ export default function ListingDetailContent({
                   {listing.isSample && <SampleBadge />}
                   {listing.sponsored && <SponsoredBadge />}
                   {listing.priceReduced && priceChange?.direction !== 'up' && (
-                    <span className="badge bg-amber-100 text-amber-800">Price Reduced</span>
+                    <span className="badge bg-brand-50 text-brand-700">Price Reduced</span>
                   )}
                   {listing.newConstruction && (
-                    <span className="badge bg-emerald-100 text-emerald-800">New Construction</span>
+                    <span className="badge bg-surface-soft text-ink">New Construction</span>
                   )}
                 </div>
 
@@ -345,12 +351,6 @@ export default function ListingDetailContent({
                 {priceChange && !closePriceText && (
                   <p className="mt-1 text-sm text-ink-body" data-testid="price-change">
                     {formatDetailPriceChange(priceChange)}
-                  </p>
-                )}
-
-                {marketTimeText && (
-                  <p className="mt-1 text-sm text-ink-muted" data-testid="market-time">
-                    {marketTimeText}
                   </p>
                 )}
 
@@ -401,7 +401,10 @@ export default function ListingDetailContent({
             {listing.description && (
               <div className={`${PANEL} p-6`}>
                 <h2 className="text-xl font-semibold tracking-tight">About this home</h2>
-                <p className="mt-3 leading-relaxed text-ink-muted">{listing.description}</p>
+                <ExpandableText
+                  text={listing.description}
+                  className="mt-3 leading-relaxed text-ink-muted"
+                />
               </div>
             )}
 

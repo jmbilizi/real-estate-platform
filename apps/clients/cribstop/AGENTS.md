@@ -175,6 +175,13 @@ with a fixed date. A failure means a spec reads the real clock.
   `text-brand-700`. Icons are `lucide-react` line icons, never emoji. The filter panel
   (`FilterModalContent.tsx`) holds the pattern. The account page sections share
   `components/account-card.ts`.
+- **The full-screen photo viewer (`PhotoViewer` in `PropertyGallery.tsx`, 2026-11-24).** White
+  ground. The photo fills a frame with the blurred-photo fill, so no empty space shows. Previous and
+  Next are white circles at mid height on the photo sides, never at the bottom left, where the
+  Bright MLS watermark is. A filmstrip below opens any slide. A sideways swipe changes the slide.
+- **A fieldset never carries a divider or section padding.** A legend sits on the top border of its
+  fieldset. Put the border and the padding on a wrapper `div`.
+- **The market time shows once, in the gallery status badge.** Never add it under the price.
 - **One fact shows once on a page.** The home trust block states the freshness in its title and the
   brokerage with its states in one sentence. Do not add an eyebrow or a stat tile that repeats them.
 - **Never collect a protected-class signal from the searcher.** The occupancy ("Who") picker was

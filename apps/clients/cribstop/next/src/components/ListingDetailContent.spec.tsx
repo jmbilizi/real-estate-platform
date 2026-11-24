@@ -659,7 +659,7 @@ describe('ListingDetailContent — one home, several MLS records (#716)', () => 
     expect(screen.queryByText(/Also listed as/i)).toBeNull();
   });
 
-  it('shows the MLS day count near the price, not in the facts block', async () => {
+  it('shows the MLS day count in the gallery badge, not in the facts block', async () => {
     const view = toListingDetailView(
       aListingDetail({ listing: { daysOnMarket: 12, listedSince: '2026-08-01T00:00:00.000Z' } }),
     );

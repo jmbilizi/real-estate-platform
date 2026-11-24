@@ -72,6 +72,8 @@ const PROPERTY_TYPE_ICONS: Record<PropertyType, LucideIcon> = {
  * One look for the whole panel. A selected control is the brand color on a brand tint, never a
  * black fill. `brand-700` on `brand-50` passes 4.5:1 for text.
  */
+// On a wrapper `div`, never on the `fieldset`: a legend sits on its fieldset's top border, and
+// fieldset padding starts below the legend. Both put the title on the divider line.
 const SECTION_CLASSES = 'py-6 first:pt-0 last:pb-0';
 const SECTION_TITLE_CLASSES = 'text-base font-semibold text-ink';
 const FOCUS_RING_CLASSES =
@@ -285,58 +287,62 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
   return (
     <div className="divide-y divide-surface-border">
       {/* ── Home type ── Multi-select. A listing matches any selected type. */}
-      <fieldset className={SECTION_CLASSES}>
-        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Home Type</legend>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {PROPERTY_TYPES.map((type) => {
-            const selected = value.propertyType ?? [];
-            const active = selected.includes(type);
-            const next = active ? selected.filter((t) => t !== type) : [...selected, type];
-            const Icon = PROPERTY_TYPE_ICONS[type];
-            return (
-              <button
-                key={type}
-                type="button"
-                aria-pressed={active}
-                onClick={() => set({ propertyType: next.length > 0 ? next : undefined })}
-                className={`flex min-h-[76px] flex-col items-start justify-between gap-2 rounded-md border p-3 text-left text-[13px] font-medium leading-tight transition-colors ${FOCUS_RING_CLASSES} ${
-                  active ? `${SELECTED_CLASSES} ring-1 ring-inset ring-brand` : UNSELECTED_CLASSES
-                }`}
-              >
-                <Icon
-                  className="h-6 w-6 shrink-0"
-                  strokeWidth={active ? 2 : 1.75}
-                  aria-hidden="true"
-                />
-                {type}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <div className={SECTION_CLASSES}>
+        <fieldset>
+          <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Home Type</legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {PROPERTY_TYPES.map((type) => {
+              const selected = value.propertyType ?? [];
+              const active = selected.includes(type);
+              const next = active ? selected.filter((t) => t !== type) : [...selected, type];
+              const Icon = PROPERTY_TYPE_ICONS[type];
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => set({ propertyType: next.length > 0 ? next : undefined })}
+                  className={`flex min-h-[76px] flex-col items-start justify-between gap-2 rounded-md border p-3 text-left text-[13px] font-medium leading-tight transition-colors ${FOCUS_RING_CLASSES} ${
+                    active ? `${SELECTED_CLASSES} ring-1 ring-inset ring-brand` : UNSELECTED_CLASSES
+                  }`}
+                >
+                  <Icon
+                    className="h-6 w-6 shrink-0"
+                    strokeWidth={active ? 2 : 1.75}
+                    aria-hidden="true"
+                  />
+                  {type}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      </div>
 
       {/* ── Listing status ── Multi-select, matching Home Type's chip style. Defaults to
            `DEFAULT_STATUS_FILTER` (Active, Coming Soon) when `value.status` is unset, so the
            chips read as checked even before the user has touched this filter. */}
-      <fieldset className={SECTION_CLASSES}>
-        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Listing Status</legend>
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FILTER_VALUES.map((status) => {
-            const active = (value.status ?? DEFAULT_STATUS_FILTER).includes(status);
-            return (
-              <button
-                key={status}
-                type="button"
-                aria-pressed={active}
-                onClick={() => toggleStatus(status)}
-                className={chipClasses(active)}
-              >
-                {STATUS_FILTER_LABELS[status]}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <div className={SECTION_CLASSES}>
+        <fieldset>
+          <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Listing Status</legend>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_FILTER_VALUES.map((status) => {
+              const active = (value.status ?? DEFAULT_STATUS_FILTER).includes(status);
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleStatus(status)}
+                  className={chipClasses(active)}
+                >
+                  {STATUS_FILTER_LABELS[status]}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      </div>
 
       {/* ── Price ────────────────────────────────────────────────────────
           Max-only (#243): people search for what they can afford at most, not a minimum. `minPrice`
@@ -393,81 +399,87 @@ export default function FilterModalContent({ value, onChange }: FilterModalConte
       </div>
 
       {/* ── Beds / Baths / Square Feet — the dwelling group the interlock governs ── */}
-      <fieldset className={SECTION_CLASSES}>
-        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Size</legend>
-        {parcelOnly && (
-          <p id={PARCEL_HINT_ID} className="mb-3 text-xs text-ink-muted">
-            {PARCEL_INTERLOCK_HINT}
-          </p>
-        )}
-        <div className="flex flex-col gap-3">
-          {stepper('beds', 'Bedrooms', parcelOnly)}
-          {stepper('baths', 'Bathrooms', parcelOnly)}
-          <div className="flex flex-wrap items-center justify-between gap-y-2">
-            {rowLabel('Square Feet', { htmlFor: 'filter-sqft', disabled: parcelOnly })}
-            <input
-              id="filter-sqft"
-              type="number"
-              min={0}
-              step={1}
-              inputMode="numeric"
-              placeholder={parcelOnly ? 'Not applicable to land' : 'No min'}
-              disabled={parcelOnly}
-              aria-describedby={parcelHintId}
-              className={`${FIELD_CLASSES} border-surface-border focus:border-brand focus:ring-brand/20 disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-ink-subtle`}
-              value={parcelOnly ? '' : (value.minSqft ?? '')}
-              onChange={(event) => set({ minSqft: wholeNumberOrUndefined(event.target.value) })}
-            />
+      <div className={SECTION_CLASSES}>
+        <fieldset>
+          <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Size</legend>
+          {parcelOnly && (
+            <p id={PARCEL_HINT_ID} className="mb-3 text-xs text-ink-muted">
+              {PARCEL_INTERLOCK_HINT}
+            </p>
+          )}
+          <div className="flex flex-col gap-3">
+            {stepper('beds', 'Bedrooms', parcelOnly)}
+            {stepper('baths', 'Bathrooms', parcelOnly)}
+            <div className="flex flex-wrap items-center justify-between gap-y-2">
+              {rowLabel('Square Feet', { htmlFor: 'filter-sqft', disabled: parcelOnly })}
+              <input
+                id="filter-sqft"
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                placeholder={parcelOnly ? 'Not applicable to land' : 'No min'}
+                disabled={parcelOnly}
+                aria-describedby={parcelHintId}
+                className={`${FIELD_CLASSES} border-surface-border focus:border-brand focus:ring-brand/20 disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-ink-subtle`}
+                value={parcelOnly ? '' : (value.minSqft ?? '')}
+                onChange={(event) => set({ minSqft: wholeNumberOrUndefined(event.target.value) })}
+              />
+            </div>
           </div>
-        </div>
-      </fieldset>
+        </fieldset>
+      </div>
 
       {/* ── Showing-only toggles ─────────────────────────────────────────
           `openHouse` and `newConstruction` are the only two booleans with a predicate of their own.
           `waterfront` and `petFriendly` are not here because server-side they *are* the amenities
           of the same name (see `parseFiltersFromSearchParams`), so they appear once, as chips. */}
-      <fieldset className={SECTION_CLASSES}>
-        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Show Only</legend>
-        <div className="flex flex-wrap gap-2">
-          {(
-            [
-              { key: 'openHouse', label: 'Has an open house' },
-              { key: 'newConstruction', label: 'Newly built' },
-            ] as const
-          ).map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={!!value[key]}
-              onClick={() => set({ [key]: value[key] ? undefined : true })}
-              className={chipClasses(!!value[key])}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <div className={SECTION_CLASSES}>
+        <fieldset>
+          <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Show Only</legend>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { key: 'openHouse', label: 'Has an open house' },
+                { key: 'newConstruction', label: 'Newly built' },
+              ] as const
+            ).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={!!value[key]}
+                onClick={() => set({ [key]: value[key] ? undefined : true })}
+                className={chipClasses(!!value[key])}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      </div>
 
       {/* ── Amenities — the contract's closed 15-value set ───────────── */}
-      <fieldset className={SECTION_CLASSES}>
-        <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Amenities</legend>
-        <div className="flex flex-wrap gap-2">
-          {AMENITIES.map((amenity) => {
-            const active = value.amenities?.includes(amenity) ?? false;
-            return (
-              <button
-                key={amenity}
-                type="button"
-                aria-pressed={active}
-                onClick={() => toggleAmenity(amenity)}
-                className={chipClasses(active)}
-              >
-                {amenity}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <div className={SECTION_CLASSES}>
+        <fieldset>
+          <legend className={`mb-3 ${SECTION_TITLE_CLASSES}`}>Amenities</legend>
+          <div className="flex flex-wrap gap-2">
+            {AMENITIES.map((amenity) => {
+              const active = value.amenities?.includes(amenity) ?? false;
+              return (
+                <button
+                  key={amenity}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleAmenity(amenity)}
+                  className={chipClasses(active)}
+                >
+                  {amenity}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      </div>
     </div>
   );
 }
