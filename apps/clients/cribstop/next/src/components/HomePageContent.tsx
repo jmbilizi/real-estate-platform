@@ -512,7 +512,7 @@ function JustListedRow({
       failed={failed}
       onRetry={refetch}
       max={7}
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      sectionClassName="page-gutter pt-3"
     />
   );
 }
@@ -580,7 +580,7 @@ function NearYouRow({
       listings={listings}
       loading={loading}
       max={7}
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      sectionClassName="page-gutter pt-3"
     />
   );
 }
@@ -692,7 +692,7 @@ function SavedLikeRow({
       listings={visible}
       loading={loading}
       max={7}
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      sectionClassName="page-gutter pt-3"
     />
   );
 }
@@ -723,7 +723,7 @@ function RecentlyViewedRow({ account }: { account: string }) {
       loading={isPending}
       max={ROW_MAX}
       rowId="recently-viewed"
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      sectionClassName="page-gutter pt-3"
     />
   );
 }
@@ -786,7 +786,7 @@ function ComingSoonRow({
       failed={failed}
       onRetry={refetch}
       max={7}
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      sectionClassName="page-gutter pt-3"
     />
   );
 }
@@ -829,7 +829,7 @@ function PriceDropsRow({
       failed={failed}
       onRetry={refetch}
       max={7}
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+      sectionClassName="page-gutter pt-3"
     />
   );
 }
@@ -926,8 +926,8 @@ function PriceSortRow({
       failed={failed}
       onRetry={refetch}
       max={7}
-      sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
-      titleClassName="min-w-0 truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]"
+      sectionClassName="page-gutter pt-3"
+      titleClassName="min-w-0 truncate font-display text-xl font-semibold tracking-tight"
       headerExtra={<PriceSortToggle value={sort} onChange={setSort} />}
     />
   );
@@ -950,59 +950,40 @@ function TrustBlock() {
   const title = lastUpdated ? `Real listings, updated ${lastUpdated}` : 'Real, licensed listings';
 
   return (
-    <section className="mt-10 px-6 pb-10 sm:px-10 lg:px-20">
-      <div className="overflow-hidden rounded-xl bg-surface-alt text-ink border border-surface-border">
-        <div className="grid gap-8 px-8 py-12 sm:grid-cols-[1.4fr_1fr] sm:items-center sm:px-12 sm:py-16 lg:px-16">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-900">
-              {BRAND.brokerageShort}
-            </p>
-            <h2 className="mt-3 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
-              {title}
-            </h2>
-            <p className="mt-4 text-base leading-relaxed text-ink/80">
+    <section className="page-gutter mt-10 pb-8">
+      {/*
+       * One fact shows once. The title carries the freshness and the sentence carries the
+       * brokerage and its states, so no eyebrow and no stat tile repeats them.
+       */}
+      <div className="rounded-lg border border-surface-border bg-surface-alt px-5 py-6 text-ink sm:flex sm:items-center sm:justify-between sm:gap-8 sm:px-8 sm:py-8">
+        <div className="min-w-0">
+          <h2 className="font-display text-xl font-bold tracking-tight">{title}</h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink/80">
+            {meta && (
+              <>
+                <span className="font-semibold text-ink">{meta.listingCount.toLocaleString()}</span>{' '}
+                {meta.listingCount === 1 ? 'home listed' : 'homes listed'}.{' '}
+              </>
+            )}
+            <span>
               {BRAND.siteName} is brokered by {BRAND.brokerageShort}, licensed in{' '}
               {BRAND.licensedStates}.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/about"
-                className="inline-flex items-center justify-center rounded-full bg-brand-50 px-5 py-2.5 text-sm font-semibold text-brand-900 transition hover:bg-brand-100 hover:text-brand-900"
-              >
-                Learn more
-              </Link>
-              <Link
-                href="/homes-for-sale?type=all"
-                className="inline-flex items-center justify-center rounded-full border border-brand-200 px-5 py-2.5 text-sm font-semibold text-brand-900 transition hover:bg-brand-50 hover:text-brand-900"
-              >
-                Browse homes
-              </Link>
-            </div>
-          </div>
-          <dl className="grid grid-cols-2 gap-6 sm:gap-8">
-            {meta && (
-              <div>
-                <dt className="font-display text-3xl font-extrabold sm:text-4xl">
-                  {meta.listingCount.toLocaleString()}
-                </dt>
-                <dd className="mt-1 text-xs uppercase tracking-wider text-ink/60">
-                  {meta.listingCount === 1 ? 'Home listed' : 'Homes listed'}
-                </dd>
-              </div>
-            )}
-            <div>
-              <dt className="font-display text-3xl font-extrabold sm:text-4xl">
-                {BRAND.licensedStateCodes.length}
-              </dt>
-              <dd className="mt-1 text-xs uppercase tracking-wider text-ink/60">States licensed</dd>
-            </div>
-            {lastUpdated && (
-              <div>
-                <dt className="font-display text-lg font-extrabold sm:text-xl">{lastUpdated}</dt>
-                <dd className="mt-1 text-xs uppercase tracking-wider text-ink/60">Updated</dd>
-              </div>
-            )}
-          </dl>
+            </span>
+          </p>
+        </div>
+        <div className="mt-4 flex shrink-0 flex-wrap gap-3 sm:mt-0">
+          <Link
+            href="/about"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-brand-50 px-5 text-sm font-semibold text-brand-900 transition hover:bg-brand-100"
+          >
+            Learn more
+          </Link>
+          <Link
+            href="/homes-for-sale?type=all"
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-brand-200 px-5 text-sm font-semibold text-brand-900 transition hover:bg-brand-50"
+          >
+            Browse homes
+          </Link>
         </div>
       </div>
     </section>
@@ -1023,7 +1004,7 @@ function FeedSkeleton() {
           listings={[]}
           loading
           max={7}
-          sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+          sectionClassName="page-gutter pt-3"
         />
       ))}
     </div>
@@ -1049,7 +1030,7 @@ function FeedRows({ feed }: { feed: HomeFeedResponse }) {
             exploreIds={new Set(row.listings.filter((i) => i.explore).map((i) => i.listing.id))}
             feed={{ variant: row.variant, modelVersion: row.modelVersion }}
             max={8}
-            sectionClassName="px-6 pt-3 sm:px-10 lg:px-20"
+            sectionClassName="page-gutter pt-3"
           />
         ))}
     </>

@@ -22,7 +22,6 @@ jest.mock('motion/react', () => ({
     },
   ),
 }));
-jest.mock('./AppsDropdown', () => () => <div data-testid="apps-dropdown" />);
 jest.mock('./MobileSearchSheet', () => () => <div data-testid="mobile-search-sheet" />);
 jest.mock('./MobileSearchPill', () => () => <div data-testid="mobile-search-pill" />);
 jest.mock(
@@ -50,40 +49,43 @@ function appValue(showHeaderPill: boolean) {
   };
 }
 
-/** The phone top bar (#943). jsdom has no CSS, so order is read from the `order-*` classes. */
+/** The phone top bar (#943). jsdom has no CSS, so order is read from the DOM order. */
 describe('NavBar on a phone (#943)', () => {
   beforeEach(() => mockUseApp.mockReturnValue(appValue(false)));
 
-  const orderOf = (el: Element): number => {
-    const m = el.className.match(/(?:^|\s)(?:max-md:)?order-(\d+)/);
-    return m ? Number(m[1]) : 0;
-  };
-
-  it('lays out apps, search pill and account on one row, in that order', () => {
+  it('lays out the search pill and account on one row, in that order, with no Apps grid', () => {
     render(<NavBar />);
-    const apps = screen.getByTestId('apps-dropdown').parentElement as HTMLElement;
     const pill = screen.getByTestId('mobile-search-pill').parentElement as HTMLElement;
-    const account = screen.getByRole('button', { name: 'Sign in or sign up' })
-      .parentElement as HTMLElement;
+    const account = screen.getByRole('button', { name: 'Sign in or sign up' });
+    const row = pill.parentElement as HTMLElement;
 
-    // Apps and Account sit in a `display: contents` wrapper, so they join the pill's flex row.
-    expect(apps.parentElement?.className).toContain('max-md:contents');
-    expect(apps.parentElement?.parentElement).toBe(pill.parentElement);
-    expect(pill.parentElement?.className).toMatch(/(^|\s)flex(\s|$)/);
-    expect([apps, pill, account].sort((a, b) => orderOf(a) - orderOf(b))).toEqual([
-      apps,
-      pill,
-      account,
-    ]);
+    expect(row.className).toMatch(/(^|\s)flex(\s|$)/);
+    expect(row.contains(account)).toBe(true);
+    // The pill comes first in the row and takes the free width.
+    expect(pill.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pill.className).toContain('flex-1');
     expect(pill.className).toContain('md:hidden');
+    expect(screen.queryByTestId('apps-dropdown')).toBeNull();
+    expect(row.innerHTML).not.toMatch(/[\s":]order-\d/);
   });
 
-  it('drops the 3-dot menu and Saved below md, because Settings and the tab bar carry them', () => {
+  it('keeps the brand mark and hides the pill slot and the tabs below md, where the tab bar has the tabs', () => {
     render(<NavBar />);
-    expect(screen.getByRole('button', { name: 'More options' }).className).toContain(
-      'max-md:hidden',
-    );
-    expect(screen.getByRole('link', { name: 'Saved' }).className).toContain('max-md:hidden');
+    const mark = screen.getByRole('link', { name: /Cribstop at Real Broker, LLC/ });
+    expect(mark.querySelector('svg[data-brand-mark="cs"]')).not.toBeNull();
+    expect(mark.className).not.toMatch(/hidden/);
+    const tabs = screen.getByRole('navigation', { name: 'Primary', hidden: true });
+    expect(tabs.className).toContain('hidden');
+    expect(tabs.className).toContain('md:flex');
+    expect(document.querySelector('.header-pill-slot')?.className).toContain('max-md:hidden');
+  });
+
+  it('keeps the 3-dot menu beside Account on a phone and has no Saved button', () => {
+    render(<NavBar />);
+    const more = screen.getByRole('button', { name: 'More options' });
+    expect(more.className).not.toContain('max-md:hidden');
+    expect(more.className).toContain('max-md:before:-inset-x-2.5');
+    expect(screen.queryByRole('link', { name: 'Saved' })).toBeNull();
   });
 
   it('gives every phone control a 44px target', () => {

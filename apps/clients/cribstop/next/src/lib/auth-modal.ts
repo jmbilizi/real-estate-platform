@@ -1,5 +1,13 @@
 export type AuthModalMode = 'login' | 'signup';
 
+/** Why the modal opened, when an action needs an account. The modal shows the matching line. */
+export type AuthModalReason = 'save';
+
+/** The line the modal shows for each reason. */
+export const AUTH_MODAL_NOTICES: Record<AuthModalReason, string> = {
+  save: 'Sign in to save homes.',
+};
+
 /** True while the modal entry this document pushed is still on the history stack. */
 let pushedEntry = false;
 
@@ -17,11 +25,16 @@ function urlWith(mutate: (params: URLSearchParams) => void): string {
  * server for a new RSC payload and re-renders the route behind the modal (#908). `pushState` only
  * moves the URL. Next.js keeps `useSearchParams` in step, so `AuthModalListener` still opens.
  */
-export function openAuthModal(mode: AuthModalMode = 'login', opts?: { forgot?: boolean }): void {
+export function openAuthModal(
+  mode: AuthModalMode = 'login',
+  opts?: { forgot?: boolean; reason?: AuthModalReason },
+): void {
   const url = urlWith((p) => {
     p.set('modal', mode);
     if (opts?.forgot) p.set('mode', 'forgot');
     else p.delete('mode');
+    if (opts?.reason) p.set('reason', opts.reason);
+    else p.delete('reason');
   });
   window.history.pushState(null, '', url);
   pushedEntry = true;
@@ -43,6 +56,7 @@ export function closeAuthModal(): void {
     urlWith((p) => {
       p.delete('modal');
       p.delete('mode');
+      p.delete('reason');
     }),
   );
 }

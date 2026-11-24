@@ -38,7 +38,7 @@ export default function ConnectPage() {
             <Users className="h-3.5 w-3.5" />
             Coming Soon
           </span>
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-ink">
             {PILLAR} is coming.
             <br />
             <span className="text-brand">Your neighborhood has a lot to say.</span>

@@ -22,7 +22,7 @@ interface Props {
   listings: ListingCardRow[];
   /** Max number of listing cards to render before the "See all" tile. Defaults to 4. */
   max?: number;
-  /** Override the section's outer padding class. Defaults to "px-6 pt-6 sm:px-10 lg:px-20" */
+  /** Override the section's outer padding class. Defaults to "page-gutter pt-6" */
   sectionClassName?: string;
   /**
    * Override the heading's type classes. Defaults to the page-level section size (20/24px).
@@ -87,10 +87,7 @@ export default function ListingRow({
   const { scrollerRef, atStart, atEnd, scroll } = useCarouselScroll([loading, visible.length]);
 
   return (
-    <section
-      className={sectionClassName ?? 'px-6 pt-6 sm:px-10 lg:px-20'}
-      data-target-source={targetSource}
-    >
+    <section className={sectionClassName ?? 'page-gutter pt-6'} data-target-source={targetSource}>
       {/* `gap-1.5`, not `gap-1` (#447): the title/chip link's `before:-bottom-1.5` hit area reaches
           6px below its own box, so a smaller gap here would let that invisible hit area cover the
           top of `subtitle`'s text. */}
@@ -120,7 +117,7 @@ export default function ListingRow({
                   <h2
                     className={
                       titleClassName ??
-                      'line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                      'line-clamp-2 font-display text-xl font-semibold tracking-tight'
                     }
                   >
                     {title}
@@ -130,7 +127,7 @@ export default function ListingRow({
                 <h2
                   className={
                     titleClassName ??
-                    'line-clamp-2 min-w-0 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                    'line-clamp-2 min-w-0 font-display text-xl font-semibold tracking-tight'
                   }
                 >
                   {title}
@@ -185,7 +182,7 @@ export default function ListingRow({
                   <h2
                     className={
                       titleClassName ??
-                      'min-w-0 line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
+                      'min-w-0 line-clamp-2 font-display text-xl font-semibold tracking-tight'
                     }
                   >
                     {title}
@@ -214,10 +211,7 @@ export default function ListingRow({
                 </Link>
               ) : (
                 <h2
-                  className={
-                    titleClassName ??
-                    'font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]'
-                  }
+                  className={titleClassName ?? 'font-display text-xl font-semibold tracking-tight'}
                 >
                   {title}
                 </h2>

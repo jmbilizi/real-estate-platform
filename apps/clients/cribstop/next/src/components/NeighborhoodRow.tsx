@@ -46,7 +46,7 @@ export default function NeighborhoodRow({
   if (!loading && visible.length === 0) return null;
 
   return (
-    <section className="px-6 pt-6 sm:px-10 lg:px-20">
+    <section className="page-gutter pt-6">
       {/* `gap-1.5`, not `gap-1` (#447): the title/chip link's `before:-bottom-1.5` hit area reaches
           6px below its own box, so a smaller gap here would let that invisible hit area cover the
           top of `subtitle`'s text. */}
@@ -75,7 +75,7 @@ export default function NeighborhoodRow({
               // chip below the first line.
               className="group relative flex min-h-8 min-w-0 w-full items-start justify-between gap-1.5 before:absolute before:-top-1.5 before:-bottom-1.5 before:inset-x-0 before:content-[''] sm:inline-flex sm:w-auto sm:justify-normal"
             >
-              <h2 className="min-w-0 line-clamp-2 font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
+              <h2 className="min-w-0 line-clamp-2 font-display text-xl font-semibold tracking-tight">
                 {title}
               </h2>
               {/* `relative top-0.5` centers the chip on the first line's height rather than the
@@ -97,9 +97,7 @@ export default function NeighborhoodRow({
               </span>
             </Link>
           ) : (
-            <h2 className="truncate font-display text-lg font-semibold tracking-tight sm:text-xl lg:text-[22px]">
-              {title}
-            </h2>
+            <h2 className="truncate font-display text-xl font-semibold tracking-tight">{title}</h2>
           )}
           <CarouselArrows atStart={atStart} atEnd={atEnd} onScroll={scroll} />
         </div>

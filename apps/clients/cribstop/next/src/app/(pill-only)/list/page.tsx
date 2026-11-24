@@ -25,7 +25,7 @@ export default function ListPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
         </span>
-        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">List a Property</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">List a Property</h1>
       </div>
 
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import AuthForm from './AuthForm';
 import Modal from './Modal';
-import { closeAuthModal } from '@/lib/auth-modal';
+import { AUTH_MODAL_NOTICES, type AuthModalReason, closeAuthModal } from '@/lib/auth-modal';
 
 export default function AuthModalWrapper() {
   const router = useRouter();
@@ -16,6 +16,13 @@ export default function AuthModalWrapper() {
     searchParams.get('modal') === 'login' && searchParams.get('mode') === 'forgot'
       ? 'forgot'
       : 'login';
+
+  // `?reason=save`: the visitor tried to save a home while signed out.
+  const reason = searchParams.get('reason');
+  const notice =
+    reason && reason in AUTH_MODAL_NOTICES
+      ? AUTH_MODAL_NOTICES[reason as AuthModalReason]
+      : undefined;
 
   // Modal's open state — set to false to play exit animation, then close
   const [open, setOpen] = useState(true);
@@ -43,7 +50,12 @@ export default function AuthModalWrapper() {
       noPadding
     >
       <div className="min-h-full flex items-center justify-center sm:block">
-        <AuthForm variant="modal" initialMode={initialMode} onSuccess={close} />
+        <AuthForm
+          variant="modal"
+          initialMode={initialMode}
+          onSuccess={close}
+          reasonNotice={notice}
+        />
       </div>
     </Modal>
   );

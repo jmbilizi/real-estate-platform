@@ -273,7 +273,7 @@ export function DateRangePanel({
               : 'When do you want to move in?'}
           </p>
           {instructionText && (
-            <p className="text-[12px] text-ink-muted mt-0.5 truncate">{instructionText}</p>
+            <p className="text-xs text-ink-muted mt-0.5 truncate">{instructionText}</p>
           )}
         </div>
         {hasSelection && (

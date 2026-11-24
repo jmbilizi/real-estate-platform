@@ -5,7 +5,7 @@ import { BRAND } from '@/lib/brand';
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-      <h1 className="font-display text-3xl font-extrabold sm:text-4xl">
+      <h1 className="font-display text-3xl font-bold tracking-tight">
         About {BRAND.brokerageShort}
       </h1>
       <p className="mt-4 text-lg leading-relaxed text-ink-muted">

@@ -104,7 +104,7 @@ export default function ServicesPage() {
             <Home className="h-3.5 w-3.5" aria-hidden="true" />
             Coming Soon
           </span>
-          <h1 className="font-display text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-ink">
             {BRAND.siteName} {PILLAR} is coming.
           </h1>
           <p className="mt-4 text-lg text-ink-muted max-w-2xl mx-auto">

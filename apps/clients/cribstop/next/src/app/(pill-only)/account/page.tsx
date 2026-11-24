@@ -73,7 +73,7 @@ export default function AccountPage() {
           {initials}
         </div>
         <div>
-          <h1 className="font-display text-2xl font-extrabold">{displayName}</h1>
+          <h1 className="font-display text-2xl font-bold">{displayName}</h1>
           {displayName !== user.email && <p className="text-sm text-ink-muted">{user.email}</p>}
         </div>
       </div>

@@ -35,7 +35,7 @@ describe('carousel parity between NeighborhoodRow and ListingRow (#508)', () => 
     const listing = scrollerOf(a.container).className;
     const hood = scrollerOf(b.container).className;
     expect(hood).toBe(listing);
-    expect(hood).toContain('-mr-6');
+    expect(hood).toContain('-mr-4');
     expect(hood).toContain('sm:-mr-3');
     expect(hood).toContain('gap-3');
     expect(hood).toContain('sm:gap-5');

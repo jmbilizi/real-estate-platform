@@ -74,7 +74,7 @@ export function PropertyHistory({
   timeZone?: string;
 }) {
   return (
-    <section className="px-6 py-6" data-testid="property-history">
+    <section className="page-gutter py-6" data-testid="property-history">
       <h2 className="text-xl font-semibold tracking-tight text-ink">Listing history</h2>
       <ul className="mt-4 divide-y divide-surface-border">
         {entries.map((entry) => (
@@ -128,7 +128,7 @@ function OffMarketPropertyView({
   ];
 
   return (
-    <div id="overview" className="px-6 py-8 sm:px-8">
+    <div id="overview" className="page-gutter py-8">
       <span className="badge bg-surface-border text-ink" data-testid="market-status-badge">
         {marketStatus}
       </span>

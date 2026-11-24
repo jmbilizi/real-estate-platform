@@ -17,6 +17,7 @@ import {
   verifyDeviceSignIn,
 } from '@/lib/api/account';
 import { store } from '@/lib/store/store';
+import { openAuthModal } from '@/lib/auth-modal';
 import {
   selectActiveTab,
   selectHeaderExpanded,
@@ -405,6 +406,13 @@ export function useApp(): AppContextValue {
       const alreadySaved = getSavedEntries(queryClient).some(
         (h) => h.propertyId === listing.propertyId,
       );
+      // A save needs an account (stakeholder decision 2026-11-24). A signed-out visitor gets the
+      // sign-in modal with the reason, and nothing is saved. An unsave still works, for a home
+      // that was saved on this device before this rule.
+      if (!signedIn && !alreadySaved) {
+        openAuthModal('login', { reason: 'save' });
+        return;
+      }
       if (!alreadySaved) {
         trackEvent('listing_save', { listingId: listing.id });
         recordFeedItem(

@@ -78,12 +78,15 @@ export default function AuthForm({
   initialMode = 'login',
   onSuccess,
   variant = 'page',
+  reasonNotice,
 }: {
   /** 'forgot' opens the reset screen. The other values open the email-first flow. */
   initialMode?: 'login' | 'signup' | 'forgot';
   onSuccess?: () => void;
   /** 'page': always shows the card border/shadow. 'modal': plain on mobile, card on sm+ */
   variant?: 'page' | 'modal';
+  /** Why the form opened, when an action needs an account ("Sign in to save homes."). */
+  reasonNotice?: string;
 }) {
   const [step, setStep] = useState<Step>(initialMode === 'forgot' ? 'forgot' : 'email');
   const [email, setEmail] = useState('');
@@ -363,6 +366,14 @@ export default function AuthForm({
         {/* TODO(dark-mode): bg-white, border-surface-border and text colours below are
             hardcoded for light mode — make them conditional (dark:bg-surface-alt etc.)
             when dark mode support is added. */}
+        {reasonNotice && (
+          <p
+            role="status"
+            className="mb-4 rounded-xl bg-brand-50 px-4 py-2.5 text-center text-sm font-medium text-ink"
+          >
+            {reasonNotice}
+          </p>
+        )}
         <h2
           ref={headingRef}
           tabIndex={-1}

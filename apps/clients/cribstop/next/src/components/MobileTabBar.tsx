@@ -1,24 +1,25 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Heart, Home, Settings, Users, Wrench } from 'lucide-react';
-import SettingsSheet from './SettingsSheet';
+import { Home, Users, Wrench } from 'lucide-react';
 
 /**
-/**
- * The phone tab bar (#923). Every link tab points at an existing route. A tab for a page the app
- * does not have (Inbox, Updates) is not added. Account lives in the top bar (#943), so the last
- * tab is Settings. It has no route: it opens the Settings sheet.
+ * The phone tab bar (#923): the three primary destinations and nothing else (stakeholder decision
+ * 2026-11-24). Every tab points at an existing route. Account and the More menu are in the top bar
+ * at every width. Saved is an item of the account panel for a signed-in user.
  */
 export const MOBILE_TABS = [
   { id: 'homes', label: 'Homes', href: '/', icon: Home },
   { id: 'services', label: 'Services', href: '/services', icon: Wrench },
   { id: 'connect', label: 'Connect', href: '/connect', icon: Users },
-  { id: 'saved', label: 'Saved', href: '/favorites', icon: Heart },
-  { id: 'settings', label: 'Settings', href: null, icon: Settings },
 ] as const;
+
+/**
+ * The three primary destinations. The desktop header draws its tabs from this list (`NavBar`),
+ * so the phone bar and the desktop header show the same labels and icons.
+ */
+export const PRIMARY_TABS = MOBILE_TABS;
 
 /** Routes that draw their own sticky bottom action bar. The tab bar would stack on it. */
 const HIDDEN_PREFIXES = ['/property/', '/listing/'];
@@ -36,8 +37,6 @@ function isActive(id: (typeof MOBILE_TABS)[number]['id'], pathname: string): boo
       return pathname.startsWith('/services');
     case 'connect':
       return pathname.startsWith('/connect');
-    case 'saved':
-      return pathname.startsWith('/favorites');
     default:
       return false;
   }
@@ -50,7 +49,6 @@ function isActive(id: (typeof MOBILE_TABS)[number]['id'], pathname: string): boo
  */
 export default function MobileTabBar() {
   const pathname = usePathname();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   if (HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return null;
 
   return (
@@ -66,9 +64,9 @@ export default function MobileTabBar() {
         data-testid="mobile-tab-bar"
         className="mobile-tab-bar fixed inset-x-0 bottom-0 z-chrome border-t border-surface-border bg-white/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur md:hidden"
       >
-        <ul className="grid h-14 grid-cols-5">
+        <ul className="grid h-14 grid-cols-3">
           {MOBILE_TABS.map((tab) => {
-            const active = tab.id === 'settings' ? settingsOpen : isActive(tab.id, pathname);
+            const active = isActive(tab.id, pathname);
             const Icon = tab.icon;
             const label = (
               <>
@@ -87,27 +85,14 @@ export default function MobileTabBar() {
             }`;
             return (
               <li key={tab.id} className="min-w-0">
-                {tab.href === null ? (
-                  <button
-                    type="button"
-                    aria-haspopup="dialog"
-                    aria-expanded={settingsOpen}
-                    onClick={() => setSettingsOpen(true)}
-                    className={cls}
-                  >
-                    {label}
-                  </button>
-                ) : (
-                  <Link href={tab.href} aria-current={active ? 'page' : undefined} className={cls}>
-                    {label}
-                  </Link>
-                )}
+                <Link href={tab.href} aria-current={active ? 'page' : undefined} className={cls}>
+                  {label}
+                </Link>
               </li>
             );
           })}
         </ul>
       </nav>
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

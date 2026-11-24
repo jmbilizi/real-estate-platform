@@ -38,7 +38,6 @@ jest.mock('motion/react', () => ({
 }));
 
 /* Children with their own dependency trees — this file is about the nav's own slots. */
-jest.mock('./AppsDropdown', () => () => <div data-testid="apps-dropdown" />);
 jest.mock('./MobileSearchSheet', () => () => <div data-testid="mobile-search-sheet" />);
 jest.mock('./MobileSearchPill', () => () => <div data-testid="mobile-search-pill" />);
 jest.mock(
@@ -95,32 +94,40 @@ describe('NavBar before hydration', () => {
   it('keeps every control in its own slot', () => {
     const html = serverHtml();
 
-    expect(html).toContain('aria-label="Saved"');
-    // Three tab icons, three tab labels, Apps, account, More.
-    expect(html.match(/skeleton-fill/g) ?? []).toHaveLength(9);
+    expect(html).not.toContain('aria-label="Saved"');
+    // Only the account label is unknown. The account icon, the More dots and the tabs are real
+    // from first paint.
+    expect(html.match(/skeleton-fill/g) ?? []).toHaveLength(1);
   });
 
   /**
-   * PRD §6.1: the brokerage name is legible on every page (#1048), and must read from
-   * server-rendered HTML, not only after the bundle hydrates. Both the brokerage name and the
-   * CRIB/STOP wordmark are compile-time constants, so there is no hydration uncertainty to
-   * placeholder over — unlike the tab labels below, which stay skeletoned because they wait on
-   * the route-derived active tab.
+   * The header brand is the "cs" mark (stakeholder decision 2026-11-24). Its link name holds the
+   * site name and the brokerage name, and both read from server-rendered HTML, not only after the
+   * bundle hydrates. They are compile-time constants, so there is no hydration uncertainty.
    */
-  it('ships the brokerage name and wordmark in server-rendered HTML', () => {
+  it('ships the brand mark, with both names in its link name, in server-rendered HTML', () => {
     const html = serverHtml();
 
-    expect(html).toContain('Real Broker, LLC');
-    expect(html).toContain(BRAND.siteWordmark[0]);
-    expect(html).toContain(BRAND.siteWordmark[1]);
+    expect(html).toContain(`aria-label="${BRAND.siteName} at ${BRAND.brokerage}: home"`);
+    expect(html).toContain('data-brand-mark="cs"');
+    expect(html).not.toContain('>at<');
   });
 
-  it('still placeholders the tab labels, which are not known until hydration resolves', () => {
+  /** The tabs are fixed copy and real links, so they are in the server HTML and work with no JS. */
+  it('ships the three primary tabs as links in server-rendered HTML', () => {
     const html = serverHtml();
+    const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
 
-    for (const copy of ['Homes', 'Services', 'Connect']) {
-      expect(html).not.toContain(copy);
+    for (const [label, href] of [
+      ['Homes', '/'],
+      ['Services', '/services'],
+      ['Connect', '/connect'],
+    ]) {
+      expect(nav).toContain(`href="${href}"`);
+      expect(nav).toContain(`aria-label="${label}"`);
+      expect(nav).toContain(`>${label}</span>`);
     }
+    expect(nav).not.toContain('skeleton-fill');
   });
 
   /**
@@ -182,20 +189,22 @@ describe('NavBar before hydration', () => {
       mockPathname.mockReturnValue(path);
       const html = serverHtml();
 
-      const underlineMarker = 'absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand';
+      const underlineMarker = 'absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-brand';
       // Exactly one underline renders in the whole tab row.
       expect(html.split(underlineMarker).length - 1).toBe(1);
 
-      // Tab order in the markup follows NAV_TABS (Homes, Services, Connect); splitting on each
-      // tab button isolates which one carries the underline and the active ("text-ink", not
-      // "text-ink-muted") class, without depending on tab copy, which is still skeletoned.
-      const buttons = html.split('<button').slice(1);
+      // Tab order in the markup follows PRIMARY_TABS (Homes, Services, Connect). Splitting the
+      // nav on each tab link isolates which one carries the underline and the active
+      // ("text-ink", not "text-ink-muted") class.
+      const nav = html.slice(html.indexOf('<nav'), html.indexOf('</nav>'));
+      const buttons = nav.split('<a ').slice(1);
       expect(buttons).toHaveLength(3);
       const labels = ['Homes', 'Services', 'Connect'];
       labels.forEach((label, i) => {
         const isExpected = label === expectedLabel;
         expect(buttons[i].includes(underlineMarker)).toBe(isExpected);
         expect(buttons[i].includes('text-ink-muted')).toBe(!isExpected);
+        expect(buttons[i].includes('aria-current="page"')).toBe(isExpected);
       });
     });
   });
@@ -219,16 +228,19 @@ describe('NavBar after hydration', () => {
     expect(container.querySelector('.skeleton-fill')).toBeNull();
   });
 
-  /** Saved and Apps are unconditional — they must survive both branches of the swap. */
+  /** The tabs are unconditional: they must survive both branches of the swap. The row has no
+   *  Saved button: a signed-in user gets "Saved homes" in the account panel. */
   it.each([
     ['signed out', null],
     ['signed in', A_USER],
-  ])('keeps Saved and Apps for a %s visitor', (_label, user) => {
+  ])('keeps the three tabs and shows no Saved button for a %s visitor', (_label, user) => {
     mockUseApp.mockReturnValue(appValue(user as User | null));
     render(<NavBar />);
 
-    expect(screen.getByLabelText('Saved')).toBeInTheDocument();
-    expect(screen.getByTestId('apps-dropdown')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Saved')).toBeNull();
+    for (const name of ['Homes', 'Services', 'Connect']) {
+      expect(screen.getByRole('link', { name })).toBeInTheDocument();
+    }
   });
 });
 
@@ -244,7 +256,7 @@ describe('NavBar right side', () => {
     mockUseApp.mockReturnValue(appValue(null));
     render(<NavBar />);
 
-    for (const name of ['Saved', 'Sign in or sign up', 'More options']) {
+    for (const name of ['Sign in or sign up', 'More options']) {
       expect(screen.getByLabelText(name)).toHaveAttribute('title', name);
     }
   });
@@ -343,17 +355,43 @@ describe('NavBar profile and right-side spacing', () => {
     const { container } = render(<NavBar />);
 
     expect(container.querySelector('img[src="https://example.com/me.jpg"]')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Profile menu' })).not.toHaveTextContent('D');
+    // The photo replaces the account icon. The first name stays beside it.
+    expect(screen.getByRole('button', { name: 'Profile menu' }).querySelector('svg')).toBeNull();
+  });
+
+  it('shows the account icon then "Sign in" when signed out', () => {
+    mockUseApp.mockReturnValue(appValue(null));
+    render(<NavBar />);
+    const button = screen.getByRole('button', { name: 'Sign in or sign up' });
+
+    expect(button.querySelector('svg')).not.toBeNull();
+    expect(button).toHaveTextContent('Sign in');
+    // The label follows the tab labels: hidden below lg.
+    expect(button.querySelector('span')!.className).toMatch(/(^|\s)hidden\s.*lg:inline/);
+  });
+
+  it('shows the account icon then the first name when signed in, and still opens the panel', () => {
+    mockUseApp.mockReturnValue(appValue({ ...A_USER, firstName: 'Dana', lastName: 'Okafor' }));
+    render(<NavBar />);
+    const button = screen.getByRole('button', { name: 'Profile menu' });
+
+    expect(button.querySelector('svg')).not.toBeNull();
+    expect(button).toHaveTextContent(/^Dana$/);
+    fireEvent.click(button);
+    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Saved homes');
   });
 
   it('puts every right-side item in one flex row with one gap value', () => {
     mockUseApp.mockReturnValue(appValue(null));
     render(<NavBar />);
-    const row = screen.getByLabelText('Saved').parentElement as HTMLElement;
+    const row = screen
+      .getByRole('button', { name: 'More options' })
+      .closest('.z-20') as HTMLElement;
 
     expect(row.className).toContain('gap-1.5');
     expect(row.className).toContain('md:gap-2');
-    expect(row.children).toHaveLength(4);
+    // Account, More. There is no Saved button and no Apps grid.
+    expect(row.children).toHaveLength(2);
     for (const child of Array.from(row.children)) {
       expect(child.className).not.toMatch(MARGIN);
     }
@@ -364,19 +402,21 @@ describe('NavBar profile and right-side spacing', () => {
     render(<NavBar />);
     const more = screen.getByLabelText('More options');
 
-    // Only -mr-1, the mirror of the logo's -ml-1. No margin on the left, where the flex gap applies.
-    expect(more.className.match(new RegExp(MARGIN.source, 'g'))).toEqual([' -mr-']);
-    expect(more.className).toContain('-mr-1');
+    // From md: a 4px glyph box with -mr-1. On a phone: a 24px box with a 44px hit area.
+    expect(more.className).toContain('md:-mr-1');
     expect(more.className).toContain('h-6');
-    expect(more.className).toContain('w-1');
+    expect(more.className).toContain('md:w-1');
+    expect(more.className).toContain('max-md:before:-inset-x-2.5');
+    expect(more.className).not.toContain('max-md:hidden');
     expect(more.querySelector('svg')?.getAttribute('viewBox')).toBe('10.2 3.2 3.6 17.6');
   });
 
-  it('draws the More skeleton in the same box', () => {
+  it('draws the real More dots before hydration, in the same box', () => {
     mockUseApp.mockReturnValue(appValue(null));
     const html = renderToStaticMarkup(<NavBar />);
 
-    expect(html).toContain('-mr-1 h-6 w-1 shrink-0');
+    expect(html).toContain('viewBox="10.2 3.2 3.6 17.6"');
+    expect(html).toContain('h-6 w-6 shrink-0');
     expect(html).not.toContain('4.5px');
   });
 });
