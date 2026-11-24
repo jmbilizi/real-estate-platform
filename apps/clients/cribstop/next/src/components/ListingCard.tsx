@@ -482,9 +482,12 @@ export default function ListingCard({
           {statsLine ?? ' '}
         </p>
 
-        {/* #458. The property address is secondary now that price leads: normal weight, the same
-            13px/18px system face and `ink-body` color tier as the attribution row below it. */}
-        <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px] tracking-[-0.01em] text-ink-body">
+        {/*
+         * #458. The address is secondary to the price: normal weight, `ink-body`. It is one line,
+         * never two. `.listing-card-address` (globals.css) sets the size from the card width, so a
+         * narrow phone card shows more of the address.
+         */}
+        <h3 className="listing-card-address mt-0.5 truncate font-system font-normal tracking-[-0.01em] text-ink-body">
           {/*
            * #841. A real link, so a crawler reads the listing URL from the server HTML. A plain
            * click still opens the panel through the card handler. A modified click or a middle

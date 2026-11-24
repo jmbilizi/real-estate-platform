@@ -53,6 +53,11 @@ interface ModalProps {
   showCloseButton?: boolean;
   /** Paint above other dialogs. For a dialog summoned over another one, such as sign-in. */
   stacked?: boolean;
+  /**
+   * The panel can fill the window. The page then keeps no scrollbar gutter beside it, so the
+   * panel's own scrollbar sits at the window edge (`[data-overlay-cover]` in globals.css).
+   */
+  coversWindow?: boolean;
   /** Remove default px-6 py-4 padding from the content area */
   noPadding?: boolean;
   /** Remove bottom border radius (useful for large modals where a flat bottom looks cleaner) */
@@ -104,6 +109,7 @@ export default function Modal({
   cardClassName,
   showCloseButton,
   stacked,
+  coversWindow,
   noPadding,
   squareBottom,
   noScroll,
@@ -280,6 +286,7 @@ export default function Modal({
          *below* the docked search bar's 55, so scrolling a results page far enough to dock the pill
          and then opening a listing put the pill on top of the panel's own header row. */
       data-overlay
+      data-overlay-cover={coversWindow ? '' : undefined}
       className={`fixed inset-0 ${stacked ? 'z-auth-dialog' : 'z-dialog'} flex justify-center overflow-hidden bg-black/30 ${backdropAlign}`}
     >
       <div

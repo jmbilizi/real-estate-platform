@@ -19,6 +19,10 @@ const nextConfig = {
   },
   // frame-src is the only directive set. It limits iframes to the tour hosts the gallery embeds (#573, #590).
   // frame-src also checks every redirect target, so list the host a tour URL redirects to.
+  // Saved homes moved under the account (/account/favorites). Old links keep working.
+  async redirects() {
+    return [{ source: '/favorites', destination: '/account/favorites', permanent: true }];
+  },
   async headers() {
     const frameSrc = ["'self'", ...frameHosts.map((h) => `https://${h}`)].join(' ');
     return [

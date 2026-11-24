@@ -1294,80 +1294,15 @@ describe('HomePageContent', () => {
     });
   });
 
-  describe('recently viewed row (#366)', () => {
-    const TITLE = 'Recently viewed';
-    beforeEach(() => mockedRecentSaved.mockResolvedValue([]));
-    const card = (id: string, address: string) =>
-      aListingCardRow({ id, propertyId: `p-${id}`, address });
+  it('shows no recently viewed row: it lives on /account/recently-viewed', async () => {
+    mockUser = { email: 'a@b.co' };
+    mockedRecentSaved.mockResolvedValue([]);
 
-    it('renders the resolved cards, newest first, for a signed-in user', async () => {
-      mockUser = { email: 'a@b.co' };
-      mockedViewedIds.mockResolvedValue(['L2', 'L1']);
-      mockedByIds.mockResolvedValue([card('L2', '2 Newest St'), card('L1', '1 Older St')]);
+    renderWithClient(<HomePageContent />);
 
-      renderWithClient(<HomePageContent />);
-
-      expect(await screen.findByText(TITLE)).toBeInTheDocument();
-      expect(mockedByIds.mock.calls[0][0]).toEqual(['L2', 'L1']);
-      const newest = await screen.findByText(/2 Newest St/);
-      const older = await screen.findByText(/1 Older St/);
-      expect(newest.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    });
-
-    it('sits after the near-you rows and before coming soon', async () => {
-      mockUser = { email: 'a@b.co' };
-      mockRegionFetch({ city: 'Rockville', state: 'MD' });
-      mockedViewedIds.mockResolvedValue(['L1']);
-      mockedByIds.mockResolvedValue([card('L1', '1 Older St')]);
-
-      renderWithClient(<HomePageContent />);
-
-      const heading = await screen.findByText(TITLE);
-      const coming = await screen.findByText('Be first to see homes coming for sale');
-      expect(
-        heading.compareDocumentPosition(coming) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    });
-
-    it('is absent and makes no call when signed out', async () => {
-      renderWithClient(<HomePageContent />);
-
-      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
-      await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
-      expect(mockedViewedIds).not.toHaveBeenCalled();
-    });
-
-    it('is absent for a signed-in user with an empty list, and looks up nothing', async () => {
-      mockUser = { email: 'a@b.co' };
-
-      renderWithClient(<HomePageContent />);
-
-      await waitFor(() => expect(mockedViewedIds).toHaveBeenCalled());
-      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
-      await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
-      expect(mockedByIds).not.toHaveBeenCalled();
-    });
-
-    it('skips a listing that no longer resolves', async () => {
-      mockUser = { email: 'a@b.co' };
-      mockedViewedIds.mockResolvedValue(['L2', 'GONE', 'L1']);
-      mockedByIds.mockResolvedValue([card('L2', '2 Newest St'), card('L1', '1 Older St')]);
-
-      renderWithClient(<HomePageContent />);
-
-      expect(await screen.findByText(/2 Newest St/)).toBeInTheDocument();
-      expect(screen.getAllByText(/Newest St|Older St/)).toHaveLength(2);
-    });
-
-    it('hides the row, not the page, when the read fails', async () => {
-      mockUser = { email: 'a@b.co' };
-      mockedViewedIds.mockRejectedValue(new Error('503'));
-
-      renderWithClient(<HomePageContent />);
-
-      expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
-      await waitFor(() => expect(screen.queryByText(TITLE)).not.toBeInTheDocument());
-    });
+    expect(await screen.findByText('Newest homes for sale')).toBeInTheDocument();
+    expect(screen.queryByText('Recently viewed')).not.toBeInTheDocument();
+    expect(mockedViewedIds).not.toHaveBeenCalled();
   });
 
   describe('one batch request for the rows (#960)', () => {

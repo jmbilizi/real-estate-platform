@@ -60,7 +60,7 @@ describe('AnalyticsTracker (#826)', () => {
   it('sends dwell with the old route values when the route changes', () => {
     const { rerender } = render(<AnalyticsTracker />);
     act(() => void jest.advanceTimersByTime(3000));
-    mockPath = '/favorites';
+    mockPath = '/account/favorites';
     rerender(<AnalyticsTracker />);
     expect(dwellCalls()[0][1]).toEqual({
       surface: 'search',
@@ -68,7 +68,7 @@ describe('AnalyticsTracker (#826)', () => {
     });
     expect(mockTrackEvent).toHaveBeenCalledWith('page_view', {
       surface: 'favorites',
-      props: { path_template: '/favorites' },
+      props: { path_template: '/account/favorites' },
     });
   });
 });

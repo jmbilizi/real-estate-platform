@@ -48,20 +48,32 @@ const CUT = {
 };
 
 describe('ListingDetailContent price change (#717)', () => {
-  it('writes the cut from the two stored prices', async () => {
+  it('shows the earlier price struck through beside the price, for a cut', async () => {
     await renderDetail(CUT);
 
-    expect(screen.getByTestId('price-change').textContent).toBe(
-      'Reduced $100,000 (4.4%) from $2,297,500 on Oct 2',
-    );
+    const earlier = screen.getByTestId('price-change');
+    expect(earlier.tagName).toBe('S');
+    expect(earlier.textContent).toBe('Earlier price: $2,297,500');
+    expect(earlier.parentElement?.textContent).toContain('$2,197,500');
+  });
+
+  it('shows no Price Reduced label when the struck earlier price shows', async () => {
+    await renderDetail({ ...CUT, priceReduced: true });
+
+    expect(screen.getByTestId('price-change')).toBeInTheDocument();
+    expect(screen.queryByText('Price Reduced')).toBeNull();
+  });
+
+  it('keeps the Price Reduced label when there is no earlier price to show', async () => {
+    await renderDetail({ price: 2_197_500, priceReduced: true });
+
+    expect(screen.getByText('Price Reduced')).toBeInTheDocument();
   });
 
   it('writes an increase the same way', async () => {
     await renderDetail({ ...CUT, price: 2_397_500 });
 
-    expect(screen.getByTestId('price-change').textContent).toBe(
-      'Increased $100,000 (4.4%) from $2,297,500 on Oct 2',
-    );
+    expect(screen.getByTestId('price-change').textContent).toBe('Earlier price: $2,297,500');
   });
 
   it('shows no line for a change older than 90 days, or with no earlier price', async () => {

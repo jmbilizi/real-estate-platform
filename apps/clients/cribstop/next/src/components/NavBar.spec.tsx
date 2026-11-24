@@ -209,7 +209,7 @@ describe('NavBar before hydration', () => {
     });
 
     /** On an account page the account control is the active item, and no tab is. */
-    it.each(['/account', '/favorites'])(
+    it.each(['/account', '/account/favorites'])(
       'marks Account active on %s in the server-rendered HTML, and no tab',
       (path) => {
         mockPathname.mockReturnValue(path);
@@ -273,7 +273,7 @@ describe('NavBar after hydration', () => {
   });
 
   /** The tabs are unconditional: they must survive both branches of the swap. The row has no
-   *  Saved button: a signed-in user gets "Saved homes" in the account panel. */
+   *  Saved button: a signed-in user gets "Saved" in the account panel. */
   it.each([
     ['signed out', null],
     ['signed in', A_USER],
@@ -345,7 +345,7 @@ describe('NavBar right side', () => {
       .getAllByRole('link')
       .map((a) => a.getAttribute('href') ?? '')
       .filter((h) => h.startsWith('/') && h !== '/');
-    expect(hrefs).toEqual(expect.arrayContaining(['/account', '/favorites']));
+    expect(hrefs).toEqual(expect.arrayContaining(['/account', '/account/favorites']));
 
     const routes = pageRoutes(join(__dirname, '..', 'app'));
     for (const href of hrefs) {
@@ -391,7 +391,7 @@ describe('NavBar profile and right-side spacing', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }));
 
-    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Saved homes');
+    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Recently viewed');
   });
 
   it('shows the profile photo instead of the initials when the user has one', () => {
@@ -422,7 +422,7 @@ describe('NavBar profile and right-side spacing', () => {
     expect(button.querySelector('svg')).not.toBeNull();
     expect(button).toHaveTextContent(/^Dana$/);
     fireEvent.click(button);
-    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Saved homes');
+    expect(screen.getByTestId('slide-panel')).toHaveTextContent('Recently viewed');
   });
 
   it('puts every right-side item in one flex row with one gap value', () => {

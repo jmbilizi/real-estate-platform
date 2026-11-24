@@ -7,6 +7,15 @@
  * fetch-failure state anywhere. Both are now real states on every listing surface.
  */
 
+import {
+  DETAIL_ASIDE,
+  DETAIL_ASIDE_BLOCK,
+  DETAIL_ASIDE_CARD,
+  DETAIL_BODY,
+  DETAIL_GALLERY,
+  DETAIL_GRID,
+  DETAIL_SECTION,
+} from '@/components/listing/detail-layout';
 import { CAROUSEL_ITEM_CLASS } from '@/components/CarouselShell';
 import ToolbarIconButton, { BACK_ICON } from '@/components/ToolbarIconButton';
 import type { ListingCardRow } from '@/lib/types';
@@ -103,7 +112,7 @@ export function ListingCardSkeleton() {
         <p className="mt-0.5 h-[18px] text-[13px] leading-[18px]">
           <Bar className="w-4/5" />
         </p>
-        <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px]">
+        <h3 className="listing-card-address mt-0.5 truncate font-system font-normal">
           <Bar className="w-3/5" />
         </h3>
         {/* #433/#438/#458/#470. Attribution row, two slots. Left: avatar circle + name bar within
@@ -204,8 +213,6 @@ export function ListingGridSkeleton({
  * this header measured 73px against the real 81px and everything below it jumped 8px on load.
  */
 export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRow }) {
-  const panel = 'rounded-2xl border border-surface-border bg-white';
-
   /*
    * No container-level animation here, and deliberately not.
    *
@@ -240,9 +247,9 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
           measured 999px inside a 750px panel and was simply clipped. */}
       {/* Same scroll classes as the loaded body. With `overflow-hidden` the skeleton had no
           scrollbar while the loaded page did, so the content column was 10px wider during load. */}
-      <div className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt page-gutter py-4 pb-8">
+      <div className={DETAIL_BODY}>
         {/*
-         * The gallery, in the same bordered panel the loaded page wraps `PropertyGallery` in, so
+         * The gallery, in the same wrapper the loaded page wraps `PropertyGallery` in, so
          * the block measures 482px at `md` and up in both states. Getting this shape wrong is the
          * most expensive mistake on the page: it is the tallest thing below the header, and an
          * early version at `aspect-[16/9]` on every width stood 551px against the real 482px, so
@@ -260,7 +267,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          * branded placeholder rather than a mosaic. Only `layoutRow` can know that, which is one of
          * the three things it is still consulted for.
          */}
-        <div className={`relative overflow-hidden ${panel}`} data-skeleton-section="gallery">
+        <div className={`relative ${DETAIL_GALLERY}`} data-skeleton-section="gallery">
           {/* #565. The status badge, top left. Absolute, so it adds no height. */}
           <div
             data-skeleton-status-badge
@@ -291,8 +298,8 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
           )}
         </div>
 
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
-          <div className="space-y-4">
+        <div className={DETAIL_GRID}>
+          <div>
             {/*
              * Overview: badge row, price, address, then the stat tiles under a hairline. One panel,
              * as on the loaded page.
@@ -307,8 +314,8 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
              * Price and address are placeholders inside the real type classes, so their boxes come
              * from the type scale. The tile grid has the loaded grid's columns and gaps.
              */}
-            <div className={panel} data-skeleton-section="overview">
-              <div className="p-6">
+            <div className={DETAIL_SECTION} data-skeleton-section="overview">
+              <div>
                 <p className="text-xl font-semibold tracking-[-0.18px]">
                   <Bar className="w-1/2" />
                 </p>
@@ -316,7 +323,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
                   <Bar className="w-3/5" />
                 </h1>
               </div>
-              <div className="grid grid-cols-2 gap-y-4 border-t border-surface-border px-6 py-4 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="mt-6 grid grid-cols-2 gap-y-4 border-t border-surface-border pt-6 sm:grid-cols-3 lg:grid-cols-6">
                 {Array.from({ length: 6 }, (_, i) => (
                   <div key={i} className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-wider">
@@ -331,7 +338,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
             </div>
 
             {/* "About this home" — detail-only text, absent from a card row by design. */}
-            <div className={`${panel} p-6`} data-skeleton-section="description">
+            <div className={DETAIL_SECTION} data-skeleton-section="description">
               <h2 className="text-xl font-semibold tracking-tight">
                 <Bar className="w-44" />
               </h2>
@@ -348,7 +355,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
              * the real chips will need. Their labels are not guessed: each chip is a placeholder
              * until the detail lands.
              */}
-            <div className={`${panel} p-6`} data-skeleton-section="amenities">
+            <div className={DETAIL_SECTION} data-skeleton-section="amenities">
               <h2 className="text-xl font-semibold tracking-tight">
                 <Bar className="w-56" />
               </h2>
@@ -378,7 +385,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
 
             {/*
              * "Where you'll live". The map box is reserved at the loaded map's exact `h-[380px]`,
-             * inside the same square-edged hairline, because this is the tallest thing below the
+             * inside the same round frame, because this is the tallest thing below the
              * gallery — leaving it out moved every section under it by half a screen.
              *
              * It deliberately stays a plain block rather than mounting `SingleListingMap` early:
@@ -386,77 +393,75 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
              * the detail lands, and starting it here would fetch leaflet for a panel that may be
              * closed a second later. Its own placeholder fills the same box when it does mount.
              */}
-            <div className={`${panel} p-6`} data-skeleton-section="map">
+            <div className={DETAIL_SECTION} data-skeleton-section="map">
               <h2 className="text-xl font-semibold tracking-tight">
                 <Bar className="w-48" />
               </h2>
-              <div className="mt-4 overflow-hidden border border-surface-border">
+              <div className="mt-4 overflow-hidden rounded-2xl">
                 <div className={`h-[380px] w-full ${FILL}`} />
               </div>
             </div>
           </div>
 
           {/* Sidebar — agent card, buyer-agent card, then the mortgage estimate. */}
-          <div className="space-y-4">
-            {/* Listing agent: label, avatar row, four contact lines. */}
-            <div className={`${panel} p-6`} data-skeleton-section="agent">
-              <p className="text-[11px] font-semibold uppercase tracking-wider">
-                <Bar className="w-24" />
-              </p>
-              <div className="mt-3 flex items-center gap-3">
-                <div className={`h-12 w-12 flex-shrink-0 rounded-full ${FILL}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">
-                    <Bar className="w-2/3" />
-                  </p>
-                  <p className="text-sm">
-                    <Bar className="mt-1 w-1/2" />
-                  </p>
+          <div className={DETAIL_ASIDE}>
+            <div className={DETAIL_ASIDE_CARD}>
+              {/* Listing agent: label, avatar row, four contact lines. */}
+              <div className={DETAIL_SECTION} data-skeleton-section="agent">
+                <p className="text-[11px] font-semibold uppercase tracking-wider">
+                  <Bar className="w-24" />
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className={`h-12 w-12 flex-shrink-0 rounded-full ${FILL}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">
+                      <Bar className="w-2/3" />
+                    </p>
+                    <p className="text-sm">
+                      <Bar className="mt-1 w-1/2" />
+                    </p>
+                  </div>
+                </div>
+                {/* Four tap rows of 44px (`min-h-11`), as the loaded card: agent phone, agent email,
+                  office phone, office email. */}
+                <div className="mt-4 space-y-1 text-sm">
+                  {['w-3/4', 'w-4/5', 'w-2/3', 'w-3/5'].map((w) => (
+                    <div key={w} className="flex min-h-11 items-center">
+                      <Bar className={`${w}`} />
+                    </div>
+                  ))}
                 </div>
               </div>
-              {/* Four tap rows of 44px (`min-h-11`), as the loaded card: agent phone, agent email,
-                  office phone, office email. */}
-              <div className="mt-4 space-y-1 text-sm">
-                {['w-3/4', 'w-4/5', 'w-2/3', 'w-3/5'].map((w) => (
-                  <div key={w} className="flex min-h-11 items-center">
-                    <Bar className={`${w}`} />
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Buyer-agent card (#591): label, name line, two-line blurb, two buttons, broker line. */}
-            <div className={`${panel} p-6`} data-skeleton-section="buyer-agent">
-              <p className="text-[11px] font-semibold uppercase tracking-wider">
-                <Bar className="w-24" />
-              </p>
-              <p className="mt-3 font-semibold">
-                <Bar className="w-4/5" />
-              </p>
-              <p className="mt-1 text-sm leading-snug">
-                <Bar className="w-full" />
-                <Bar className="mt-1 w-2/3" />
-              </p>
-              {/* Both buttons are `min-h-11` (44px) on the loaded card. */}
-              <div className={`mt-5 h-11 w-full rounded-full ${FILL}`} />
-              <div className={`mt-2 h-11 w-full rounded-full ${FILL}`} />
-              <p className="mt-4 text-sm leading-snug">
-                <Bar className="w-3/5" />
-              </p>
+              {/* Buyer-agent card (#591): label, name line, two-line blurb, two buttons, broker line. */}
+              <div className={DETAIL_SECTION} data-skeleton-section="buyer-agent">
+                <p className="text-[11px] font-semibold uppercase tracking-wider">
+                  <Bar className="w-24" />
+                </p>
+                <p className="mt-3 font-semibold">
+                  <Bar className="w-4/5" />
+                </p>
+                <p className="mt-1 text-sm leading-snug">
+                  <Bar className="w-full" />
+                  <Bar className="mt-1 w-2/3" />
+                </p>
+                {/* Both buttons are `min-h-11` (44px) on the loaded card. */}
+                <div className={`mt-5 h-11 w-full rounded-full ${FILL}`} />
+                <div className={`mt-2 h-11 w-full rounded-full ${FILL}`} />
+                <p className="mt-4 text-sm leading-snug">
+                  <Bar className="w-3/5" />
+                </p>
+              </div>
             </div>
 
             {/*
              * The mortgage estimate, which the loaded page renders only for a sale with a price.
              * With a row in hand that is knowable, so it is reserved exactly when it will appear;
              * without one it is reserved anyway, because it is the last thing in its own column and
-             * being wrong about it moves nothing. `bg-brand-50/50` because a container matches the
-             * loaded surface — this panel is tinted, and a white one would flash to tint on load.
+             * being wrong about it moves nothing.
              */}
             {(!layoutRow || (layoutRow.listingType === 'sale' && layoutRow.price !== null)) && (
-              <div
-                className="rounded-2xl border border-surface-border bg-brand-50/50 p-6"
-                data-skeleton-section="mortgage"
-              >
+              <div className={DETAIL_ASIDE_BLOCK} data-skeleton-section="mortgage">
                 <p className="text-base font-semibold">
                   <Bar className="w-3/5" />
                 </p>
@@ -492,7 +497,7 @@ export function ListingDetailSkeleton({ layoutRow }: { layoutRow?: ListingCardRo
          * The same component the loaded page shows while that request is in flight, so the two
          * states are the same block rather than two guesses at it.
          */}
-        <div className="mt-4" data-skeleton-section="nearby-homes">
+        <div className="mt-8" data-skeleton-section="nearby-homes">
           <NearbyHomesSkeleton />
         </div>
 
@@ -565,7 +570,7 @@ export function ListingErrorState({
  * The error state inside the listing modal's own layout (#907).
  *
  * It uses the skeleton's two slots: a header bar with the back button, then a scrolling body on
- * the `surface-alt` canvas. A bare `ListingErrorState` with a vertical margin left an empty white
+ * the white ground. A bare `ListingErrorState` with a vertical margin left an empty white
  * band above the grey box and ignored the header. Same markup at every width.
  */
 export function ListingErrorPanel({
@@ -582,11 +587,8 @@ export function ListingErrorPanel({
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-surface-border bg-white page-gutter pb-3 pt-4">
         {onClose && <ToolbarIconButton label="Go back" icon={BACK_ICON} onClick={onClose} />}
       </div>
-      <div
-        data-error-body
-        className="scrollbar-overlay min-h-0 flex-1 bg-surface-alt page-gutter py-4 pb-8"
-      >
-        <div className="mx-auto max-w-lg rounded-2xl border border-surface-border bg-white p-4">
+      <div data-error-body className={`${DETAIL_BODY} pt-6`}>
+        <div className="mx-auto max-w-lg">
           <ListingErrorState message={message} onRetry={onRetry} />
         </div>
       </div>

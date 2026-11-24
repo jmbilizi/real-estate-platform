@@ -20,6 +20,11 @@ export function lockScroll() {
   // Cancel any pending deferred unlock first (handles Strict Mode re-mount)
   cancelDeferredUnlock();
   const root = document.documentElement;
+  // The page scrollbar width, read on a new lock only. A dialog that covers the window uses it
+  // (`[data-overlay-cover]` in globals.css). A lock over a lock reads 0, so it must not write.
+  if (typeof getComputedStyle === 'function' && getComputedStyle(root).overflowY !== 'hidden') {
+    root.style.setProperty('--root-gutter', `${window.innerWidth - root.clientWidth}px`);
+  }
   if (
     typeof CSS !== 'undefined' &&
     typeof CSS.supports === 'function' &&

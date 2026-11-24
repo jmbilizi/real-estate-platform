@@ -24,7 +24,7 @@ import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges'
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatCalendarDate, formatNumber, formatPrice } from '@/lib/format';
 import { listingTimeZone } from '@/lib/time-zone';
-import { describePriceChange, formatDetailPriceChange } from '@/lib/price-change';
+import { describePriceChange } from '@/lib/price-change';
 import { BRAND } from '@/lib/brand';
 import {
   agentContactLines,
@@ -47,6 +47,15 @@ import type { ListingDetailView } from '@/lib/api/listings';
 import { useApp } from '@/lib/context';
 import { useToast } from '@/lib/useToast';
 import { useRecordRecentlyViewed } from '@/lib/useRecordRecentlyViewed';
+import {
+  DETAIL_ASIDE,
+  DETAIL_ASIDE_BLOCK,
+  DETAIL_ASIDE_CARD,
+  DETAIL_BODY,
+  DETAIL_GALLERY,
+  DETAIL_GRID,
+  DETAIL_SECTION,
+} from '@/components/listing/detail-layout';
 import { searchTargetUrl } from '@/lib/search-place';
 import type { ListingCardRow } from '@/lib/types';
 import { trackEvent } from '@/lib/analytics';
@@ -67,28 +76,10 @@ interface Props {
   propertyPanel?: React.ReactNode;
 }
 
-/**
- * One panel primitive, used by every section on this page.
- *
- * The loading skeleton makes a promise the loaded page used to break: in the skeleton every block
- * is the same object — a rounded, bordered panel with a consistent gutter — so the page reads as a
- * calm stack of equal-weight cards. The loaded page then rendered *some* sections as panels (stats,
- * map, disclosure, agent, open houses) and others as bare text floating on the canvas (price,
- * description, amenities), so the layout appeared to come apart at the exact moment the data
- * arrived.
- *
- * Both halves of the fix matter. Applying one primitive everywhere is the obvious half; the other
- * is the canvas. These panels were already white on a white page, where a hairline border does
- * almost no work — the body is `surface-alt` now, which is what lets a panel actually read as one.
- *
- * Values are the existing system's (`rounded-2xl`, `surface-border`, `surface-alt`), not new ones:
- * the brief is to make what we already have consistent, not to introduce another visual language.
- */
 const PHONE_ICON =
   'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z';
 const EMAIL_ICON =
   'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z';
-const PANEL = 'rounded-2xl border border-surface-border bg-white';
 
 export default function ListingDetailContent({
   listing,
@@ -275,13 +266,10 @@ export default function ListingDetailContent({
         <div className="flex shrink-0 items-center gap-1.5">{shareSaveButtons}</div>
       </div>
 
-      {/* Scrollable body — `surface-alt` is the canvas that makes a white panel read as a panel. */}
-      <div
-        data-scroll-body
-        className="flex-1 min-h-0 scrollbar-overlay bg-surface-alt page-gutter py-4 pb-8"
-      >
-        {/* Gallery — the first panel, exactly the block the skeleton opens with. */}
-        <div className={`overflow-hidden ${PANEL}`}>
+      {/* Scrollable body. White, with flat sections: see `detail-layout.ts`. */}
+      <div data-scroll-body className={DETAIL_BODY}>
+        {/* Gallery — exactly the block the skeleton opens with. */}
+        <div className={DETAIL_GALLERY}>
           <PropertyGallery
             media={listing.media}
             tourUrl={listing.virtualTourUrl}
@@ -296,20 +284,21 @@ export default function ListingDetailContent({
           </PropertyGallery>
         </div>
 
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+        <div className={DETAIL_GRID}>
           {/* Main column */}
-          <div className="space-y-4">
+          <div>
             {/*
              * Overview (#568): the one place price, address and stats appear. The header bar, the
              * map section and the mobile bar carry none of them. The status badge is on the gallery
-             * (#565). The stat tiles sit inside this panel under a hairline.
+             * (#565). The stat tiles sit under a hairline.
              */}
-            <section id="overview" className={PANEL}>
-              <div className="p-6">
+            <section id="overview" className={DETAIL_SECTION}>
+              <div>
                 <div className="mb-3 flex flex-wrap items-center gap-1.5 empty:hidden">
                   {listing.isSample && <SampleBadge />}
                   {listing.sponsored && <SponsoredBadge />}
-                  {listing.priceReduced && priceChange?.direction !== 'up' && (
+                  {/* Only with no struck earlier price beside the price: that price says it already. */}
+                  {listing.priceReduced && !priceChange && (
                     <span className="badge bg-brand-50 text-brand-700">Price Reduced</span>
                   )}
                   {listing.newConstruction && (
@@ -318,7 +307,7 @@ export default function ListingDetailContent({
                 </div>
 
                 {closePriceText ? (
-                  <div className="rounded-2xl border border-surface-border bg-surface-alt px-4 py-3">
+                  <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
                       Sold
                     </p>
@@ -344,13 +333,19 @@ export default function ListingDetailContent({
                     }
                   >
                     {priceDisplay.text}
-                  </p>
-                )}
-
-                {/* #717. Two stored MLS prices. A cut and an increase read alike. */}
-                {priceChange && !closePriceText && (
-                  <p className="mt-1 text-sm text-ink-body" data-testid="price-change">
-                    {formatDetailPriceChange(priceChange)}
+                    {/*
+                     * #717. The earlier MLS price, struck through, beside the price. A cut and an
+                     * increase read alike. The amount and the date are in the price history.
+                     */}
+                    {priceChange && (
+                      <s
+                        className="ml-2 text-base font-normal tracking-normal text-ink-muted"
+                        data-testid="price-change"
+                      >
+                        <span className="sr-only">Earlier price: </span>
+                        {priceChange.previousPriceText}
+                      </s>
+                    )}
                   </p>
                 )}
 
@@ -384,7 +379,7 @@ export default function ListingDetailContent({
 
               {/* A parcel has no dwelling, so it shows lot size instead of the dwelling tiles. */}
               {statTiles.length > 0 && (
-                <div className="grid grid-cols-2 gap-y-4 border-t border-surface-border px-6 py-4 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="mt-6 grid grid-cols-2 gap-y-4 border-t border-surface-border pt-6 sm:grid-cols-3 lg:grid-cols-6">
                   {statTiles.map((s) => (
                     <div key={s.label} className="min-w-0">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
@@ -399,7 +394,7 @@ export default function ListingDetailContent({
 
             {/* Description */}
             {listing.description && (
-              <div className={`${PANEL} p-6`}>
+              <div className={DETAIL_SECTION}>
                 <h2 className="text-xl font-semibold tracking-tight">About this home</h2>
                 <ExpandableText
                   text={listing.description}
@@ -408,14 +403,14 @@ export default function ListingDetailContent({
               </div>
             )}
 
-            <ListingFacts listing={listing} className={PANEL} />
+            <ListingFacts listing={listing} className={DETAIL_SECTION} />
 
             {/* #717 */}
-            <PriceHistory entries={listing.priceHistory} className={PANEL} />
+            <PriceHistory entries={listing.priceHistory} className={DETAIL_SECTION} />
 
             {/* Amenities */}
             {listing.amenities.length > 0 && (
-              <div className={`${PANEL} p-6`}>
+              <div className={DETAIL_SECTION}>
                 <h2 className="text-xl font-semibold tracking-tight">Features &amp; amenities</h2>
                 <div className="mt-4">
                   <AmenityChips amenities={listing.amenities} />
@@ -424,12 +419,9 @@ export default function ListingDetailContent({
             )}
 
             {/* Where you'll live */}
-            <section id="map" className={`${PANEL} p-6`}>
+            <section id="map" className={DETAIL_SECTION}>
               <h2 className="text-xl font-semibold tracking-tight">Where you&apos;ll live</h2>
-              {/* Square, not rounded: the panel around it is already a rounded card, and a second
-                  radius inside the first reads as a card within a card. Keeping the hairline gives
-                  the map an edge without repeating the container's shape. */}
-              <div className="mt-4 overflow-hidden border border-surface-border">
+              <div className="mt-4 overflow-hidden rounded-2xl">
                 <SingleListingMap
                   latitude={listing.latitude}
                   longitude={listing.longitude}
@@ -442,119 +434,114 @@ export default function ListingDetailContent({
           </div>
 
           {/* Sidebar */}
-          <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            {/*
-             * Flat, like every other panel. This carried `shadow-card` as the page's single point
-             * of elevation, but the shadow darkens the card's own edges enough that it reads as a
-             * slightly off-white surface beside its flat neighbours — the fill was always
-             * identical `#ffffff`. Emphasis here comes from the primary button, not from the
-             * container.
-             */}
-            <div className={`${PANEL} p-6`}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                {listing.listingAgentName ? 'Listing Agent' : 'Listing Office'}
-              </p>
-              <div className="mt-3 flex items-center gap-3">
-                {/* Monogram: the feed has no agent photo keyed to the listing agent (#564). */}
-                <div
-                  aria-hidden="true"
-                  className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white"
-                >
-                  {listing.listingAgentName
-                    ? agentInitials(listing.listingAgentName)
-                    : officeInitial(listing.officeName)}
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-ink">
-                    {listing.listingAgentName ?? listing.officeName}
-                  </p>
-                  {listing.listingAgentName && (
-                    <p className="truncate text-sm text-ink-muted">{listing.officeName}</p>
-                  )}
-                </div>
-              </div>
-              {/*
-               * #344: NAR 7.58 requires the firm plus a phone OR an email, not both, so the office
-               * lines stay beside the agent's own. Each line renders only when its value is
-               * present, and each is one tap. `min-h-11` keeps the tap target 44px on a phone.
-               */}
-              <ul className="mt-4 space-y-1 text-sm">
-                {agentContactLines(listing).map((line) => (
-                  <li key={`${line.kind}:${line.value}`}>
-                    <a
-                      href={line.href}
-                      className="flex min-h-11 items-center gap-2 break-all text-ink-muted hover:text-brand"
-                    >
-                      <svg
-                        className="h-4 w-4 flex-shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d={line.kind === 'phone' ? PHONE_ICON : EMAIL_ICON}
-                        />
-                      </svg>
-                      <span className="text-ink-subtle">{line.owner}:</span>
-                      <span>{line.value}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/*
-             * #591: the buyer-agent request. These actions ask Cribstop (Real Broker, LLC) to act
-             * as the consumer's own buyer agent. They never reach the listing agent, who is
-             * contacted only through the call and email links above. A request is not a booking:
-             * no copy may say a tour is booked, confirmed or scheduled.
-             */}
-            <div className={`${PANEL} p-6`} data-testid="buyer-agent-card">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-                Your Buyer Agent
-              </p>
-              <p className="mt-3 font-semibold text-ink">
-                {BRAND.siteName}, brokered by <span className="font-bold">{BRAND.brokerage}</span>
-              </p>
-              <p className="mt-1 text-sm leading-snug text-ink-muted">
-                Request a tour with a {BRAND.siteName} buyer agent. Touring with an agent may
-                require a written buyer agreement. A tour request is not a booking.
-              </p>
-              {canRequest ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn-primary mt-5 min-h-11 w-full"
-                    onClick={onRequestTour}
-                  >
-                    Request a Tour
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary mt-2 min-h-11 w-full"
-                    onClick={onMessageAgent}
-                  >
-                    Message Agent
-                  </button>
-                </>
-              ) : (
-                <p className="mt-4 text-sm font-medium text-ink">
-                  This home is no longer available, so requests are closed.
+          <aside className={DETAIL_ASIDE}>
+            <div className={DETAIL_ASIDE_CARD}>
+              <div className={DETAIL_SECTION}>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                  {listing.listingAgentName ? 'Listing Agent' : 'Listing Office'}
                 </p>
-              )}
-              <p className="mt-4 text-sm font-medium leading-snug text-ink-muted">
-                Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
-              </p>
+                <div className="mt-3 flex items-center gap-3">
+                  {/* Monogram: the feed has no agent photo keyed to the listing agent (#564). */}
+                  <div
+                    aria-hidden="true"
+                    className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-700 font-bold text-white"
+                  >
+                    {listing.listingAgentName
+                      ? agentInitials(listing.listingAgentName)
+                      : officeInitial(listing.officeName)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink">
+                      {listing.listingAgentName ?? listing.officeName}
+                    </p>
+                    {listing.listingAgentName && (
+                      <p className="truncate text-sm text-ink-muted">{listing.officeName}</p>
+                    )}
+                  </div>
+                </div>
+                {/*
+                 * #344: NAR 7.58 requires the firm plus a phone OR an email, not both, so the office
+                 * lines stay beside the agent's own. Each line renders only when its value is
+                 * present, and each is one tap. `min-h-11` keeps the tap target 44px on a phone.
+                 */}
+                <ul className="mt-4 space-y-1 text-sm">
+                  {agentContactLines(listing).map((line) => (
+                    <li key={`${line.kind}:${line.value}`}>
+                      <a
+                        href={line.href}
+                        className="flex min-h-11 items-center gap-2 break-all text-ink-muted hover:text-brand"
+                      >
+                        <svg
+                          className="h-4 w-4 flex-shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d={line.kind === 'phone' ? PHONE_ICON : EMAIL_ICON}
+                          />
+                        </svg>
+                        <span className="text-ink-subtle">{line.owner}:</span>
+                        <span>{line.value}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/*
+               * #591: the buyer-agent request. These actions ask Cribstop (Real Broker, LLC) to act
+               * as the consumer's own buyer agent. They never reach the listing agent, who is
+               * contacted only through the call and email links above. A request is not a booking:
+               * no copy may say a tour is booked, confirmed or scheduled.
+               */}
+              <div className={DETAIL_SECTION} data-testid="buyer-agent-card">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+                  Your Buyer Agent
+                </p>
+                <p className="mt-3 font-semibold text-ink">
+                  {BRAND.siteName}, brokered by <span className="font-bold">{BRAND.brokerage}</span>
+                </p>
+                <p className="mt-1 text-sm leading-snug text-ink-muted">
+                  Request a tour with a {BRAND.siteName} buyer agent. Touring with an agent may
+                  require a written buyer agreement. A tour request is not a booking.
+                </p>
+                {canRequest ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-primary mt-5 min-h-11 w-full"
+                      onClick={onRequestTour}
+                    >
+                      Request a Tour
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary mt-2 min-h-11 w-full"
+                      onClick={onMessageAgent}
+                    >
+                      Message Agent
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-4 text-sm font-medium text-ink">
+                    This home is no longer available, so requests are closed.
+                  </p>
+                )}
+                <p className="mt-4 text-sm font-medium leading-snug text-ink-muted">
+                  Brokered by {BRAND.brokerage} &middot; {BRAND.siteName}
+                </p>
+              </div>
             </div>
 
             {/* Open houses — the API sends only upcoming occurrences, so "upcoming" is never
                 re-derived here and an occurrence the API did not send is never displayed. */}
             {listing.openHouses.length > 0 && (
-              <div className="rounded-2xl border border-brand/20 bg-brand-50 p-5">
+              <div className={DETAIL_ASIDE_BLOCK}>
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-700">
                   {listing.openHouses.length > 1 ? 'Upcoming Open Houses' : 'Upcoming Open House'}
                 </p>
@@ -589,20 +576,23 @@ export default function ListingDetailContent({
         </div>
 
         {propertyPanel !== undefined && (
-          <div id="history" className={`mt-4 ${PANEL}`}>
+          <div
+            id="history"
+            className="border-b border-surface-border [&>section]:px-0 sm:[&>section]:py-8"
+          >
             {propertyPanel}
           </div>
         )}
 
         {/* Nearby homes. A carousel, like the home page rows, so it has no panel around it. */}
         {!serverNearby && nearbyQuery.isPending && (
-          <div id="nearby" className="mt-4">
+          <div id="nearby" className="mt-8">
             <NearbyHomesSkeleton />
           </div>
         )}
         {nearbyRows.length > 0 && (
-          <div id="nearby" className="mt-4">
-            {/* No side inset: the body's gutter already aligns the title with the panels above. */}
+          <div id="nearby" className="mt-8">
+            {/* No side inset: the body's gutter already aligns the title with the sections above. */}
             <ListingRow
               title="Nearby homes"
               rowId="nearby"

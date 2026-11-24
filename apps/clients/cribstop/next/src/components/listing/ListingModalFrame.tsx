@@ -33,6 +33,7 @@ export default function ListingModalFrame({
       noPadding
       squareBottom
       noScroll
+      coversWindow
       /* This panel has no `title` — it draws the listing's own heading inside `children` — so the
          dialog's accessible name has to be supplied here, or it announces as unlabelled. */
       ariaLabel="Listing details"

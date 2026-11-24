@@ -53,7 +53,7 @@ describe('MobileTabBar (#923, #943)', () => {
     expect(current[0]).toHaveTextContent(label);
   });
 
-  it.each(['/account', '/favorites'])('marks no tab current on %s', (path) => {
+  it.each(['/account', '/account/favorites'])('marks no tab current on %s', (path) => {
     mockPath = path;
     render(<MobileTabBar />);
     expect(screen.getAllByRole('link').filter((a) => a.getAttribute('aria-current'))).toHaveLength(

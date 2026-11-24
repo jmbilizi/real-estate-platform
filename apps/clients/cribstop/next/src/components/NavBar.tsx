@@ -5,7 +5,7 @@ import { useApp } from '@/lib/context';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { motion } from 'motion/react';
-import { Heart, LogOut, User as UserIcon, UserPlus } from 'lucide-react';
+import { Clock, Heart, LogOut, User as UserIcon, UserPlus } from 'lucide-react';
 import MobileSearchSheet from './MobileSearchSheet';
 import MobileSearchPill from './MobileSearchPill';
 import SlidePanel from './SlidePanel';
@@ -29,7 +29,7 @@ const ACCOUNT_ICON_CLASSES = 'h-6 w-6 shrink-0 lg:h-5 lg:w-5';
 const ACCOUNT_ACTIVE_CLASSES = 'text-brand md:text-ink';
 
 /** The pages the account control owns. On them it is the active item, and no primary tab is. */
-const ACCOUNT_PREFIXES = ['/account', '/favorites'];
+const ACCOUNT_PREFIXES = ['/account'];
 
 export function isAccountPath(pathname: string): boolean {
   return ACCOUNT_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -236,7 +236,7 @@ export default function NavBar() {
               of the same rhythm. */}
           <div className="relative z-20 flex flex-shrink-0 items-center gap-1.5 md:-ml-3 md:gap-2 lg:-ml-5">
             {/*
-             * There is no Saved button in the row. A signed-in user gets "Saved homes" in the
+             * There is no Saved button in the row. A signed-in user gets "Saved" in the
              * account panel, and phones have Saved in the bottom tab bar (#923). There is no Apps
              * grid: one destination shows once.
              */}
@@ -344,12 +344,20 @@ export default function NavBar() {
 
                     <div className="">
                       <Link
-                        href="/favorites"
+                        href="/account/favorites"
                         className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
                         onClick={() => setProfileOpen(false)}
                       >
                         <Heart className="h-4 w-4 shrink-0 text-ink-muted" />
-                        Saved homes
+                        Saved
+                      </Link>
+                      <Link
+                        href="/account/recently-viewed"
+                        className="flex items-center gap-3 px-5 py-2.5 text-sm text-ink hover:bg-gray-100 transition-colors"
+                        onClick={() => setProfileOpen(false)}
+                      >
+                        <Clock className="h-4 w-4 shrink-0 text-ink-muted" />
+                        Recently viewed
                       </Link>
                     </div>
 

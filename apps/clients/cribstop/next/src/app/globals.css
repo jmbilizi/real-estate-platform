@@ -6,9 +6,14 @@
   display: none; /* Chrome/Safari/Webkit */
 }
 
-/* Thin overlay scrollbar — floats over content, no extra width reserved */
+/*
+ * Thin scrollbar with the same space on both sides. Browsers removed `overflow-y: overlay`, so a
+ * classic scrollbar takes 6px on the right. `both-edges` keeps the same 6px on the left, and the
+ * content stays centered. A touch scrollbar takes no room, so nothing is kept there.
+ */
 .scrollbar-overlay {
-  overflow-y: overlay !important; /* Chrome/Safari/Edge: overlay doesn't push content */
+  overflow-y: auto !important;
+  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin; /* Firefox */
   scrollbar-color: rgba(0, 0, 0, 0.18) transparent; /* Firefox */
 }
@@ -104,6 +109,16 @@ html {
 html:has([data-overlay]) {
   overflow: hidden;
   scrollbar-gutter: stable;
+}
+/*
+ * A dialog that covers the window, such as the listing detail. The page keeps no scrollbar
+ * gutter, so the dialog reaches the right edge of the window and its own scrollbar sits there.
+ * Padding of the same width keeps the page behind it at the same width. `lockScroll` sets
+ * `--root-gutter`. `!important` wins over the inline `scrollbar-gutter` that `lockScroll` writes.
+ */
+html:has([data-overlay-cover]) {
+  scrollbar-gutter: auto !important;
+  padding-right: var(--root-gutter, 0px);
 }
 
 body {
@@ -688,6 +703,17 @@ html[data-map-expanded] {
   /* The full-screen modal card already pads the top inset (`Modal.tsx`, #918). */
   top: 0;
 }
+/*
+ * The detail sidebar sticks 16px under the detail header. In the modal the header is outside the
+ * scrolling body, so the offset is the 16px alone. On the page the window scrolls under the site
+ * header and the 73px detail header.
+ */
+.listing-aside {
+  top: calc(var(--navbar-h, 65px) + 73px + 1rem);
+}
+[role='dialog'] .listing-aside {
+  top: 1rem;
+}
 /* The section links hide before the price or the address squeeze. */
 @container (max-width: 900px) {
   .listing-header-nav {
@@ -702,5 +728,25 @@ html[data-map-expanded] {
   [role='button'] {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+  }
+}
+
+/*
+ * The card address: one line, sized from the card width (`.listing-card-root`), so a narrow card
+ * shows more of it. 11px below 180px (a phone carousel card), 12px to 260px, 13px above. The line
+ * box is 18px at every size, so the card height and the skeleton do not change.
+ */
+.listing-card-address {
+  font-size: 11px;
+  line-height: 18px;
+}
+@container (min-width: 180px) {
+  .listing-card-address {
+    font-size: 12px;
+  }
+}
+@container (min-width: 260px) {
+  .listing-card-address {
+    font-size: 13px;
   }
 }
