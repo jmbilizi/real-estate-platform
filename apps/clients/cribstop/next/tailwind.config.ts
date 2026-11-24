@@ -25,6 +25,8 @@ const config: Config = {
         // Both resolve to the same value so they're interchangeable, but `layout:`
         // makes the intent explicit and ties back to LAYOUT_BREAK above.
         layout: LAYOUT_BREAK,
+        // A desktop monitor. A laptop stays below it, so its carousels show 6 items, not 7.
+        '3xl': '1920px',
       },
       // Named stacking layers, generated from `src/lib/z-layers.ts` so the classes here and the
       // inline `position: fixed` styles the docked search bar needs cannot drift apart. Use

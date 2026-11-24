@@ -24,7 +24,7 @@ import { SampleBadge, SponsoredBadge } from '@/components/listing/ListingBadges'
 import { NearbyHomesSkeleton } from '@/components/listing/ListingStates';
 import { formatCalendarDate, formatNumber, formatPrice } from '@/lib/format';
 import { listingTimeZone } from '@/lib/time-zone';
-import { describePriceChange, formatDetailPriceChange } from '@/lib/price-change';
+import { describePriceChange } from '@/lib/price-change';
 import { BRAND } from '@/lib/brand';
 import {
   agentContactLines,
@@ -331,13 +331,19 @@ export default function ListingDetailContent({
                     }
                   >
                     {priceDisplay.text}
-                  </p>
-                )}
-
-                {/* #717. Two stored MLS prices. A cut and an increase read alike. */}
-                {priceChange && !closePriceText && (
-                  <p className="mt-1 text-sm text-ink-body" data-testid="price-change">
-                    {formatDetailPriceChange(priceChange)}
+                    {/*
+                     * #717. The earlier MLS price, struck through, beside the price. A cut and an
+                     * increase read alike. The amount and the date are in the price history.
+                     */}
+                    {priceChange && (
+                      <s
+                        className="ml-2 text-base font-normal tracking-normal text-ink-muted"
+                        data-testid="price-change"
+                      >
+                        <span className="sr-only">Earlier price: </span>
+                        {priceChange.previousPriceText}
+                      </s>
+                    )}
                   </p>
                 )}
 

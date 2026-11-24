@@ -704,3 +704,23 @@ html[data-map-expanded] {
     touch-action: manipulation;
   }
 }
+
+/*
+ * The card address: one line, sized from the card width (`.listing-card-root`), so a narrow card
+ * shows more of it. 11px below 180px (a phone carousel card), 12px to 260px, 13px above. The line
+ * box is 18px at every size, so the card height and the skeleton do not change.
+ */
+.listing-card-address {
+  font-size: 11px;
+  line-height: 18px;
+}
+@container (min-width: 180px) {
+  .listing-card-address {
+    font-size: 12px;
+  }
+}
+@container (min-width: 260px) {
+  .listing-card-address {
+    font-size: 13px;
+  }
+}

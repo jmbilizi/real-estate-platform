@@ -111,7 +111,7 @@ export function ListingCardSkeleton() {
         <p className="mt-0.5 h-[18px] text-[13px] leading-[18px]">
           <Bar className="w-4/5" />
         </p>
-        <h3 className="mt-0.5 truncate font-system text-[13px] font-normal leading-[18px]">
+        <h3 className="listing-card-address mt-0.5 truncate font-system font-normal">
           <Bar className="w-3/5" />
         </h3>
         {/* #433/#438/#458/#470. Attribution row, two slots. Left: avatar circle + name bar within

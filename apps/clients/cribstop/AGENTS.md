@@ -166,9 +166,10 @@ with a fixed date. A failure means a spec reads the real clock.
     `sm`. The one card is the agent block in the sidebar, from `lg` only. The loaded page and
     `ListingDetailSkeleton` both take their classes from `components/listing/detail-layout.ts`.
     Never add a bordered or tinted panel to this page.
-  - **Cards get width before count.** A carousel shows 4 items from `md`, 5 from `xl` and 6 from
-    `2xl` (`CAROUSEL_ITEM_WIDTH_CLASS`). The search grid has two columns at most
-    (`RESULTS_GRID_COLUMNS_CLASS`). The second address line needs the room.
+  - **Cards get width before count.** A carousel shows 4 items from `md`, 5 from `xl`, 6 from `2xl`
+    and 7 from `3xl` (1920px) (`CAROUSEL_ITEM_WIDTH_CLASS`). A laptop shows 6. The search grid has
+    two columns at most (`RESULTS_GRID_COLUMNS_CLASS`). The card address is one line, never two.
+    `.listing-card-address` sets its size from the card width: 11, 12 or 13px.
   - The tabs come from `PRIMARY_TABS` (`MobileTabBar.tsx`): one list and one icon set for the phone
     bar and the desktop header. They show icons from `md` and icon with label from `lg`.
   - The pill is fixed over `NavBar`'s `.header-pill-slot`. Both read `--header-pill-left` and

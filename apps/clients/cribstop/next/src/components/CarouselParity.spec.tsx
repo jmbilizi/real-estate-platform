@@ -50,7 +50,7 @@ describe('carousel parity between NeighborhoodRow and ListingRow (#508)', () => 
       .getByRole('link', { name: 'Columbia Heights' })
       .closest('div')!.parentElement!;
     expect(widths(tile)).toEqual(widths(card));
-    expect(widths(tile)).toContain('2xl:w-[calc((100%-6.25rem)/6)]');
+    expect(widths(tile)).toContain('3xl:w-[calc((100%-7.5rem)/7)]');
     expect(widths(tile)).toContain('w-[42%]');
   });
 });

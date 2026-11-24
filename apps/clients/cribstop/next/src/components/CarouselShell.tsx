@@ -9,11 +9,11 @@ import ToolbarIconButton, { BACK_ICON, FORWARD_ICON } from '@/components/Toolbar
  */
 
 /**
- * Item width per breakpoint. Below `sm` an item is 42% wide so the next one peeks. From `lg` a row
- * shows one item fewer than the width allows (4, 5, 6), so the second address line has room.
+ * Item width per breakpoint. Below `sm` an item is 42% wide so the next one peeks. A row shows 4
+ * items from `md`, 5 from `xl`, 6 from `2xl` and 7 from `3xl` (1920px).
  */
 export const CAROUSEL_ITEM_WIDTH_CLASS =
-  'w-[42%] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] xl:w-[calc((100%-5rem)/5)] 2xl:w-[calc((100%-6.25rem)/6)]';
+  'w-[42%] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] xl:w-[calc((100%-5rem)/5)] 2xl:w-[calc((100%-6.25rem)/6)] 3xl:w-[calc((100%-7.5rem)/7)]';
 
 /** A scroll-snapping row item: the width above plus the snap behavior. */
 export const CAROUSEL_ITEM_CLASS = `flex-shrink-0 snap-start [scroll-snap-stop:always] ${CAROUSEL_ITEM_WIDTH_CLASS}`;
