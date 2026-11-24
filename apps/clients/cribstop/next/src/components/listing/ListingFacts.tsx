@@ -18,10 +18,10 @@ export default function ListingFacts({
 
   return (
     <section id="facts" className={className} data-testid="listing-facts">
-      <h2 className="px-6 pt-6 text-xl font-semibold tracking-tight">Facts &amp; features</h2>
+      <h2 className="text-xl font-semibold tracking-tight">Facts &amp; features</h2>
       <div className="mt-2 divide-y divide-surface-border">
         {groups.map((group, i) => (
-          <details key={group.id} open={i === 0} className="group px-6">
+          <details key={group.id} open={i === 0} className="group">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-4 text-base font-semibold text-ink [&::-webkit-details-marker]:hidden">
               {group.title}
               <svg

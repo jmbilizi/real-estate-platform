@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { aLandParcelRow, aListingCardRow, aSuppressedAddressRow } from '@/test/fixtures';
 import { ListingDetailSkeleton, ListingErrorPanel } from './ListingStates';
+import { DETAIL_GALLERY } from './detail-layout';
 
 /** #907: the error state fills the modal's header + body layout, with no band above it. */
 describe('ListingErrorPanel', () => {
@@ -121,7 +122,7 @@ describe('ListingDetailSkeleton', () => {
       expect(container.querySelectorAll('[data-gallery-tile-placeholder]')).toHaveLength(5);
     });
 
-    it('keeps the gallery in the same bordered panel the loaded page wraps it in', () => {
+    it('keeps the gallery in the same wrapper the loaded page uses', () => {
       const withRow = render(<ListingDetailSkeleton layoutRow={aListingCardRow()} />);
       const bare = render(<ListingDetailSkeleton />);
       const wrapper = (c: HTMLElement) =>
@@ -129,7 +130,7 @@ describe('ListingDetailSkeleton', () => {
 
       // Identical wrappers is what makes the block measure the same in both states.
       expect(wrapper(withRow.container)).toBe(wrapper(bare.container));
-      expect(wrapper(withRow.container)).toContain('border-surface-border');
+      expect(wrapper(withRow.container)).toContain(DETAIL_GALLERY);
     });
 
     /**

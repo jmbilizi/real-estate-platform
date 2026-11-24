@@ -8,9 +8,12 @@ import ToolbarIconButton, { BACK_ICON, FORWARD_ICON } from '@/components/Toolbar
  * item width and arrows from here, so the two carousels cannot drift apart.
  */
 
-/** Item width per breakpoint. Below `sm` an item is 42% wide so the next one peeks. */
+/**
+ * Item width per breakpoint. Below `sm` an item is 42% wide so the next one peeks. From `lg` a row
+ * shows one item fewer than the width allows (4, 5, 6), so the second address line has room.
+ */
 export const CAROUSEL_ITEM_WIDTH_CLASS =
-  'w-[42%] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] lg:w-[calc((100%-5rem)/5)] xl:w-[calc((100%-6.25rem)/6)] 2xl:w-[calc((100%-7.5rem)/7)]';
+  'w-[42%] sm:w-[calc((100%-2.5rem)/3)] md:w-[calc((100%-3.75rem)/4)] xl:w-[calc((100%-5rem)/5)] 2xl:w-[calc((100%-6.25rem)/6)]';
 
 /** A scroll-snapping row item: the width above plus the snap behavior. */
 export const CAROUSEL_ITEM_CLASS = `flex-shrink-0 snap-start [scroll-snap-stop:always] ${CAROUSEL_ITEM_WIDTH_CLASS}`;

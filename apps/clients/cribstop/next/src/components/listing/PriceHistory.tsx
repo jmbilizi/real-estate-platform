@@ -15,7 +15,7 @@ export default function PriceHistory({
 }) {
   if (entries.length === 0) return null;
   return (
-    <section id="price-history" className={`${className} p-6`} data-testid="price-history">
+    <section id="price-history" className={className} data-testid="price-history">
       <h2 className="text-xl font-semibold tracking-tight">Price history</h2>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[20rem] text-left text-sm">

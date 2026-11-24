@@ -161,6 +161,14 @@ with a fixed date. A failure means a spec reads the real clock.
     button. The account panel and "Your activity" on `/account` link to both pages. `/favorites`
     redirects to `/account/favorites` (`next.config.js`). The home feed has no "Recently viewed"
     row.
+  - **The listing detail has no boxed sections (2026-11-24).** The body is white. Each section is
+    flat with a hairline under it. The gallery is edge to edge on a phone and has round corners from
+    `sm`. The one card is the agent block in the sidebar, from `lg` only. The loaded page and
+    `ListingDetailSkeleton` both take their classes from `components/listing/detail-layout.ts`.
+    Never add a bordered or tinted panel to this page.
+  - **Cards get width before count.** A carousel shows 4 items from `md`, 5 from `xl` and 6 from
+    `2xl` (`CAROUSEL_ITEM_WIDTH_CLASS`). The search grid has two columns at most
+    (`RESULTS_GRID_COLUMNS_CLASS`). The second address line needs the room.
   - The tabs come from `PRIMARY_TABS` (`MobileTabBar.tsx`): one list and one icon set for the phone
     bar and the desktop header. They show icons from `md` and icon with label from `lg`.
   - The pill is fixed over `NavBar`'s `.header-pill-slot`. Both read `--header-pill-left` and
