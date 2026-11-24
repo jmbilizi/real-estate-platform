@@ -8,7 +8,7 @@
 export const DETAIL_BODY = 'scrollbar-overlay min-h-0 flex-1 bg-white page-gutter pb-8';
 
 /** The gallery. Edge to edge on a phone, with round corners from `sm`. A small space above. No border. */
-export const DETAIL_GALLERY = '-mx-4 mt-3 overflow-hidden sm:mx-0 sm:mt-4 sm:rounded-2xl';
+export const DETAIL_GALLERY = '-mx-4 mt-2 overflow-hidden sm:mx-0 sm:mt-4 sm:rounded-2xl';
 
 /** Main column and sidebar. */
 export const DETAIL_GRID =
