@@ -164,9 +164,8 @@ with a fixed date. A failure means a spec reads the real clock.
   - **The listing detail has no boxed sections (2026-11-24).** The body is white. Each section is
     flat with a hairline under it. The gallery is edge to edge on a phone and has round corners from
     `sm`. The sidebar blocks (agent, open houses, payment estimate) are cards from `lg` only, with a
-    hairline border and a faint shadow. The loaded page and `ListingDetailSkeleton` both take their
-    classes from `components/listing/detail-layout.ts`. Never add a bordered or tinted panel to this
-    page.
+    soft shadow and no border. The loaded page and `ListingDetailSkeleton` both take their classes
+    from `components/listing/detail-layout.ts`. Never add a bordered or tinted panel to this page.
   - **Cards get width before count.** A carousel shows 4 items from `md`, 5 from `xl`, 6 from `2xl`
     and 7 from `3xl` (1920px) (`CAROUSEL_ITEM_WIDTH_CLASS`). A laptop shows 6. The search grid has
     two columns at most (`RESULTS_GRID_COLUMNS_CLASS`). The card address is one line, never two.
