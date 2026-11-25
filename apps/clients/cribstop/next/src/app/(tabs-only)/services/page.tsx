@@ -19,11 +19,17 @@ const PILLAR = BRAND.pillars.services;
 
 // Plain descriptions of what the product will do. No counts, ratings, names, fees or referral
 // terms: no provider network exists yet, and RESPA bars fee claims about settlement services.
+// The order follows the life cycle of buying or renting a home. Keep it.
 const WILL_INCLUDE: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: UserRound,
     title: 'Agents',
     body: 'Find an agent for buying, selling or renting a home.',
+  },
+  {
+    icon: Calculator,
+    title: 'Lending',
+    body: 'Find lenders and mortgage brokers.',
   },
   {
     icon: ClipboardCheck,
@@ -44,11 +50,6 @@ const WILL_INCLUDE: { icon: LucideIcon; title: string; body: string }[] = [
     icon: Wrench,
     title: 'Home maintenance',
     body: 'Find help for roofing, heating and cooling, plumbing and similar jobs.',
-  },
-  {
-    icon: Calculator,
-    title: 'Lending',
-    body: 'Find lenders and mortgage brokers.',
   },
 ];
 
