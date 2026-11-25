@@ -152,6 +152,11 @@ with a fixed date. A failure means a spec reads the real clock.
   clicked field opens below with a scrim behind it. An outside click, Escape or a completed search
   closes the panel, and the bar shrinks back. On a phone the pill opens the full-screen sheet. There
   is no in-page search row.
+  - **The search bar and its panels share one geometry.** The pill, the open bar and each panel have
+    a 1px border, so nothing moves by 1px when the bar opens. A panel row has the insets of the bar
+    (`px-4`, `gap-2.5`, a 20px icon), so its icon and text sit under the icon and text of the bar.
+    The "Where" panel has the width of the bar. The "What" panel is 352px wide, under the "What"
+    field at the right. The phone pill and the phone sheet use the same 16px inset.
   - Account is a nav item. On `/account` and every page below it (`isAccountPath` in `NavBar.tsx`)
     it is the active item and no tab is. It gets the tab underline from `md`, and the brand color on
     a phone.

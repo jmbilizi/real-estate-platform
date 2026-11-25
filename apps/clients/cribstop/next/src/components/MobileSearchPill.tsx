@@ -52,7 +52,7 @@ export default function MobileSearchPill() {
       aria-label="Search"
       className="flex h-11 min-w-0 flex-1 items-center overflow-hidden rounded-full border border-surface-border bg-surface-alt text-left transition-transform active:scale-[0.99]"
     >
-      <span className="flex h-full min-w-0 flex-1 items-center gap-2 pl-4 pr-2.5">
+      <span className="flex h-full min-w-0 flex-1 items-center gap-2.5 pl-4 pr-3">
         {/* The icon gives its room to the place name once there is one: the row is narrow. */}
         {!searchLocation && (
           <svg
@@ -87,7 +87,7 @@ export default function MobileSearchPill() {
         aria-hidden="true"
         className="h-5 w-px flex-shrink-0 bg-[rgba(0,0,0,0.12)] max-[389px]:hidden"
       />
-      <span className="flex-shrink-0 whitespace-nowrap pl-2.5 pr-3.5 text-sm font-medium leading-none text-ink max-[389px]:hidden">
+      <span className="flex-shrink-0 whitespace-nowrap pl-3 pr-4 text-[15px] font-semibold leading-none text-ink max-[389px]:hidden">
         {summary}
       </span>
     </button>
