@@ -1085,11 +1085,11 @@ export default function CompactSearchBar({
   function renderWhatPanel(highlightRef: React.RefObject<HTMLDivElement | null>) {
     return (
       <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border max-h-[70vh] overflow-y-auto"
-        style={{ top: 'calc(100% + 6px)' }}
+        className="search-panel-enter absolute right-0 z-[200] max-h-[70vh] w-[22rem] max-w-full origin-top-right overflow-y-auto rounded-2xl border border-surface-border bg-white shadow-card"
+        style={{ top: 'calc(100% + 8px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="p-5">{renderWhatPanelContent(highlightRef)}</div>
+        <div className="p-4">{renderWhatPanelContent(highlightRef)}</div>
       </div>
     );
   }
@@ -1150,8 +1150,8 @@ export default function CompactSearchBar({
   ) {
     return (
       <div
-        className="search-panel-enter absolute left-0 right-0 z-[200] bg-white rounded-xl shadow-card border border-surface-border overflow-hidden"
-        style={{ top: 'calc(100% + 6px)' }}
+        className="search-panel-enter absolute left-0 right-0 z-[200] origin-top overflow-hidden rounded-2xl border border-surface-border bg-white shadow-card"
+        style={{ top: 'calc(100% + 8px)' }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className={inputInBar ? (locationNotFound ? 'px-4 pt-3' : 'hidden') : 'p-4'}>
@@ -1197,12 +1197,12 @@ export default function CompactSearchBar({
         </div>
         <div
           ref={dropdownRef}
-          className="relative pb-3 max-h-72 overflow-y-auto"
+          className={`relative max-h-[min(60vh,26rem)] overflow-y-auto pb-2 ${inputInBar ? 'pt-2' : ''}`}
           onMouseLeave={() => clearHighlight(highlightRef)}
         >
           <div
             ref={highlightRef}
-            className="absolute inset-x-0 bg-surface-soft pointer-events-none"
+            className="absolute inset-x-2 rounded-lg bg-surface-soft pointer-events-none"
             style={{ top: 0, height: 0, opacity: 0 }}
           />
           {!inputInBar && <hr className="border-t border-surface-border mb-1" />}
@@ -1216,7 +1216,7 @@ export default function CompactSearchBar({
                   e.currentTarget.offsetHeight,
                 )
               }
-              className="relative z-[1] flex w-full items-center gap-3 px-5 py-3 text-left transition-colors"
+              className="relative z-[1] flex min-h-11 w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors"
               onClick={async () => {
                 await handleGeolocate();
                 setActivePanel(null);
@@ -1233,10 +1233,10 @@ export default function CompactSearchBar({
             </button>
           )}
           {location.trim().length >= 2 && loadingSuggestions && (
-            <div className="px-5 py-3 text-ink-subtle text-sm">Loading?</div>
+            <div className="px-4 py-3 text-ink-subtle text-sm">Loading…</div>
           )}
           {location.trim().length >= 2 && !loadingSuggestions && suggestions.length === 0 && (
-            <div className="px-5 py-3 text-ink-subtle text-sm">
+            <div className="px-4 py-3 text-ink-subtle text-sm">
               {suggestionsUnavailable ? SUGGESTIONS_UNAVAILABLE_MESSAGE : 'No locations found'}
             </div>
           )}
@@ -1251,7 +1251,7 @@ export default function CompactSearchBar({
                   e.currentTarget.offsetHeight,
                 )
               }
-              className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+              className="relative z-[1] flex min-h-11 w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors"
               onClick={() => {
                 setSelectedSuggestion(s);
                 isCommittedSelectionRef.current = true;
@@ -1280,11 +1280,11 @@ export default function CompactSearchBar({
             (loadingNearby || nearbyLocations.length > 0) && (
               <>
                 <hr className="border-t border-surface-border my-1" />
-                <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
+                <div className="px-4 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                   Nearby
                 </div>
                 {loadingNearby && (
-                  <div className="px-5 py-2 text-ink-subtle text-sm">Loading nearby...</div>
+                  <div className="px-4 py-2 text-ink-subtle text-sm">Loading nearby...</div>
                 )}
                 {!loadingNearby &&
                   nearbyLocations
@@ -1323,7 +1323,7 @@ export default function CompactSearchBar({
                             e.currentTarget.offsetHeight,
                           )
                         }
-                        className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+                        className="relative z-[1] flex min-h-11 w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors"
                         onClick={() => {
                           const formatted = formatLocationLabel(loc);
                           if (typeof setLocation === 'function') setLocation(formatted);
@@ -1354,7 +1354,7 @@ export default function CompactSearchBar({
             recentSearches.length > 0 && (
               <>
                 <hr className="border-t border-surface-border my-1" />
-                <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
+                <div className="px-4 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                   Recent
                 </div>
                 {recentSearches.map((s, idx) => (
@@ -1367,11 +1367,11 @@ export default function CompactSearchBar({
                         e.currentTarget.offsetHeight,
                       )
                     }
-                    className="relative z-[1] flex w-full items-center px-5 py-2.5 transition-colors group"
+                    className="relative z-[1] flex min-h-11 w-full items-center px-4 py-2.5 transition-colors group"
                   >
                     <button
                       type="button"
-                      className="flex items-center flex-1 min-w-0 gap-3"
+                      className="flex min-w-0 flex-1 items-center gap-2.5 pr-8 text-left"
                       onClick={() => {
                         setSelectedSuggestion(s);
                         isCommittedSelectionRef.current = true;
@@ -1397,7 +1397,7 @@ export default function CompactSearchBar({
                       type="button"
                       aria-label="Remove recent search"
                       tabIndex={-1}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-surface-alt transition-opacity"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 p-1.5 rounded-full hover:bg-surface-alt transition-opacity"
                       onClick={(e) => {
                         e.stopPropagation();
                         setRecentSearches((prev) => {
@@ -1692,12 +1692,14 @@ export default function CompactSearchBar({
         >
           {/* WHERE card */}
           <div
-            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
-              activePanel === 'where' ? 'ring-2 ring-ink' : 'cursor-pointer'
+            className={`overflow-hidden rounded-2xl border bg-white transition-shadow duration-200 ${
+              activePanel === 'where'
+                ? 'border-surface-border-strong shadow-card'
+                : 'cursor-pointer border-surface-border'
             }`}
             onClick={() => activePanel !== 'where' && setActivePanel('where')}
           >
-            <div className="px-5 pt-4 pb-2">
+            <div className="px-4 pt-4 pb-2">
               <p className="text-[11px] font-bold text-ink uppercase tracking-wider">Where?</p>
               {activePanel === 'where' ? (
                 <div className="mt-3">
@@ -1780,7 +1782,7 @@ export default function CompactSearchBar({
               <div className="relative pb-3" onMouseLeave={() => clearHighlight(whereHighlightRef)}>
                 <div
                   ref={whereHighlightRef}
-                  className="absolute inset-x-0 bg-surface-soft pointer-events-none"
+                  className="absolute inset-x-2 rounded-lg bg-surface-soft pointer-events-none"
                   style={{ top: 0, height: 0, opacity: 0 }}
                 />
                 <hr className="border-t border-surface-border mb-1" />
@@ -1795,7 +1797,7 @@ export default function CompactSearchBar({
                         e.currentTarget.offsetHeight,
                       )
                     }
-                    className="relative z-[1] flex w-full items-center gap-3 px-5 py-3 text-left transition-colors"
+                    className="relative z-[1] flex min-h-11 w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors"
                     onClick={async () => {
                       await handleGeolocate();
                       setActivePanel('what');
@@ -1811,12 +1813,12 @@ export default function CompactSearchBar({
                   </button>
                 )}
                 {(location || '').trim().length >= 2 && loadingSuggestions && (
-                  <div className="px-5 py-3 text-ink-subtle text-sm">Loading…</div>
+                  <div className="px-4 py-3 text-ink-subtle text-sm">Loading…</div>
                 )}
                 {(location || '').trim().length >= 2 &&
                   !loadingSuggestions &&
                   suggestions.length === 0 && (
-                    <div className="px-5 py-3 text-ink-subtle text-sm">
+                    <div className="px-4 py-3 text-ink-subtle text-sm">
                       {suggestionsUnavailable
                         ? SUGGESTIONS_UNAVAILABLE_MESSAGE
                         : 'No locations found'}
@@ -1833,7 +1835,7 @@ export default function CompactSearchBar({
                         e.currentTarget.offsetHeight,
                       )
                     }
-                    className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+                    className="relative z-[1] flex min-h-11 w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors"
                     onClick={() => {
                       setSelectedSuggestion(s);
                       isCommittedSelectionRef.current = true;
@@ -1865,11 +1867,11 @@ export default function CompactSearchBar({
                   (loadingNearby || nearbyLocations.length > 0) && (
                     <>
                       <hr className="border-t border-surface-border my-1" />
-                      <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
+                      <div className="px-4 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                         Nearby
                       </div>
                       {loadingNearby && (
-                        <div className="px-5 py-2 text-ink-subtle text-sm">Loading nearby...</div>
+                        <div className="px-4 py-2 text-ink-subtle text-sm">Loading nearby...</div>
                       )}
                       {!loadingNearby &&
                         nearbyLocations
@@ -1909,7 +1911,7 @@ export default function CompactSearchBar({
                                   e.currentTarget.offsetHeight,
                                 )
                               }
-                              className="relative z-[1] flex w-full items-center gap-3 px-5 py-2.5 text-left transition-colors"
+                              className="relative z-[1] flex min-h-11 w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors"
                               onClick={() => {
                                 const formatted = formatLocationLabel(loc);
                                 if (typeof setLocation === 'function') setLocation(formatted);
@@ -1942,7 +1944,7 @@ export default function CompactSearchBar({
                   recentSearches.length > 0 && (
                     <>
                       <hr className="border-t border-surface-border my-1" />
-                      <div className="px-5 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
+                      <div className="px-4 pt-2 pb-1 text-[11px] text-ink-subtle font-semibold tracking-widest uppercase">
                         Recent
                       </div>
                       {recentSearches.map((s, idx) => (
@@ -1955,11 +1957,11 @@ export default function CompactSearchBar({
                               e.currentTarget.offsetHeight,
                             )
                           }
-                          className="relative z-[1] flex w-full items-center px-5 py-2.5 transition-colors group"
+                          className="relative z-[1] flex min-h-11 w-full items-center px-4 py-2.5 transition-colors group"
                         >
                           <button
                             type="button"
-                            className="flex items-center flex-1 min-w-0 gap-3"
+                            className="flex min-w-0 flex-1 items-center gap-2.5 pr-8 text-left"
                             onClick={() => {
                               setSelectedSuggestion(s);
                               isCommittedSelectionRef.current = true;
@@ -1990,7 +1992,7 @@ export default function CompactSearchBar({
                             type="button"
                             aria-label="Remove recent search"
                             tabIndex={-1}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 rounded-full hover:bg-surface-alt transition-opacity"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 [@media(hover:none)]:opacity-100 p-1.5 rounded-full hover:bg-surface-alt transition-opacity"
                             onClick={(e) => {
                               e.stopPropagation();
                               setRecentSearches((prev) => {
@@ -2020,12 +2022,14 @@ export default function CompactSearchBar({
 
           {/* WHAT card */}
           <div
-            className={`bg-white rounded-md shadow-card transition-all duration-200 overflow-hidden ${
-              activePanel === 'what' ? 'ring-2 ring-ink' : 'cursor-pointer'
+            className={`overflow-hidden rounded-2xl border bg-white transition-shadow duration-200 ${
+              activePanel === 'what'
+                ? 'border-surface-border-strong shadow-card'
+                : 'cursor-pointer border-surface-border'
             }`}
             onClick={() => activePanel !== 'what' && setActivePanel('what')}
           >
-            <div className="px-5 pt-4 pb-4">
+            <div className="px-4 pt-4 pb-4">
               <p className="text-[11px] font-bold text-ink uppercase tracking-wider">What?</p>
               {activePanel === 'what' ? (
                 <div className="mt-3">{renderWhatPanelContent(whatHighlightRef)}</div>
@@ -2039,10 +2043,10 @@ export default function CompactSearchBar({
         </div>
 
         {/* ── Bottom bar ───────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white border-t border-surface-border shadow-card">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white border-t border-surface-border shadow-card">
           <button
             onClick={handleClearAll}
-            className="text-sm font-semibold text-ink underline underline-offset-2"
+            className="min-h-11 text-sm font-semibold text-ink underline underline-offset-2"
           >
             Clear all
           </button>
@@ -2159,10 +2163,10 @@ export default function CompactSearchBar({
     content = (
       <div className="relative w-full" ref={panelRef}>
         {/* 4-slot pill */}
-        <div className="relative flex h-11 items-center rounded-full bg-white shadow-card ring-1 ring-surface-border-strong">
+        <div className="relative flex h-11 items-center rounded-full border border-surface-border-strong bg-white shadow-card">
           {/* WHERE: the input itself. Its placeholder is the label. */}
           <div
-            className={`relative flex h-full min-w-0 flex-1 items-center gap-2.5 pl-4 pr-2 ${whereShake ? 'where-shake' : ''}`}
+            className={`relative flex h-full min-w-0 flex-1 items-center gap-2.5 pl-4 pr-3 ${whereShake ? 'where-shake' : ''}`}
           >
             <svg
               aria-hidden="true"
@@ -2179,7 +2183,7 @@ export default function CompactSearchBar({
               />
             </svg>
             {renderWhereInput(
-              'h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[15px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-0',
+              `h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[15px] text-ink placeholder:font-normal placeholder:text-ink-muted focus:outline-none focus:ring-0 ${location ? 'font-semibold' : ''}`,
               true,
             )}
             {location && (
@@ -2224,7 +2228,7 @@ export default function CompactSearchBar({
             {LISTING_TYPE_SUMMARY_LABELS[searchListingType]}
           </button>
           {/* Search */}
-          <div ref={searchBtnRef} className="flex flex-shrink-0 items-center pl-1 pr-1">
+          <div ref={searchBtnRef} className="flex flex-shrink-0 items-center pl-1 pr-[3px]">
             <button
               type="button"
               disabled={busy}
